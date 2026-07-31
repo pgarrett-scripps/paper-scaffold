@@ -20,7 +20,7 @@ a reflow. That check survives for the life of the project.
 cp -r paper-scaffold /path/to/your-project/paper
 cd /path/to/your-project/paper
 
-just si-assets     # generate the example SI table + figure
+just assets        # regenerate the example figure + SI table via analysis/
 just paper         # -> paper.pdf, plus word count and readability
 just docx          # -> paper.docx
 ```
@@ -30,8 +30,8 @@ Then:
 1. Edit `config.typ` (title, authors, abstract, keywords, bibliography style).
 2. Replace the placeholder prose in `paper.typ` and `si-body.typ`.
 3. Replace `references.bib`.
-4. Point `analysis_root` at the top of the `justfile` at your analysis tree, and
-   rewrite `figures.map` and `scripts/gen_*.py` for your own figures and tables.
+4. Put your analysis in `analysis/`, keeping `just assets` as its front door. Or
+   delete `analysis/` entirely if the paper has no generated assets.
 
 Nothing else should need editing.
 
@@ -45,7 +45,7 @@ Nothing else should need editing.
 | `just docx` | Export `paper.docx` for journals and co-authors |
 | `just wordcount` | Journal-style counts without rebuilding |
 | `just readability` | Flesch-Kincaid / reading ease / fog without rebuilding |
-| `just si-assets` | Regenerate SI tables and re-copy figures from the analysis tree |
+| `just assets` | Regenerate every generated figure and table (delegates to `analysis/`) |
 | `just check` | Report every artifact that has fallen behind its source |
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
 | `just prose-check` | Check the prose against the mechanical rules in STYLE.md |
@@ -88,24 +88,38 @@ Tables whose numbers come from an analysis are written by a script into
 that supplies the caption and label. Every generated file opens with a
 "do not edit by hand" header.
 
-`scripts/gen_example_table.py` is the template. Copy it per table. `just
-si-tables` runs every `scripts/gen_*.py`, so a new table needs no wiring beyond
+`analysis/scripts/gen_example_table.py` is the template. Copy it per table.
+`just assets` runs every `gen_*_table.py`, so a new table needs no wiring beyond
 matching the filename pattern.
 
 The point is that a number in the manuscript should be traceable to the analysis
 that produced it. Re-run the analysis and the manuscript updates.
 
-### `figures.map` and the staleness trap this closes
+### `analysis/` lives inside the manuscript, and writes to it directly
 
-Figures live in the analysis tree and are *copied* into `figures/`. That copy is
-the single most reliable way for a manuscript to go quietly wrong: a re-analysis
-updates the plot upstream, the copy in `figures/` is untouched, and the PDF keeps
-rendering a figure that no longer matches the numbers in its own caption, with
-nothing to flag it.
+The analysis that produces the numbers is a subdirectory, not a sibling
+repository. It writes its figures into `figures/` and its tables into `si/` with
+no staging copy in between.
 
-`figures.map` lists `dest <- source` pairs. `just figures` copies them, and `just
-check` byte-compares them and reports drift. Set `analysis_root` at the top of
-the `justfile` to wherever your analysis writes.
+That last part is the point. A copy is the single most reliable way for a
+manuscript to go quietly wrong: a re-analysis updates the plot upstream, the copy
+in `figures/` is untouched, and the PDF keeps rendering a figure that no longer
+matches the numbers in its own caption. Writing to the destination removes the
+failure rather than adding a guard for it.
+
+**The contract is one recipe.** `analysis/justfile` exposes `assets`, which
+regenerates everything the manuscript includes. `just assets` at the top level
+delegates to it and knows nothing else. Whatever is inside `analysis/` is that
+project's business: sixty numbered scripts, one notebook, a Snakemake pipeline.
+Keep `assets` as the front door and the manuscript never has to care.
+
+A paper with no computed results simply has no `analysis/` directory, and the
+recipes say so instead of failing.
+
+`figures/` and `si/` are generated but **tracked**, for the same reason
+`paper.pdf` is: a fresh clone must compile without re-running an analysis that
+may take hours. `just check-assets` guards that by comparing commit dates, so
+editing a generator and forgetting to re-run it is reported rather than shipped.
 
 ### `just check` is a submission gate
 
@@ -118,7 +132,7 @@ actually happen:
 - `paper.docx` or an `.m4b` older than the text it renders or narrates. Each
   artifact is compared against its own inputs, so a regenerated SI table does not
   wrongly mark the audiobooks stale (they never read `si/`).
-- Figures that differ byte-for-byte from their upstream copy.
+- `figures/` and `si/` committed before the `analysis/` code that generates them.
 
 `paper.pdf` is deliberately tracked in git, so a reader can get the manuscript
 without installing Typst. `check-pdf` is what keeps that honest.

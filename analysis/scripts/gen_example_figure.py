@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
-"""Write analysis/example_figure.png -- the upstream half of the figure contract.
+"""Write ../../figures/example_figure.png -- the figure half of the asset contract.
 
-Note where this writes: into the ANALYSIS tree, not into figures/. That is the
-whole point of the arrangement. Figures are produced by the analysis that owns
-the data, and `just figures` copies them into the manuscript according to
-figures.map. `just check` then byte-compares the two, so a re-analysis that
-changes a plot is reported as manuscript drift instead of silently leaving a
-stale image in the PDF.
+Note where this writes: straight into the manuscript's figures/ directory, not
+into a staging area that something copies across afterwards. The copy is what
+goes stale. A re-analysis updates the plot upstream, the copy in the manuscript
+is untouched, and the PDF keeps rendering a figure that no longer matches its own
+caption. Writing to the destination removes that failure rather than guarding it.
 
-In a real project this script lives in the analysis repo (or its own directory)
-and the manuscript's `analysis_root` in the justfile points at it. It is here so
-the scaffold's loop is closed and testable out of the box.
+Picked up by `just assets` on the filename pattern gen_*_figure.py, so a new
+figure needs no wiring.
 """
 from __future__ import annotations
 
@@ -23,8 +21,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
+PAPER = HERE.parent.parent          # analysis/scripts/ -> analysis/ -> paper/
 SRC = HERE / "example_data.csv"
-OUT = HERE.parent / "analysis" / "example_figure.png"
+OUT = PAPER / "figures" / "example_figure.png"
 
 
 def main() -> int:
@@ -49,10 +48,10 @@ def main() -> int:
     OUT.parent.mkdir(exist_ok=True)
     # Deterministic bytes: matplotlib stamps a creation date into the PNG unless
     # told not to, which would make every regeneration look like real drift to
-    # the byte-compare in `just check`.
+    # `just check` see every regeneration as a real change.
     fig.savefig(OUT, metadata={"Software": None})
     plt.close(fig)
-    print(f"wrote {OUT.relative_to(HERE.parent)}")
+    print(f"wrote {OUT.relative_to(PAPER)}")
     return 0
 
 

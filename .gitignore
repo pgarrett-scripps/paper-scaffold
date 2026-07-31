@@ -24,6 +24,10 @@ audio/cover_si.png
 __pycache__/
 *.pyc
 
-# The bundled example analysis output. In a real project, analysis_root points
-# at a tree outside this directory and this line does not apply.
-/analysis/
+# Analysis inputs and intermediates. The CODE in analysis/ is tracked; the heavy
+# data and the results tree are not, and neither is its virtualenv. The generated
+# figures/ and si/ ARE tracked, so a fresh clone compiles the PDF without
+# re-running an analysis that may take hours.
+analysis/data/
+analysis/results/
+analysis/.venv/

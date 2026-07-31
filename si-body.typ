@@ -18,13 +18,13 @@ orienting material here.
 = Auto-generated tables <sec:si-tables>
 
 Replace this section. The table below is written by
-`scripts/gen_example_table.py` and included rather than pasted, so re-running
-the analysis updates the manuscript. Regenerate with `just si-tables`.
+`analysis/scripts/gen_example_table.py` and included rather than pasted, so
+re-running the analysis updates the manuscript. Regenerate with `just assets`.
 
 #figure(
   include "si/example_table.typ",
   caption: [Placeholder, auto-generated. Do not edit `si/example_table.typ`
-    directly, as the next `just si-tables` overwrites it.],
+    directly, as the next `just assets` overwrites it.],
 ) <tbl:si-example>
 
 Cross-references resolve in both directions, so @tbl:si-example and Table #refn(

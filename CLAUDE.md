@@ -5,13 +5,13 @@ what the pipeline does and [STYLE.md](STYLE.md) for prose conventions.
 
 ## Never do these
 
-**Never hand-edit `si/*.typ`.** Those files are written by `scripts/gen_*.py` and
-carry an "AUTO-GENERATED, do not edit by hand" header. An edit survives until the
-next `just si-tables` and then vanishes, usually unnoticed. Change the generator
-or the data it reads.
+**Never hand-edit `si/*.typ`.** Those files are written by
+`analysis/scripts/gen_*_table.py` and carry an "AUTO-GENERATED, do not edit by
+hand" header. An edit survives until the next `just assets` and then vanishes,
+usually unnoticed. Change the generator or the data it reads.
 
-**Never hand-edit files under `figures/`.** They are copies, governed by
-`figures.map`. Change the plot in the analysis tree and run `just figures`.
+**Never hand-edit files under `figures/`.** They are written by `analysis/`.
+Change the script that produces the plot and run `just assets`.
 
 **Never type a result into the prose that no generated table or figure backs.**
 If a number is worth stating, it is worth being traceable.
@@ -45,15 +45,18 @@ construct in `paper.typ`: that prose is placeholder and gets deleted.
 
 ## When adding a table or figure
 
-A table: copy `scripts/gen_example_table.py`, keep the filename pattern
-`gen_*.py` so `just si-tables` picks it up with no wiring, emit a bare
-`#table(...)` with the auto-generated header and no caption or label, then wrap it
-in a `#figure` in `si-body.typ` where the caption and label live.
+A table: copy `analysis/scripts/gen_example_table.py`, keep the filename pattern
+`gen_*_table.py` so `just assets` picks it up with no wiring, write a bare
+`#table(...)` into `../../si/` with the auto-generated header and no caption or
+label, then wrap it in a `#figure` in `si-body.typ` where the caption and label
+live.
 
-A figure: have the analysis write it, add a `dest source` row to `figures.map`,
-run `just figures`. Set `metadata={"Software": None}` and seed any RNG in the
-generator, or every regeneration churns the PNG bytes and `just check` reports
-drift that is not real.
+A figure: copy `analysis/scripts/gen_example_figure.py`, keep the pattern
+`gen_*_figure.py`, and write straight into `../../figures/`. Set
+`metadata={"Software": None}` and seed any RNG, or every regeneration churns the
+PNG bytes and shows up as a diff that is not a real change.
+
+Then `just assets && git add figures si`, because both are tracked.
 
 ## Editing the Typst preamble
 
