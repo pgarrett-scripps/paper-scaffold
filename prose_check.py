@@ -226,9 +226,9 @@ ACRONYM_OK = {
 def check_structure(sources: dict[str, str]) -> tuple[list[str], list[str]]:
     """Checks that need the Typst source rather than the extracted prose.
 
-    A float nobody points to is the one defect here with no honest defence: most
-    journals require every figure and table to be cited in the text, in order, and
-    a reader who is never sent to a figure will not look at it. So that is an
+    A figure or table nobody points to is the one defect here with no honest
+    defence: most journals require every one to be cited in the text, in order,
+    and a reader who is never sent to a figure will not look at it. So that is an
     error. Undefined acronyms are a warning, because deciding what counts as
     common knowledge in a given field is not something this script can do.
     """
@@ -246,8 +246,11 @@ def check_structure(sources: dict[str, str]) -> tuple[list[str], list[str]]:
 
     for label, where in sorted(labels.items()):
         if label not in refs:
-            errors.append(f"{where}: <{label}> is never referenced in the text  "
-                          f"(most journals require every float to be cited)")
+            kind = {"fig": "figure", "tbl": "table", "eq": "equation"}[
+                label.split(":")[0]]
+            errors.append(f"{where}: {kind} <{label}> is never referenced in the "
+                          f"text (most journals require every figure and table "
+                          f"to be cited)")
 
     # An acronym used more than once but never followed by, or preceded by, a
     # parenthetical expansion anywhere in the manuscript.

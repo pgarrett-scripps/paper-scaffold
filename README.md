@@ -216,7 +216,8 @@ three times your own parenthetical rate is a real signal you can act on.
 
 `just prose-check` enforces the mechanical rules in STYLE.md and adds two
 structural checks: a figure or table that no text ever references (an error, since
-most journals require every float to be cited), and an acronym used repeatedly but
+most journals require every figure and table to be cited, and a reader who is
+never sent to a figure will not look at it), and an acronym used repeatedly but
 never expanded (a warning, since what counts as common knowledge is field-specific).
 
 ### `tests/` is the permanent smoke test
