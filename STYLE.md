@@ -163,6 +163,10 @@ the paper usually marks a paragraph worth splitting.
 Run `just wordcount` before submission rather than after writing to a limit. The
 abstract has its own cap and is counted separately.
 
+Where a rule here is genuinely wrong for this manuscript, record the exception in
+`prose-check.toml` rather than ignoring the warning each time. An exception with a
+reason beside it is a decision; a warning everyone scrolls past is not.
+
 ## Domain conventions
 
 Delete this section or replace it with your field's. The entries below are

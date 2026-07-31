@@ -176,10 +176,10 @@ def structural_cases() -> bool:
         ("genuine doubled word", "this is is a real repetition", 1),
     ]
     for name, src, want in dup_cases:
-        errs, _ = pc.check("t", readability.clean(src),
-                           readability.clean(pc.no_code(src)),
-                           readability.clean(src, gap=pc.GAP))
-        got = len([e for e in errs if "doubled word" in e])
+        found = pc.check("t", readability.clean(src),
+                         readability.clean(pc.no_code(src)),
+                         readability.clean(src, gap=pc.GAP))
+        got = len([f for f in found if f.rule == "doubled-word"])
         if got != want:
             print(f"  doubled word [{name}]: expected {want}, got {got}")
             ok = False
@@ -194,11 +194,50 @@ def structural_cases() -> bool:
         ok = False
 
     # An uncited figure is an error; a cited one is not.
-    uncited = len(pc.check_structure({"t": fig.format(cap="c", label="fig:x")})[0])
-    cited = len(pc.check_structure(
-        {"t": "See @fig:x.\n" + fig.format(cap="c", label="fig:x")})[0])
+    only = lambda src, rule: len(
+        [f for f in pc.check_structure({"t": src}) if f.rule == rule])
+    uncited = only(fig.format(cap="c", label="fig:x"), "uncited-figure")
+    cited = only("See @fig:x.\n" + fig.format(cap="c", label="fig:x"),
+                 "uncited-figure")
     if (uncited, cited) != (1, 0):
         print(f"  uncited-figure check: expected (1, 0), got ({uncited}, {cited})")
+        ok = False
+    ok &= suppression_cases()
+    return ok
+
+
+def suppression_cases() -> bool:
+    """A finding must be silenceable by rule and by value, and a typo in the
+    config must fail rather than silently suppress nothing."""
+    import prose_rules as pr
+
+    f = pr.Finding("unexpanded-acronym", "warn", "'TOF' used 9x", "TOF")
+    checks = [
+        ("no config suppresses nothing", pr.Config(), False),
+        ("by value", pr.Config(allow={"unexpanded-acronym": {"tof"}}), True),
+        ("by value is case-insensitive",
+         pr.Config(allow={"unexpanded-acronym": {"TOF".lower()}}), True),
+        ("wrong value does not match",
+         pr.Config(allow={"unexpanded-acronym": {"pride"}}), False),
+        ("by rule", pr.Config(disable={"unexpanded-acronym"}), True),
+        ("another rule does not match", pr.Config(disable={"em-dash"}), False),
+    ]
+    ok = True
+    for name, cfg, want in checks:
+        if cfg.suppresses(f) != want:
+            print(f"  suppression [{name}]: expected {want}")
+            ok = False
+
+    # Every rule the checker can emit must be declared, or its findings would
+    # crash the reporter and could never be suppressed.
+    import prose_check as pc2
+    declared = set(pr.RULES)
+    emitted = set(re.findall(r'add\(\s*"([a-z-]+)"', Path(pc2.__file__).read_text()))
+    emitted |= set(re.findall(r'Finding\(\s*\n?\s*"([a-z-]+)"',
+                              Path(pc2.__file__).read_text()))
+    missing = emitted - declared
+    if missing:
+        print(f"  rules emitted but not declared in prose_rules.RULES: {sorted(missing)}")
         ok = False
     return ok
 

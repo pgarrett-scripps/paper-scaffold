@@ -225,13 +225,44 @@ that depart from *this paper's own median* by 1.6x. A Methods section running at
 three times your own parenthetical rate is a real signal you can act on.
 
 `just prose-check` enforces the mechanical rules in STYLE.md and adds two
-structural checks. A figure or table that no text ever references is an error,
+structural checks. Anything this project has earned an exception to goes in
+`prose-check.toml` (see below). A figure or table that no text ever references is an error,
 since most journals require every one to be cited and a reader who is never sent
 to a figure will not look at it. Two more are warnings: figures cited out of
 numerical order (a copy-editing return at many journals, but a conventions
 paragraph legitimately forward-references, so it does not gate), and an acronym
 used repeatedly but never expanded (what counts as common knowledge is
 field-specific).
+
+### Suppressing a finding: `prose-check.toml`
+
+Every finding carries a stable rule id and, where the rule is about a particular
+value, the value that triggered it. A project silences one by naming both:
+
+```toml
+disable = ["semicolon-count"]        # a whole rule, off
+
+[allow]                              # or just these values
+unexpanded-acronym = ["TOF", "DIA-NN"]
+british-spelling   = ["Grey"]        # a surname, not a colour
+reference-order    = ["fig:si-lowab-retention"]
+
+[limits]
+max-sentence-words = 40
+```
+
+Three things keep it from becoming a place problems go to hide:
+
+- **Every finding prints its own silencer**, once per rule, so the file is
+  discoverable without reading the docs.
+- **Suppressions are counted, never silent.** The footer says how many are
+  hidden, and `--show-suppressed` lists them.
+- **A typo is an error.** `acronym` instead of `unexpanded-acronym` fails with the
+  list of valid rules rather than quietly suppressing nothing.
+
+`just prose-check --list-rules` prints every rule, its severity, and what a
+suppression matches on. Errors are suppressible too, since a surname or a figure
+cited only from elsewhere is a real exception.
 
 ### `tests/` is the permanent smoke test
 

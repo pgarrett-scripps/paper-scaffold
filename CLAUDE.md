@@ -28,7 +28,11 @@ figure differs from its upstream copy. "I edited the text" is not done; "`just
 check` is clean" is done.
 
 If you changed prose, also run `just paper` so the word count and readability
-numbers in your report are current, and quote them rather than estimating. Run
+numbers in your report are current, and quote them rather than estimating. Do not silence a prose-check finding by editing prose_check.py. Add it to
+`prose-check.toml` with a comment saying why, so the exception is reviewable. Run
+`just prose-check --show-suppressed` occasionally to see what has accumulated.
+
+Run
 `just prose-check` too: it fails on em dashes, British spellings, doubled words,
 and uncited figures, and reports long sentences, verbosity, repetition, and
 unexpanded acronyms as warnings you should read rather than silence. `just

@@ -13,9 +13,15 @@ judgement calls, reported with counts and locations so they can be skimmed and
 ignored. A style checker that fails the build over the word "very" gets disabled
 within a week, so it does not.
 
+Anything a particular project has earned an exception to goes in
+`prose-check.toml`. See prose_rules.py for the rule ids and the file's shape, or
+run with --list-rules.
+
 Usage:
-    python3 prose_check.py               # main text + SI
-    python3 prose_check.py --strict      # warnings become errors too
+    python3 prose_check.py                    # main text + SI
+    python3 prose_check.py --strict           # warnings become errors too
+    python3 prose_check.py --show-suppressed  # list what the config is hiding
+    python3 prose_check.py --list-rules       # rule ids and how to suppress each
 """
 from __future__ import annotations
 
@@ -24,6 +30,7 @@ import sys
 from pathlib import Path
 
 import readability
+from prose_rules import Config, Finding, list_rules, load_config, report
 
 HERE = Path(__file__).resolve().parent
 
@@ -102,8 +109,6 @@ VERBOSE = {
 DOUBLE_HEDGE = re.compile(
     r"\b(may|might|could|can)\s+(possibly|potentially|perhaps|conceivably)\b", re.I
 )
-MAX_SENTENCE_WORDS = 40      # a hard "this is a run-on" line, not the 25-word aim
-OPENER_RUN = 3               # N consecutive sentences opening with the same word
 # Words common enough that repeating them is invisible; only flag beyond these.
 COMMON = set("""
 the a an and or but of in on at to for with from by as is are was were be been
@@ -135,7 +140,7 @@ GAP = "\x00"
 
 
 def check(label: str, text: str, spellable: str | None = None,
-          gapped: str | None = None) -> tuple[list[str], list[str]]:
+          gapped: str | None = None, cfg: Config | None = None) -> list[Finding]:
     """`text` is the cleaned prose. `spellable` is the same prose with inline code
     removed rather than unwrapped, and is what the spelling check runs on.
     `gapped` is the same prose with a sentinel where constructs were removed, and
@@ -152,18 +157,23 @@ def check(label: str, text: str, spellable: str | None = None,
     """
     spellable = text if spellable is None else spellable
     gapped = text if gapped is None else gapped
-    errors, warnings = [], []
+    cfg = Config() if cfg is None else cfg
+    out: list[Finding] = []
     sents = sentences(text)
+
+    def add(rule, message, subject="", context=""):
+        from prose_rules import RULES
+        out.append(Finding(rule, RULES[rule][0], message, subject, label, context))
 
     # --- errors ---
     for m in re.finditer(r"—", text):
-        errors.append(f"{label}: em dash  {_ctx(text, m.start())}")
+        add("em-dash", "em dash", context=_ctx(text, m.start()))
 
     for m in re.finditer(r"\b[A-Za-z]+\b", spellable):
         fix = BRITISH.get(m.group(0).lower())
         if fix:
-            errors.append(f"{label}: British spelling {m.group(0)!r} -> {fix}  "
-                          f"{_ctx(spellable, m.start())}")
+            add("british-spelling", f"{m.group(0)!r} -> {fix}", m.group(0),
+                _ctx(spellable, m.start()))
 
     for m in re.finditer(r"\b(\w+)\s+\1\b", gapped, re.I):
         if m.group(1).lower() in {"had", "that"}:   # legitimately doubles
@@ -171,21 +181,23 @@ def check(label: str, text: str, spellable: str | None = None,
         # Window first, THEN drop the sentinels. Stripping them from the whole
         # string before indexing shifts every offset after the first removed
         # construct, which slid the reported context clean off the match.
-        errors.append(f"{label}: doubled word {m.group(0)!r}  "
-                      f"{_ctx(gapped, m.start()).replace(GAP, '')}")
+        add("doubled-word", f"doubled word {m.group(0)!r}", m.group(1),
+            _ctx(gapped, m.start()).replace(GAP, ""))
 
     # --- warnings ---
     for s in sents:
         n = len(s.split())
-        if n > MAX_SENTENCE_WORDS:
-            warnings.append(f"{label}: {n}-word sentence  \"{s[:90]}...\"")
+        if n > cfg.limit("max-sentence-words"):
+            add("long-sentence", f"{n}-word sentence", context=f'"{s[:90]}..."')
 
     for phrase, fix in VERBOSE.items():
         for m in re.finditer(rf"\b{re.escape(phrase)}\b", text, re.I):
-            warnings.append(f"{label}: {phrase!r} -> {fix}  {_ctx(text, m.start())}")
+            add("verbose-phrase", f"{phrase!r} -> {fix}", phrase,
+                _ctx(text, m.start()))
 
     for m in DOUBLE_HEDGE.finditer(text):
-        warnings.append(f"{label}: double hedge {m.group(0)!r}  {_ctx(text, m.start())}")
+        add("double-hedge", f"double hedge {m.group(0)!r}", m.group(0),
+            _ctx(text, m.start()))
 
     # repeated sentence openers
     run, first = 1, 0
@@ -196,9 +208,9 @@ def check(label: str, text: str, spellable: str | None = None,
         if same:
             run += 1
         else:
-            if run >= OPENER_RUN:
+            if run >= cfg.limit("opener-run"):
                 word = sents[first].split()[0]
-                warnings.append(f"{label}: {run} sentences in a row open with {word!r}")
+                add("opener-run", f"{run} sentences in a row open with {word!r}", word)
             run, first = 1, i
 
     # a distinctive word repeated inside one sentence
@@ -209,15 +221,16 @@ def check(label: str, text: str, spellable: str | None = None,
                 continue
             seen[w] = seen.get(w, 0) + 1
         for w, c in seen.items():
-            if c >= 3:
-                warnings.append(f"{label}: {w!r} appears {c}x in one sentence  "
-                                f"\"{s[:80]}...\"")
+            if c >= cfg.limit("repeat-in-sentence"):
+                add("word-repetition", f"{w!r} appears {c}x in one sentence", w,
+                    f'"{s[:80]}..."')
 
     semis = text.count(";")
     if semis:
-        warnings.append(f"{label}: {semis} semicolon(s); STYLE.md asks for sparing use")
+        add("semicolon-count",
+            f"{semis} semicolon(s), STYLE.md asks for sparing use")
 
-    return errors, warnings
+    return out
 
 
 def no_code(src: str) -> str:
@@ -242,7 +255,7 @@ ACRONYM_OK = {
 KIND = {"fig": "Figure", "tbl": "Table", "eq": "Equation"}
 
 
-def check_reference_order(sources: dict[str, str]) -> list[str]:
+def check_reference_order(sources: dict[str, str]) -> list[Finding]:
     """Figures and tables should be first cited in numerical order.
 
     Typst numbers them by order of appearance in the source, so the number a
@@ -298,14 +311,17 @@ def check_reference_order(sources: dict[str, str]) -> list[str]:
                 lo, hi = min(skipped), max(skipped)
                 span = f"{KIND[kind]} {lo}" if lo == hi else \
                     f"{KIND[kind]}s {lo}–{hi}"
-                out.append(
-                    f"{name}: {KIND[kind]} {early} (<{label_of[(kind, early)]}>) "
-                    f"is cited before {span}; either move its first mention later "
-                    f"or move the {KIND[kind].lower()} earlier")
+                label = label_of[(kind, early)]
+                out.append(Finding(
+                    "reference-order", "warn",
+                    f"{KIND[kind]} {early} (<{label}>) is cited before {span}, "
+                    f"either move its first mention later or move the "
+                    f"{KIND[kind].lower()} earlier",
+                    subject=label, where=name))
     return out
 
 
-def check_structure(sources: dict[str, str]) -> tuple[list[str], list[str]]:
+def check_structure(sources: dict[str, str]) -> list[Finding]:
     """Checks that need the Typst source rather than the extracted prose.
 
     A figure or table nobody points to is the one defect here with no honest
@@ -314,7 +330,7 @@ def check_structure(sources: dict[str, str]) -> tuple[list[str], list[str]]:
     error. Undefined acronyms are a warning, because deciding what counts as
     common knowledge in a given field is not something this script can do.
     """
-    errors, warnings = [], []
+    out: list[Finding] = []
     joined = "\n".join(sources.values())
 
     labels, refs = {}, set()
@@ -330,11 +346,13 @@ def check_structure(sources: dict[str, str]) -> tuple[list[str], list[str]]:
         if label not in refs:
             kind = {"fig": "figure", "tbl": "table", "eq": "equation"}[
                 label.split(":")[0]]
-            errors.append(f"{where}: {kind} <{label}> is never referenced in the "
-                          f"text (most journals require every figure and table "
-                          f"to be cited)")
+            out.append(Finding(
+                "uncited-figure", "error",
+                f"{kind} <{label}> is never referenced in the text "
+                f"(most journals require every figure and table to be cited)",
+                subject=label, where=where))
 
-    warnings += check_reference_order(sources)
+    out += check_reference_order(sources)
 
     # An acronym used more than once but never followed by, or preceded by, a
     # parenthetical expansion anywhere in the manuscript.
@@ -349,41 +367,32 @@ def check_structure(sources: dict[str, str]) -> tuple[list[str], list[str]]:
         defined = (re.search(rf"\(\s*{re.escape(acr)}s?\s*\)", prose)
                    or re.search(rf"\b{re.escape(acr)}s?\s*\([A-Za-z]", prose))
         if not defined:
-            warnings.append(f"acronym {acr!r} used {n}x but never expanded")
+            out.append(Finding(
+                "unexpanded-acronym", "warn",
+                f"{acr!r} used {n}x but never expanded", subject=acr))
 
-    return errors, warnings
+    return out
 
 
 def main() -> int:
-    strict = "--strict" in sys.argv
+    if "--list-rules" in sys.argv:
+        return list_rules()
+
+    cfg = load_config(HERE)
     body = readability.slice_body((HERE / "paper.typ").read_text())
     si = (HERE / "si-body.typ").read_text()
     targets = {"main": body, "SI": si}
 
-    errors, warnings = [], []
+    findings: list[Finding] = []
     for label, src in targets.items():
-        e, w = check(label, readability.clean(src),
-                     readability.clean(no_code(src)),
-                     readability.clean(src, gap=GAP))
-        errors += e
-        warnings += w
+        findings += check(label, readability.clean(src),
+                          readability.clean(no_code(src)),
+                          readability.clean(src, gap=GAP), cfg)
+    findings += check_structure(targets)
 
-    e, w = check_structure(targets)
-    errors += e
-    warnings += w
-
-    for e in errors:
-        print(f"  ERROR   {e}")
-    for w in warnings:
-        print(f"  warn    {w}")
-
-    if not errors and not warnings:
-        print("  prose check clean")
-    else:
-        print(f"\n  {len(errors)} error(s), {len(warnings)} warning(s)")
-        print("  rules: STYLE.md   (warnings are judgement calls, not gates)")
-
-    return 1 if errors or (strict and warnings) else 0
+    return report(findings, cfg,
+                  show_suppressed="--show-suppressed" in sys.argv,
+                  strict="--strict" in sys.argv)
 
 
 if __name__ == "__main__":

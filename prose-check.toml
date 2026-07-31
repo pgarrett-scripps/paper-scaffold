@@ -1,0 +1,40 @@
+# Per-project exceptions to the checks in prose_check.py.
+#
+# STYLE.md is the policy a person reads. This is the machine-checkable subset
+# plus the exceptions this particular manuscript has earned. Every entry should
+# be one a reviewer would accept, so write the reason next to it.
+#
+# `just prose-check --list-rules` prints every rule id and how to suppress it.
+# `just prose-check --show-suppressed` lists what this file is currently hiding,
+# which is worth running occasionally so nothing rots behind a suppression.
+
+# Rules switched off entirely. Use this only for rules with no per-value form,
+# such as semicolon-count. Prefer [allow] for anything narrower.
+disable = []
+
+# Values that are fine in this manuscript, per rule. Matching is
+# case-insensitive on the value the finding names.
+[allow]
+# An acronym so standard in this field that expanding it would read oddly.
+unexpanded-acronym = [
+  "SI",   # Supporting Information, defined by the section it names
+]
+
+# A British spelling that is really a name, a quotation, or a product.
+# british-spelling = ["Grey"]   # a surname
+
+# A phrase flagged as verbose but quoted from a source, or a term of art.
+# verbose-phrase = ["essentially"]
+
+# A figure or table legitimately cited before its number, usually from a
+# conventions or overview paragraph that forward-references.
+# reference-order = ["fig:si-example"]
+
+# A figure or table cited only from somewhere the checker does not read.
+# uncited-figure = ["fig:example"]
+
+# Thresholds. Omit any you are happy with.
+[limits]
+max-sentence-words = 40   # flags a run-on; STYLE.md aims for 25
+opener-run = 3            # consecutive sentences opening with the same word
+repeat-in-sentence = 3    # times a distinctive word may repeat in one sentence
