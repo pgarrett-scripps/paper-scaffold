@@ -6,13 +6,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-PY=python3
-[ -x .venv/bin/python ] && PY=.venv/bin/python
+# One environment, shared with the manuscript toolchain (../pyproject.toml).
+PY="uv run --quiet --group audio python"
 
 # Titles, author, description, voice, and year all come from config.py, which in
 # turn reads the manuscript's identity out of ../config.typ. Nothing about the
 # paper is spelled out in this script.
-eval "$("$PY" - <<'PY'
+eval "$($PY - <<'PY'
 import shlex
 import config
 for k in ("TITLE", "AUTHOR", "MAIN_DESC", "YEAR", "VOICE_NAME"):
@@ -23,21 +23,18 @@ PY
 VOICE="models/${VOICE_NAME}.onnx"
 
 # 1. extract clean prose from the Typst source
-"$PY" extract_prose.py
+$PY extract_prose.py
 
 # 2. synthesize to WAV with Piper (offline)
 export LD_LIBRARY_PATH="./piper:${LD_LIBRARY_PATH:-}"
 ./piper/piper --model "$VOICE" --output_file paper.wav < paper_prose.txt
 
-# 3. compress: a self-contained ffmpeg lives in .venv (installed via imageio-ffmpeg).
+# 3. compress: a self-contained ffmpeg comes from imageio-ffmpeg in the audio group.
 #    MP3 (plays everywhere) + Opus (smallest, modern players).
-FF=""
-if [ -x .venv/bin/python ]; then
-  FF=$(.venv/bin/python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())" 2>/dev/null || true)
-fi
+FF=$($PY -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())" 2>/dev/null || true)
 [ -z "$FF" ] && command -v ffmpeg >/dev/null 2>&1 && FF=ffmpeg
 
-[ -f cover_main.png ] || "$PY" make_cover.py 2>/dev/null || true
+[ -f cover_main.png ] || $PY make_cover.py 2>/dev/null || true
 
 if [ -n "$FF" ]; then
   # MP3 with cover art + ID3 tags (falls back to no cover if the png is absent)

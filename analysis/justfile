@@ -43,7 +43,7 @@ figures:
   shopt -s nullglob
   for s in scripts/gen_*_figure.py; do
     echo "-> $s"
-    uv run --quiet --with matplotlib "$s"
+    uv run --quiet "$s"
   done
 
 # Remove generated assets from the manuscript. Rarely wanted: they are tracked,

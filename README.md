@@ -49,6 +49,8 @@ Nothing else should need editing.
 | `just check` | Report every artifact that has fallen behind its source |
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
 | `just prose-check` | Check the prose against the mechanical rules in STYLE.md |
+| `just density` | Numerals, parentheticals, acronyms, passives per 1,000 words, and section outliers |
+| `just setup` | Build the Python environment (uv, locked) |
 | `just audio-setup` | One-time: fetch Piper, the voice model, and the ffmpeg venv |
 | `just audiobook` | Chaptered `.m4b` of the main text |
 | `just all` | PDF + Word + both audiobooks, then `just check` |
@@ -197,6 +199,26 @@ throughout.
 `tests/fixture.typ` carries a case for each, and `just test` asserts the extracted
 prose is unchanged by a reflow. Add a case there when you add a construct.
 
+### Reading the prose metrics
+
+Three commands look at the writing rather than the build.
+
+`just readability` is Flesch-Kincaid and friends. Useful, but it only knows word
+length and sentence length.
+
+`just density` counts what FK is blind to and what actually makes a Results
+section unreadable: numerals, parentheticals (and what fraction of the words sit
+inside them), acronyms, nominalizations, passives, and hedges, all per 1,000
+words. **Read it relatively, not absolutely.** There is no published limit for any
+of these and anyone quoting one is guessing, so the second table flags sections
+that depart from *this paper's own median* by 1.6x. A Methods section running at
+three times your own parenthetical rate is a real signal you can act on.
+
+`just prose-check` enforces the mechanical rules in STYLE.md and adds two
+structural checks: a figure or table that no text ever references (an error, since
+most journals require every float to be cited), and an acronym used repeatedly but
+never expanded (a warning, since what counts as common knowledge is field-specific).
+
 ### `tests/` is the permanent smoke test
 
 `tests/fixture.typ` is a deliberately dense pile of every construct any extractor
@@ -235,10 +257,18 @@ clone needs `just audio-setup` once (~60 MB download).
 
 ## Requirements
 
-- `typst` and `just`
-- `uv` (for the Word export and the generator scripts; no global installs)
-- `python3`
+- `typst`, `just`, `uv`
+- `typstyle` for `just fmt` (`cargo install typstyle`)
 - `curl` and a network connection for `just audio-setup` only
+
+`just setup` builds the Python environment from `pyproject.toml` and commits the
+resolution to `uv.lock`, so every machine gets the same versions. There are two
+environments on purpose: the manuscript toolchain at the root (pandoc, cairosvg,
+textstat, small and stable, locked and shipped with the scaffold) and the
+analysis in `analysis/pyproject.toml` (whatever the science needs, rewritten per
+project). Keeping them apart means a project's churning analysis dependencies do
+not invalidate the toolchain lock. The audiobook extras are a `--group audio` so a
+clone that never builds audio stays light.
 
 The first PDF build fetches the `arkheion` template from Typst Universe and
 caches it.

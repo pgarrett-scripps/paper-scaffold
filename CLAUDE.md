@@ -29,9 +29,10 @@ check` is clean" is done.
 
 If you changed prose, also run `just paper` so the word count and readability
 numbers in your report are current, and quote them rather than estimating. Run
-`just prose-check` too: it fails on em dashes, British spellings, and doubled
-words, and reports long sentences, verbosity, and repetition as warnings you
-should read rather than silence.
+`just prose-check` too: it fails on em dashes, British spellings, doubled words,
+and uncited figures, and reports long sentences, verbosity, repetition, and
+unexpanded acronyms as warnings you should read rather than silence. `just
+density` shows which section is densest relative to the rest of the paper.
 
 If you changed inline markup, math, links, or cross-references, run `just test`
 and `just fmt-verify`. Those constructs are handled by regexes that a reflow can
@@ -70,6 +71,14 @@ Typst gotcha worth knowing: a method chain broken across lines after `#let x =`
 or inside `[...]` ends at the first newline, and the continuation is parsed as
 literal text. The error points at a closure parameter and reads
 `unknown variable: a`. Wrap the chain in a code block `{ ... }`.
+
+## Python
+
+One environment per concern, both managed by uv. The manuscript toolchain is
+`pyproject.toml` at the root; the analysis has its own in `analysis/`. Run things
+with `uv run`, never a bare `python3` that picks up whatever is on PATH, and never
+`uv run --with X` inline: add the dependency to the right pyproject so the lock
+stays honest.
 
 ## Scope
 

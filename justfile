@@ -18,6 +18,19 @@ fmt_width := "80"
 default:
   @just --list
 
+# One-time (and after any pyproject change): build the Python environment. uv
+# resolves and locks it, so every machine gets the same versions. The analysis has
+# its own separate environment; `just assets` builds it on demand.
+setup:
+  uv sync
+  @echo "environment ready. For the audiobooks: just audio-setup"
+
+# Density metrics: numerals, parentheticals, acronyms, nominalizations, passives
+# and hedges per 1,000 words, plus the sections that depart from the paper's own
+# norms. These are what make prose dense; a reading-level score cannot see them.
+density:
+  @uv run --quiet python density.py
+
 # Rebuild everything this directory owns, from the current source, in the order
 # that fails fastest: the PDF first (any Typst error surfaces in seconds), then
 # Word, then the audiobooks, which dominate the runtime.
@@ -118,7 +131,9 @@ paper:
   typst compile paper.typ
   @bash wordcount.sh
   @echo ""
-  @python3 readability.py
+  @uv run --quiet python readability.py
+  @echo ""
+  @uv run --quiet python density.py
 
 # See wordcount.typ for exactly what is excluded (refs, figures/tables, captions,
 # math, code) vs. included (headings, inline code).
@@ -130,7 +145,7 @@ wordcount:
 # `textstat` if installed, else a built-in estimate. No PDF rebuild.
 # Readability metrics (Flesch-Kincaid grade, reading ease, words/sentence, fog)
 readability:
-  @python3 readability.py
+  @uv run --quiet python readability.py
 
 # Live preview, recompiling on save
 watch:
@@ -149,8 +164,8 @@ watch:
 # formats code and leaves markup lines however long they already were, and in a
 # paper the long lines are prose.
 #
-# SCOPE. `typst_sources` deliberately excludes si/*.typ. Those are written by the
-# scripts in scripts/, so formatting them would be undone on the next
+# SCOPE. `typst_sources` deliberately excludes si/*.typ. Those are written by
+# analysis/, so formatting them would be undone on the next
 # regeneration and show up as spurious diffs. .vscode/settings.json marks them
 # read-only in the editor for the same reason.
 #
@@ -164,23 +179,23 @@ watch:
 # and are reported without failing, because a checker that fails the build over
 # the word "very" gets disabled within a week.
 prose-check:
-  @python3 prose_check.py
+  @uv run --quiet python prose_check.py
 
 # Same, but treat the judgement calls as failures too
 prose-check-strict:
-  @python3 prose_check.py --strict
+  @uv run --quiet python prose_check.py --strict
 
 # Assert the prose extractors still handle every construct, and still do so after
 # a reflow. Runs against tests/fixture.typ, which is NOT part of the manuscript --
 # placeholder prose in paper.typ gets deleted the moment real writing starts, so
 # anything relying on it for coverage would be tested once and never again.
 test:
-  @python3 tests/run.py
+  @uv run --quiet python tests/run.py
 
 # Rewrite tests/expected/ from the current extractor behaviour. Review the diff:
 # this is how a regression gets blessed into the baseline by accident.
 test-update:
-  @python3 tests/run.py --update
+  @uv run --quiet python tests/run.py --update
 
 # Reflow the hand-written Typst sources to `fmt_width` columns
 fmt:
@@ -220,9 +235,9 @@ fmt-verify:
   snap() {   # <tag> -- the rendered text, the counted prose, and the narration
     typst compile paper.typ "$work/$1.pdf" 2>/dev/null
     pdftotext "$work/$1.pdf" "$work/$1-pdf.txt"
-    python3 -c "import readability as r; open('$work/$1-main.txt','w').write(r.clean(r.slice_body(open('paper.typ').read())))"
-    python3 -c "import readability as r; open('$work/$1-si.txt','w').write(r.clean(open('si-body.typ').read()))"
-    (cd audio && python3 extract_prose.py >/dev/null && mv paper_prose.txt "$work/$1-prose.txt")
+    uv run --quiet python -c "import readability as r; open('$work/$1-main.txt','w').write(r.clean(r.slice_body(open('paper.typ').read())))"
+    uv run --quiet python -c "import readability as r; open('$work/$1-si.txt','w').write(r.clean(open('si-body.typ').read()))"
+    (cd audio && uv run --quiet python extract_prose.py >/dev/null && mv paper_prose.txt "$work/$1-prose.txt")
   }
   snap before
   typstyle --inplace --line-width {{fmt_width}} --wrap-text {{typst_sources}}
@@ -254,7 +269,7 @@ fmt-verify:
 # Compile paper.typ -> paper.docx (Word), for journals/co-authors that want .docx
 docx:
   typst compile --features html --input docx=true -f html paper.typ paper.docx.html
-  uv run --quiet --with pypandoc-binary --with cairosvg --with pillow python typst2docx.py paper.docx.html paper.docx
+  uv run --quiet python typst2docx.py paper.docx.html paper.docx
   @rm -f paper.docx.html
 
 # ---------------------------------------------------------------------------
@@ -304,17 +319,16 @@ audio-setup:
   base="https://huggingface.co/rhasspy/piper-voices/resolve/main/${lang}/${name}.onnx"
   test -f "models/${name}.onnx"      || curl -sSL -o "models/${name}.onnx" "$base"
   test -f "models/${name}.onnx.json" || curl -sSL -o "models/${name}.onnx.json" "${base}.json"
-  test -x .venv/bin/python || uv venv .venv
-  uv pip install -q --python .venv/bin/python imageio-ffmpeg pillow matplotlib
+  cd .. && uv sync --quiet --group audio
   echo "audio toolchain ready -- build with: just audiobook"
 
 # Chaptered audiobook of the main text -> audio/paper.m4b (one chapter per section).
 audiobook: _audio-check
-  cd audio && .venv/bin/python make_audiobook.py
+  cd audio && uv run --quiet --group audio python make_audiobook.py
 
 # Chaptered audiobook of the Supporting Information -> audio/paper_si.m4b.
 audiobook-si: _audio-check
-  cd audio && .venv/bin/python make_audiobook.py si
+  cd audio && uv run --quiet --group audio python make_audiobook.py si
 
 # Both chaptered audiobooks (main text, then SI).
 audiobook-all: audiobook audiobook-si
@@ -325,7 +339,7 @@ audio: _audio-check
 
 # Cover art only (audio/cover_main.png, audio/cover_si.png).
 audio-cover: _audio-check
-  cd audio && .venv/bin/python make_cover.py
+  cd audio && uv run --quiet --group audio python make_cover.py
 
 # Fail early with a fix-it hint when the untracked toolchain is missing.
 _audio-check:
@@ -333,7 +347,7 @@ _audio-check:
   set -euo pipefail
   cd audio
   name=$(python3 -c "import config; print(config.VOICE_NAME)")
-  if [ ! -x piper/piper ] || [ ! -f "models/${name}.onnx" ] || [ ! -x .venv/bin/python ]; then
+  if [ ! -x piper/piper ] || [ ! -f "models/${name}.onnx" ]; then
     echo "audio toolchain missing -- run: just audio-setup"
     exit 1
   fi

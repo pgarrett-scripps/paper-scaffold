@@ -209,6 +209,64 @@ def no_code(src: str) -> str:
     return re.sub(r"`[^`]*`", " ", src)
 
 
+# Acronyms that are never expanded because expanding them would be absurd.
+ACRONYM_OK = {
+    # file formats and computing
+    "PDF", "CSV", "TSV", "JSON", "HTML", "XML", "URL", "API", "CPU", "GPU",
+    "RAM", "SSD", "OS", "ID", "IDS", "AI", "MIT", "BSD", "GNU",
+    # units and quantities
+    "GB", "MB", "KB", "TB", "MS", "NS", "PPM", "RPM", "SD", "SE", "CI", "CV",
+    # places, orgs, identifiers
+    "USA", "UK", "EU", "CA", "NY", "ORCID", "DOI", "ISO", "UTC", "PHD", "NIH",
+    # near-universal in science
+    "DNA", "RNA", "PCR", "FDR", "PCA",
+}
+
+
+def check_structure(sources: dict[str, str]) -> tuple[list[str], list[str]]:
+    """Checks that need the Typst source rather than the extracted prose.
+
+    A float nobody points to is the one defect here with no honest defence: most
+    journals require every figure and table to be cited in the text, in order, and
+    a reader who is never sent to a figure will not look at it. So that is an
+    error. Undefined acronyms are a warning, because deciding what counts as
+    common knowledge in a given field is not something this script can do.
+    """
+    errors, warnings = [], []
+    joined = "\n".join(sources.values())
+
+    labels, refs = {}, set()
+    for name, src in sources.items():
+        for m in re.finditer(r"<((?:fig|tbl|eq):[A-Za-z0-9_-]+)>", src):
+            labels.setdefault(m.group(1), name)
+    for m in re.finditer(r"@((?:fig|tbl|eq):[A-Za-z0-9_-]+)", joined):
+        refs.add(m.group(1))
+    for m in re.finditer(r"#refn\(\s*<((?:fig|tbl|eq):[A-Za-z0-9_-]+)>", joined):
+        refs.add(m.group(1))
+
+    for label, where in sorted(labels.items()):
+        if label not in refs:
+            errors.append(f"{where}: <{label}> is never referenced in the text  "
+                          f"(most journals require every float to be cited)")
+
+    # An acronym used more than once but never followed by, or preceded by, a
+    # parenthetical expansion anywhere in the manuscript.
+    prose = re.sub(r"`[^`]*`", " ", joined)
+    counts: dict[str, int] = {}
+    # Hyphenated acronyms (DIA-NN, LC-MS) count as one token, not two fragments.
+    for m in re.finditer(r"\b[A-Z]{2,}[0-9]*(?:-[A-Z0-9]{2,})*\b", prose):
+        counts[m.group(0)] = counts.get(m.group(0), 0) + 1
+    for acr, n in sorted(counts.items()):
+        if n < 2 or acr.upper() in ACRONYM_OK:
+            continue
+        defined = (re.search(rf"\(\s*{re.escape(acr)}s?\s*\)", prose)
+                   or re.search(rf"\b{re.escape(acr)}s?\s*\([A-Za-z]", prose))
+        if not defined:
+            warnings.append(f"acronym {acr!r} used {n}x but never expanded")
+
+    return errors, warnings
+
+
 def main() -> int:
     strict = "--strict" in sys.argv
     body = readability.slice_body((HERE / "paper.typ").read_text())
@@ -220,6 +278,10 @@ def main() -> int:
         e, w = check(label, readability.clean(src), readability.clean(no_code(src)))
         errors += e
         warnings += w
+
+    e, w = check_structure(targets)
+    errors += e
+    warnings += w
 
     for e in errors:
         print(f"  ERROR   {e}")

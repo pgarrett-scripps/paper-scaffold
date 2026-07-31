@@ -1,0 +1,19 @@
+[project]
+name = "analysis"
+version = "0"
+description = "Analysis that produces the manuscript's figures and tables"
+requires-python = ">=3.10"
+
+# REPLACE THIS LIST with whatever your analysis needs. It is deliberately separate
+# from the manuscript toolchain in ../pyproject.toml: those dependencies are the
+# same for every paper built on this scaffold and stay locked, while these change
+# with the science and would otherwise churn that lock on every project.
+#
+# Heavy is fine here. This environment is only built when someone regenerates the
+# assets, which `just check-assets` makes rare, since figures/ and si/ are tracked.
+dependencies = [
+  "matplotlib",
+]
+
+[tool.uv]
+package = false
