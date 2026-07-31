@@ -90,10 +90,13 @@ check:
 # a generator, forget to re-run it, and the manuscript keeps rendering the old
 # numbers with nothing to flag it.
 #
-# Compares commit dates rather than mtimes, for the same reason check-pdf does: a
-# fresh clone or a branch switch rewrites every mtime and would report a false
-# alarm. Treats figures/ and si/ as one unit, because `just assets` regenerates
-# them together.
+# Compares a CONTENT STAMP of the analysis source, not commit dates. Commit dates
+# were the first attempt and were wrong in the one case that matters most: the
+# generators are deterministic on purpose, so re-running them after an edit that
+# does not change the output produces no new commit, and a date-based check then
+# nags forever with no way to satisfy it. A stamp clears the moment `just assets`
+# runs, whether or not the bytes moved. It also needs no git, so it works in an
+# exported tree.
 # Fail if the generated figures/tables predate the analysis code that makes them
 check-assets:
   #!/usr/bin/env bash
@@ -102,23 +105,26 @@ check-assets:
     echo "note:    no analysis/ directory, skipped the generated-asset check"
     exit 0
   fi
-  if ! git rev-parse --git-dir >/dev/null 2>&1; then
-    echo "note:    not a git repository, skipped the generated-asset check"
-    exit 0
-  fi
-  asset_commit=$(git log -1 --format=%H -- figures si)
-  if [ -z "$asset_commit" ]; then
-    echo "figures/ and si/ are not committed yet -- run: just assets"
+  want=$(just _assets-stamp)
+  have=$(cat .assets-stamp 2>/dev/null || echo "")
+  if [ -z "$have" ]; then
+    echo "MISSING: .assets-stamp -- run: just assets"
     exit 1
   fi
-  stale=$(git log --format=%h "$asset_commit"..HEAD -- analysis | head -1)
-  if [ -n "$stale" ]; then
-    echo "STALE: figures/ and si/ predate these analysis commits --"
-    git log --oneline "$asset_commit"..HEAD -- analysis | sed 's/^/  /'
-    echo "  fix: just assets && git add figures si"
+  if [ "$want" != "$have" ]; then
+    echo "STALE: analysis/ has changed since figures/ and si/ were last generated"
+    echo "  fix: just assets && git add figures si .assets-stamp"
     exit 1
   fi
   echo "figures/ and si/ are current with analysis/"
+
+# Hash of the analysis source: every tracked-ish file under analysis/, excluding
+# the heavy inputs and intermediates that do not determine the output.
+_assets-stamp:
+  @find analysis -type f \
+      -not -path 'analysis/data/*' -not -path 'analysis/results/*' \
+      -not -path 'analysis/.venv/*' -not -name '*.pyc' -not -name 'uv.lock' \
+      | sort | xargs sha256sum | sha256sum | cut -d" " -f1
 
 # The SI is included from si-body.typ as an appendix, so this single PDF holds the
 # whole manuscript; there is no separate supplementary.pdf. si-body.typ is
@@ -237,7 +243,12 @@ assets:
     echo "no analysis/ directory: this manuscript has no generated assets."
     exit 0
   fi
-  cd analysis && just assets
+  (cd analysis && just assets)
+  # Record what produced these, so check-assets can tell whether the analysis has
+  # moved on since. Written here rather than in analysis/justfile so the contract
+  # with the analysis stays "regenerate the assets" and nothing more.
+  just _assets-stamp > .assets-stamp
+  echo "stamped .assets-stamp"
 
 # ---------------------------------------------------------------------------
 # Audiobook (audio/). Offline Piper TTS narration of the prose:

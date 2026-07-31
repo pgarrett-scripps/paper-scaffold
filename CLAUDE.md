@@ -56,7 +56,8 @@ A figure: copy `analysis/scripts/gen_example_figure.py`, keep the pattern
 `metadata={"Software": None}` and seed any RNG, or every regeneration churns the
 PNG bytes and shows up as a diff that is not a real change.
 
-Then `just assets && git add figures si`, because both are tracked.
+Then `just assets && git add figures si .assets-stamp`, because all three are
+tracked.
 
 ## Editing the Typst preamble
 

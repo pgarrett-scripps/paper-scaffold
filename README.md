@@ -120,8 +120,14 @@ recipes say so instead of failing.
 
 `figures/` and `si/` are generated but **tracked**, for the same reason
 `paper.pdf` is: a fresh clone must compile without re-running an analysis that
-may take hours. `just check-assets` guards that by comparing commit dates, so
-editing a generator and forgetting to re-run it is reported rather than shipped.
+may take hours. `just check-assets` guards that with a content stamp of the
+analysis source, recorded in `.assets-stamp` when `just assets` runs, so editing
+a generator and forgetting to re-run it is reported rather than shipped.
+
+It stamps rather than comparing commit dates because the generators are
+deterministic on purpose. Re-running them after an edit that does not move the
+output produces no new commit, and a date-based check would then nag with no way
+to satisfy it.
 
 ### `just check` is a submission gate
 
@@ -134,7 +140,7 @@ actually happen:
 - `paper.docx` or an `.m4b` older than the text it renders or narrates. Each
   artifact is compared against its own inputs, so a regenerated SI table does not
   wrongly mark the audiobooks stale (they never read `si/`).
-- `figures/` and `si/` committed before the `analysis/` code that generates them.
+- `figures/` and `si/` older than the `analysis/` code that generates them.
 
 `paper.pdf` is deliberately tracked in git, so a reader can get the manuscript
 without installing Typst. `check-pdf` is what keeps that honest.
