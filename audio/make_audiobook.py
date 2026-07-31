@@ -18,7 +18,9 @@ import wave
 from pathlib import Path
 
 import config
-from extract_prose import clean, extract_abstract, extract_body, strip_balanced
+from extract_prose import (
+    clean, extract_abstract, extract_body, report_unmapped, strip_balanced,
+)
 
 HERE = Path(__file__).resolve().parent
 VOICE = HERE / "models" / f"{config.VOICE_NAME}.onnx"
@@ -91,6 +93,8 @@ def wav_seconds(path):
 def main():
     raw = SRC.read_text()
     chapters = build_chapters(raw)
+    # Before spending the synthesis time on it: say what got dropped.
+    report_unmapped()
     CHAPDIR.mkdir(exist_ok=True)
 
     env = {**os.environ, "LD_LIBRARY_PATH": str(HERE / "piper")}

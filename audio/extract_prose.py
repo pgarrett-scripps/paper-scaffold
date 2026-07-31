@@ -175,6 +175,20 @@ def clean(text):
     return "\n\n".join(cleaned)
 
 
+def report_unmapped():
+    """Print any #sym.* token clean() dropped for want of a mapping.
+
+    Called by both entry points. UNMAPPED exists to make a missing mapping
+    visible at build time rather than on playback, which it only does if
+    something actually prints it.
+    """
+    if not UNMAPPED:
+        return
+    print(f"note: {len(UNMAPPED)} unmapped symbol token(s) dropped rather than "
+          f"narrated: {', '.join(sorted(UNMAPPED))}")
+    print("      add them to SYM in audio/config.py to have them spoken.")
+
+
 def main():
     raw = PAPER_TYP.read_text()
 
@@ -197,10 +211,7 @@ def main():
 
     words = len((OUT.read_text()).split())
     print(f"wrote {OUT}  ({words} words, ~{words/150:.1f} min at 150 wpm)")
-    if UNMAPPED:
-        print(f"note: {len(UNMAPPED)} unmapped symbol token(s) dropped rather than "
-              f"narrated: {', '.join(sorted(UNMAPPED))}")
-        print("      add them to SYM in audio/config.py to have them spoken.")
+    report_unmapped()
 
 
 if __name__ == "__main__":
