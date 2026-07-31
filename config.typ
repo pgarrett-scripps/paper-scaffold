@@ -88,8 +88,25 @@
     .join(", ")
 }
 
+// Generational and post-nominal suffixes, so a surname lookup does not return
+// "III" for "John R. Yates III". Compared case- and period-insensitively.
+#let name-suffixes = (
+  "jr", "sr", "ii", "iii", "iv", "v", "phd", "md", "dphil", "dsc", "esq",
+)
+
+// The family name: the last token that is not a suffix. "John R. Yates III"
+// gives "Yates". Used for the audiobook artist tag and the cover art.
+#let surname-of(full) = {
+  let parts = full.split(" ").filter(p => p.trim() != "")
+  let i = parts.len() - 1
+  while i > 0 and lower(parts.at(i).replace(".", "")) in name-suffixes {
+    i -= 1
+  }
+  parts.at(i)
+}
+
 // "Lovelace, Hopper" -- used as the audiobook artist tag and on the cover.
-#let paper-surnames = paper-authors.map(a => a.name.split(" ").last())
+#let paper-surnames = paper-authors.map(a => surname-of(a.name))
 
 // Restated on the Supporting Information title page.
 #let si-authors = paper-authors.map(a => a.name).join(", ")

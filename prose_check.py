@@ -129,17 +129,29 @@ def _ctx(text: str, i: int, w: int = 45) -> str:
     return "..." + re.sub(r"\s+", " ", text[max(0, i - w):i + w]) + "..."
 
 
-def check(label: str, text: str, spellable: str | None = None
-          ) -> tuple[list[str], list[str]]:
+# Marks where clean() removed a construct. Not whitespace, so a duplicate-word
+# pattern cannot match across it.
+GAP = "\x00"
+
+
+def check(label: str, text: str, spellable: str | None = None,
+          gapped: str | None = None) -> tuple[list[str], list[str]]:
     """`text` is the cleaned prose. `spellable` is the same prose with inline code
     removed rather than unwrapped, and is what the spelling check runs on.
+    `gapped` is the same prose with a sentinel where constructs were removed, and
+    is what the duplicate-word check runs on.
 
     They have to differ. readability.clean() turns `Ms1.Normalised` into a bare
     word, because journals count an inline-code term as a word. Spell-checking
     that word then flags a DIA-NN column name as a British spelling, which is not
     something the author can act on.
+
+    `gapped` exists for the same class of reason. clean() replaces a removed
+    construct with a space, so `and $N_"human"$ and` becomes a literal `and and`
+    and the duplicate-word check reports a repetition the author never wrote.
     """
     spellable = text if spellable is None else spellable
+    gapped = text if gapped is None else gapped
     errors, warnings = [], []
     sents = sentences(text)
 
@@ -153,10 +165,11 @@ def check(label: str, text: str, spellable: str | None = None
             errors.append(f"{label}: British spelling {m.group(0)!r} -> {fix}  "
                           f"{_ctx(spellable, m.start())}")
 
-    for m in re.finditer(r"\b(\w+)\s+\1\b", text, re.I):
+    for m in re.finditer(r"\b(\w+)\s+\1\b", gapped, re.I):
         if m.group(1).lower() in {"had", "that"}:   # legitimately doubles
             continue
-        errors.append(f"{label}: doubled word {m.group(0)!r}  {_ctx(text, m.start())}")
+        errors.append(f"{label}: doubled word {m.group(0)!r}  "
+                      f"{_ctx(gapped.replace(GAP, ''), m.start())}")
 
     # --- warnings ---
     for s in sents:
@@ -346,7 +359,9 @@ def main() -> int:
 
     errors, warnings = [], []
     for label, src in targets.items():
-        e, w = check(label, readability.clean(src), readability.clean(no_code(src)))
+        e, w = check(label, readability.clean(src),
+                     readability.clean(no_code(src)),
+                     readability.clean(src, gap=GAP))
         errors += e
         warnings += w
 

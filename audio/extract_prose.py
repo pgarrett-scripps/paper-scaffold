@@ -28,6 +28,7 @@ OUT = Path(__file__).resolve().parent / "paper_prose.txt"
 # from here.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from typst_prose import (  # noqa: E402
+    CITE,
     LINK,
     REFN,
     markup as _markup,
@@ -98,7 +99,7 @@ def clean(text):
     # 5. cross-refs: #refn(<...>) and bare @label citations (labels may contain -)
     text = re.sub(REFN, "", text)
     text = re.sub(r"\(@[^)]*\)", "", text)              # (@fig:x) parenthetical refs
-    text = re.sub(r"@[A-Za-z0-9:_-]+", "", text)        # remaining @citekeys / @refs
+    text = re.sub(CITE, "", text)                       # remaining @citekeys / @refs
 
     # 6. links: #link("url")[shown text] -> shown text
     text = re.sub(LINK, r"\1", text)

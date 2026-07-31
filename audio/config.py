@@ -115,8 +115,24 @@ WORDMARK = typst_str("paper-wordmark")
 COVER_SUBTITLE = typst_str("paper-cover-subtitle").replace("\\n", "\n")
 INSTITUTION = typst_str("paper-institution")
 
+# Generational and post-nominal suffixes, so the family name of
+# "John R. Yates III" is "Yates" and not "III". Kept in step with `name-suffixes`
+# in config.typ, which does the same job for the PDF side.
+NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v", "phd", "md", "dphil",
+                 "dsc", "esq"}
+
+
+def surname_of(full: str) -> str:
+    """The family name: the last token that is not a suffix."""
+    parts = full.split()
+    i = len(parts) - 1
+    while i > 0 and parts[i].lower().replace(".", "") in NAME_SUFFIXES:
+        i -= 1
+    return parts[i]
+
+
 AUTHOR_NAMES = _author_names()
-SURNAMES = [n.split()[-1] for n in AUTHOR_NAMES]
+SURNAMES = [surname_of(n) for n in AUTHOR_NAMES]
 AUTHOR = ", ".join(SURNAMES)                 # .m4b artist tag
 COVER_AUTHORS = "  ·  ".join(SURNAMES)  # "Lovelace · Hopper"
 

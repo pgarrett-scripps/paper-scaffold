@@ -29,6 +29,14 @@ REFN = r"#refn\(\s*<[^>]*>\s*,?\s*\)"
 # sit on its own line after a reflow.
 LINK = r'#link\(\s*"[^"]*"\s*,?\s*\)\s*\[([^\]]*)\]'
 
+# A bare citation key or cross-reference: @smith2020, @fig:x, @sec:methods.
+#
+# The colon is matched only when an identifier follows it. A plain `[A-Za-z0-9:_-]+`
+# class also swallows a colon that is punctuation rather than part of the key, so
+# `@smith2020: the counts` lost the colon that introduced the clause. Typst's own
+# parser stops at the same place.
+CITE = r"@[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*"
+
 
 def markup(delim: str) -> str:
     """Pattern for one inline-markup pair (`*strong*`, `_emph_`), tolerant of the
@@ -52,12 +60,16 @@ def markup(delim: str) -> str:
     return rf'(?<![A-Za-z0-9_"]){d}(?!\s)({body})(?<!\s){d}(?![A-Za-z0-9_"])'
 
 
-def strip_balanced(text: str, opener: str) -> str:
+def strip_balanced(text: str, opener: str, gap: str = "") -> str:
     """Remove `opener` ... matching-close-paren blocks (e.g. `#figure( ... )`),
     along with any `<label>` that trails the closing paren.
 
     Paren-matching rather than a regex, so it is indifferent to how the contents
     are wrapped and to nesting.
+
+    `gap` is what replaces the removed block. Callers that go on to look for
+    adjacent duplicate words pass a sentinel, so that deleting something from
+    between two identical words does not fabricate a repetition.
     """
     out, i = [], 0
     while i < len(text):
@@ -66,6 +78,7 @@ def strip_balanced(text: str, opener: str) -> str:
             out.append(text[i:])
             break
         out.append(text[i:j])
+        out.append(gap)
         k = j + len(opener) - 1  # index of the '('
         depth = 0
         while k < len(text):

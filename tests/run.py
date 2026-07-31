@@ -167,6 +167,32 @@ def structural_cases() -> bool:
             print(f"  reference order [{name}]: expected {want} finding(s), got {got}")
             ok = False
 
+    # A construct removed from between two identical words must not fabricate a
+    # repetition, and a real repetition must still be caught.
+    import readability
+    dup_cases = [
+        ("math between duplicates", 'the human and $N_h$ and yeast counts', 0),
+        ("citation between duplicates", "reported and @smith2020 and confirmed", 0),
+        ("genuine doubled word", "this is is a real repetition", 1),
+    ]
+    for name, src, want in dup_cases:
+        errs, _ = pc.check("t", readability.clean(src),
+                           readability.clean(pc.no_code(src)),
+                           readability.clean(src, gap=pc.GAP))
+        got = len([e for e in errs if "doubled word" in e])
+        if got != want:
+            print(f"  doubled word [{name}]: expected {want}, got {got}")
+            ok = False
+
+    # A citation key must not swallow a colon that is punctuation.
+    import typst_prose
+    if re.findall(typst_prose.CITE, "@smith2020: the counts") != ["@smith2020"]:
+        print("  citation pattern: swallowed a trailing colon")
+        ok = False
+    if re.findall(typst_prose.CITE, "See @sec:methods.") != ["@sec:methods"]:
+        print("  citation pattern: dropped a real key suffix")
+        ok = False
+
     # An uncited figure is an error; a cited one is not.
     uncited = len(pc.check_structure({"t": fig.format(cap="c", label="fig:x")})[0])
     cited = len(pc.check_structure(

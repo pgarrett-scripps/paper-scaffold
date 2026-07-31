@@ -23,7 +23,7 @@ import re
 import sys
 from pathlib import Path
 
-from typst_prose import LINK, REFN, markup as _markup, strip_balanced as _strip_balanced
+from typst_prose import CITE, LINK, REFN, markup as _markup, strip_balanced as _strip_balanced
 
 HERE = Path(__file__).resolve().parent
 PAPER = HERE / "paper.typ"
@@ -40,25 +40,31 @@ _ABBR = [
 ]
 
 
-def clean(text: str) -> str:
-    """Strip Typst source down to exempt-free prose (math/code/figures dropped)."""
+def clean(text: str, gap: str = " ") -> str:
+    """Strip Typst source down to exempt-free prose (math/code/figures dropped).
+
+    `gap` is what a removed construct leaves behind. The default, a space, is what
+    you want for counting and scoring. Pass a sentinel when the caller then looks
+    for adjacent duplicate words: `and $N_"human"$ and` collapses to a literal
+    `and and` under a space, which is a repetition the author never wrote.
+    """
     # line comments and standalone directive lines (imports, lets, sets, shows)
-    text = re.sub(r"(?m)^\s*//.*$", " ", text)
-    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
-    text = re.sub(r"(?m)^\s*#(?:import|let|set|show)\b.*$", " ", text)
+    text = re.sub(r"(?m)^\s*//.*$", gap, text)
+    text = re.sub(r"/\*.*?\*/", gap, text, flags=re.S)
+    text = re.sub(r"(?m)^\s*#(?:import|let|set|show)\b.*$", gap, text)
     # block code and config dumps, then whole figures (caption + table + image)
-    text = re.sub(r"```.*?```", " ", text, flags=re.S)
-    text = _strip_balanced(text, "#raw(")
-    text = _strip_balanced(text, "#figure(")
+    text = re.sub(r"```.*?```", gap, text, flags=re.S)
+    text = _strip_balanced(text, "#raw(", gap)
+    text = _strip_balanced(text, "#figure(", gap)
     # math: DROP entirely (exempt), including any leftover $...$
-    text = re.sub(r"#sym\.[A-Za-z0-9.]+", " ", text)
-    text = re.sub(r"\$[^$]*\$", " ", text)
+    text = re.sub(r"#sym\.[A-Za-z0-9.]+", gap, text)
+    text = re.sub(r"\$[^$]*\$", gap, text)
     # cross-refs and citations. The \s* are load-bearing: typstyle breaks a long
     # line inside the call, leaving `#refn(\n  <sec:x>\n)`, and a one-line-only
     # pattern then leaks the bare `#refn(` and `)` into the prose as words.
-    text = re.sub(REFN, " ", text)
-    text = re.sub(r"\(@[^)]*\)", " ", text)         # (@fig:example) parentheticals
-    text = re.sub(r"@[A-Za-z0-9:_-]+", " ", text)   # remaining @citekeys / @refs
+    text = re.sub(REFN, gap, text)
+    text = re.sub(r"\(@[^)]*\)", gap, text)         # (@fig:example) parentheticals
+    text = re.sub(CITE, gap, text)                  # remaining @citekeys / @refs
     # links: #link("url")[shown] -> shown
     text = re.sub(LINK, r"\1", text)
     text = text.replace("`", "")                    # inline code -> bare word
@@ -69,7 +75,7 @@ def clean(text: str) -> str:
     # generic inline wrappers #text(..)[x], #emph[x] -> x
     text = re.sub(r"#[a-z][a-z0-9.]*(?:\([^()]*\))?\s*\[", "[", text)
     text = text.replace("[", " ").replace("]", " ")
-    text = re.sub(r"<[A-Za-z0-9:_-]+>", " ", text)  # stray labels
+    text = re.sub(r"<[A-Za-z0-9:_-]+>", gap, text)  # stray labels
     text = text.replace(r"\@", "@").replace(r"\_", "_")
     return re.sub(r"\s+", " ", text).strip()
 
