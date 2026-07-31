@@ -122,10 +122,7 @@ into over under between within across after before above below through
 
 def sentences(text: str) -> list[str]:
     """Split into sentences, protecting the abbreviations readability knows about."""
-    t = text
-    for ab in readability._ABBR:
-        t = t.replace(ab, ab.replace(".", "\x00"))
-    t = re.sub(r"(?<=\d)\.(?=\d)", "\x00", t)
+    t = readability.protect_periods(text)
     parts = re.split(r"(?<=[.!?])\s+", t)
     return [p.replace("\x00", ".").strip() for p in parts if len(p.split()) >= 2]
 

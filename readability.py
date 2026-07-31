@@ -39,6 +39,34 @@ _ABBR = [
     "min.", "Inc.", "Ltd.", "St.",
 ]
 
+# Matched only at a word boundary. These used to be masked with a plain substring
+# replace, which made every word ending in "-al." ("removal.", "structural.")
+# look like "et al." and weld the following sentence onto it. Sentences got
+# longer, and words-per-sentence, Flesch-Kincaid and fog all reported the prose
+# as denser than it is.
+_ABBR_RE = re.compile(
+    r"\b(?:%s)" % "|".join(re.escape(a) for a in sorted(_ABBR, key=len, reverse=True))
+)
+
+# A heading is navigation, not prose. Left alone, the marker survived into the
+# text and glued the title to the sentence after it, inventing long sentences
+# that nobody wrote. It is replaced by a bare period rather than by its title: a
+# hard sentence boundary that contributes no words, so a run of short headings
+# cannot drag the words-per-sentence average down the way the gluing dragged it
+# up. The narrator keeps headings; a reader needs to hear them. A readability
+# score does not. The journal word count counts them separately.
+_HEADING_RE = re.compile(r"(?m)^\s*=+\s+[^\n<]+?(?:\s*<[^>]+>)?\s*$")
+
+
+def protect_periods(text: str) -> str:
+    """Mask the periods that do not end a sentence (abbreviations, decimals).
+
+    Shared so the readability score and the long-sentence check agree on where a
+    sentence ends. They had separate copies of this and had already drifted.
+    """
+    t = _ABBR_RE.sub(lambda m: m.group(0).replace(".", "\x00"), text)
+    return re.sub(r"(?<=\d)\.(?=\d)", "\x00", t)
+
 
 def clean(text: str, gap: str = " ") -> str:
     """Strip Typst source down to exempt-free prose (math/code/figures dropped).
@@ -48,6 +76,8 @@ def clean(text: str, gap: str = " ") -> str:
     for adjacent duplicate words: `and $N_"human"$ and` collapses to a literal
     `and and` under a space, which is a repetition the author never wrote.
     """
+    # headings -> a bare sentence boundary, before the markers are lost
+    text = _HEADING_RE.sub("\n\n.\n\n", text)
     # line comments and standalone directive lines (imports, lets, sets, shows)
     text = re.sub(r"(?m)^\s*//.*$", gap, text)
     text = re.sub(r"/\*.*?\*/", gap, text, flags=re.S)
@@ -108,10 +138,7 @@ def _syllables(word: str) -> int:
 
 
 def _sentences(text: str) -> int:
-    t = text
-    for ab in _ABBR:
-        t = t.replace(ab, ab.replace(".", "\x00"))
-    t = re.sub(r"(?<=\d)\.(?=\d)", "\x00", t)  # decimals: 0.15
+    t = protect_periods(text)
     parts = [s for s in re.split(r"[.!?]+(?:\s|$)", t) if len(s.split()) >= 2]
     return max(1, len(parts))
 

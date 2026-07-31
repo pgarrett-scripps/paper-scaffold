@@ -231,7 +231,47 @@ def structural_cases() -> bool:
     if (uncited, cited) != (1, 0):
         print(f"  uncited-figure check: expected (1, 0), got ({uncited}, {cited})")
         ok = False
+    ok &= boundary_cases()
     ok &= suppression_cases()
+    return ok
+
+
+def boundary_cases() -> bool:
+    """Where a sentence ends. Both of these were wrong and silently inflated the
+    reported words-per-sentence, which is the kind of error a golden file over a
+    fixture full of short sentences will never catch."""
+    import prose_check as pc
+    import readability
+    ok = True
+
+    # An abbreviation is masked only at a word boundary. Masking it as a plain
+    # substring made every word ending in "-al." look like "et al.".
+    splits = [
+        ("plain -al. ends a sentence", "It survived removal. It is sampled densely.", 2),
+        ("et al. does not", "As Smith et al. showed, it works. Then it stopped.", 2),
+        ("a decimal does not", "The value 0.15 held. It then fell.", 2),
+        ("vs. does not", "Treated vs. control counts differ. The gap is small.", 2),
+    ]
+    for name, src, want in splits:
+        got = len(pc.sentences(src))
+        if got != want:
+            print(f"  sentence split [{name}]: expected {want}, got {got}")
+            ok = False
+
+    # A heading ends the sentence before it, contributes no words of its own, and
+    # never merges with the sentence after it.
+    got = readability.clean(
+        "== Methods\nWe used a hybrid benchmark here.\n\n"
+        "= Results\nReduction is governed by density."
+    )
+    for bad in ("=", "Methods", "Results"):
+        if bad in got:
+            print(f"  heading handling: {bad!r} leaked into the scored prose -- {got!r}")
+            ok = False
+    if readability._sentences(got) != 2:
+        print(f"  heading handling: expected 2 sentences, got "
+              f"{readability._sentences(got)} -- {got!r}")
+        ok = False
     return ok
 
 
