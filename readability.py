@@ -38,6 +38,26 @@ _ABBR = [
 ]
 
 
+def _markup(delim: str) -> str:
+    """Pattern for one inline-markup pair (`*strong*`, `_emph_`), tolerant of the
+    line break `just fmt` may have put inside it.
+
+    typstyle --wrap-text reflows prose to `fmt_width` columns and will happily
+    break `_Saccharomyces cerevisiae_` across two lines. A `[^_\\n]+` body then
+    stops matching and the literal underscores survive into the word count and
+    the narration.
+
+    Allowing the newline is not enough on its own: it lets the pair span lines and
+    match things that are not markup at all, such as a filename glob (`smooth_*`)
+    or a subscript left behind by math (`"median"_"orig"`). So the delimiter must
+    also sit where markup can sit -- not butted against an identifier character or
+    a quote, and not against the whitespace inside the pair.
+    """
+    d = re.escape(delim)
+    body = rf"(?:[^{d}\n]|\n(?!\s*\n))+?"
+    return rf'(?<![A-Za-z0-9_"]){d}(?!\s)({body})(?<!\s){d}(?![A-Za-z0-9_"])'
+
+
 def _strip_balanced(text: str, opener: str) -> str:
     """Remove `opener` ... matching-close-paren blocks (e.g. #figure( ... ))."""
     out, i = [], 0
@@ -84,13 +104,14 @@ def clean(text: str) -> str:
     text = re.sub(r"#refn\(\s*<[^>]*>\s*,?\s*\)", " ", text)
     text = re.sub(r"\(@[^)]*\)", " ", text)         # (@fig:example) parentheticals
     text = re.sub(r"@[A-Za-z0-9:_-]+", " ", text)   # remaining @citekeys / @refs
-    # links: #link("url")[shown] -> shown
-    text = re.sub(r'#link\("[^"]*"\)\[([^\]]*)\]', r"\1", text)
+    # links: #link("url")[shown] -> shown (the url may sit on its own line after
+    # a reflow, hence the \s*)
+    text = re.sub(r'#link\(\s*"[^"]*"\s*,?\s*\)\s*\[([^\]]*)\]', r"\1", text)
     text = text.replace("`", "")                    # inline code -> bare word
-    # strong/emph markup -> plain
+    # strong/emph markup -> plain (see _markup() for why it is not just [^*\n]+)
     for _ in range(3):
-        text = re.sub(r"\*([^*\n]+)\*", r"\1", text)
-        text = re.sub(r"(?<![A-Za-z0-9])_([^_\n]+)_(?![A-Za-z0-9])", r"\1", text)
+        text = re.sub(_markup("*"), r"\1", text)
+        text = re.sub(_markup("_"), r"\1", text)
     # generic inline wrappers #text(..)[x], #emph[x] -> x
     text = re.sub(r"#[a-z][a-z0-9.]*(?:\([^()]*\))?\s*\[", "[", text)
     text = text.replace("[", " ").replace("]", " ")

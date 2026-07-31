@@ -27,6 +27,25 @@ BODY_START = re.compile(r"(?m)^// >>> BODY START.*$")
 BODY_END = re.compile(r"(?m)^// <<< BODY END.*$")
 
 
+def _markup(delim):
+    """Pattern for one inline-markup pair (`*strong*`, `_emph_`), tolerant of the
+    line break `just fmt` may have put inside it.
+
+    typstyle --wrap-text reflows prose to `fmt_width` columns and will happily
+    break `_Saccharomyces cerevisiae_` across two lines. A `[^_\\n]+` body then
+    stops matching and Piper pronounces the literal underscores.
+
+    Allowing the newline is not enough on its own: it lets the pair span lines and
+    match things that are not markup at all, such as a filename glob (`smooth_*`)
+    or a subscript left behind after math is verbalized (`"median"_"orig"`). So the
+    delimiter must also sit where markup can sit -- not butted against an
+    identifier character or a quote, and not against the whitespace inside the pair.
+    """
+    d = re.escape(delim)
+    body = rf"(?:[^{d}\n]|\n(?!\s*\n))+?"
+    return rf'(?<![A-Za-z0-9_"]){d}(?!\s)({body})(?<!\s){d}(?![A-Za-z0-9_"])'
+
+
 def strip_balanced(text, opener):
     """Remove `opener` ... matching-close-paren blocks (e.g. #figure( ... ))."""
     out = []
@@ -122,18 +141,20 @@ def clean(text):
     text = re.sub(r"\(@[^)]*\)", "", text)              # (@fig:x) parenthetical refs
     text = re.sub(r"@[A-Za-z0-9:_-]+", "", text)        # remaining @citekeys / @refs
 
-    # 6. links: #link("url")[shown text] -> shown text
-    text = re.sub(r'#link\("[^"]*"\)\[([^\]]*)\]', r"\1", text)
+    # 6. links: #link("url")[shown text] -> shown text. The url argument may sit
+    #    on its own line after a reflow, hence the \s*.
+    text = re.sub(r'#link\(\s*"[^"]*"\s*,?\s*\)\s*\[([^\]]*)\]', r"\1", text)
 
     # 7. inline code -> the bare word, with spaces kept. Stripping the backticks
     #    alone glues the term to the preceding word, which the voice then runs
     #    together ("resulting.d").
     text = re.sub(r"`([^`]*)`", r" \1 ", text)
 
-    # 8. strong *...* and emphasis _..._ -> plain (do a couple of passes)
+    # 8. strong *...* and emphasis _..._ -> plain (do a couple of passes).
+    #    See _markup() for why this is not just [^*\n]+.
     for _ in range(3):
-        text = re.sub(r"\*([^*\n]+)\*", r"\1", text)
-        text = re.sub(r"(?<![A-Za-z0-9])_([^_\n]+)_(?![A-Za-z0-9])", r"\1", text)
+        text = re.sub(_markup("*"), r"\1", text)
+        text = re.sub(_markup("_"), r"\1", text)
 
     # 8b. generic inline content wrappers: #text(size: 9pt)[x], #emph[x],
     #     #block(..)[x] -> keep x, drop the marker and its content brackets

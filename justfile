@@ -153,9 +153,17 @@ fmt-check:
 fmt-diff:
   typstyle --diff --line-width {{fmt_width}} --wrap-text {{typst_sources}}
 
-# Prove formatting is output-neutral: compare the PDF's extracted text before and
-# after a reformat. Restores the sources either way, so it is safe to run on a
-# dirty tree only if that tree is committed -- it uses git to restore.
+# Prove a reflow changes nothing that matters, on BOTH axes.
+#
+# The PDF is the obvious one. The other is the prose that readability.py and
+# audio/extract_prose.py strip out of the source with regexes, several of which
+# have to assume a construct sits on one line -- which is exactly what
+# --wrap-text stops being true. In the manuscript this scaffold came from, a
+# reflow silently split `#refn(<tab:x>)`, `_Saccharomyces cerevisiae_` and
+# `#link(` across lines: the PDF was untouched, but the narration gained a
+# spoken "and)." and a pair of literal underscores. So check both.
+#
+# Uses git to restore the sources, so they must be committed first.
 fmt-verify:
   #!/usr/bin/env bash
   set -euo pipefail
@@ -164,19 +172,31 @@ fmt-verify:
     exit 1
   fi
   command -v pdftotext >/dev/null || { echo "error: pdftotext not found (poppler-utils)"; exit 1; }
-  trap 'git checkout -- {{typst_sources}}' EXIT
-  typst compile paper.typ /tmp/fmt-before.pdf
-  pdftotext /tmp/fmt-before.pdf /tmp/fmt-before.txt
+  work=$(mktemp -d); trap 'git checkout -- {{typst_sources}}; rm -rf "$work"' EXIT
+  # One-liners on purpose: a line at column 0 inside a recipe body ends the
+  # recipe, so neither a heredoc nor a multi-line `python -c` string works here.
+  snap() {   # <tag> -- the rendered text, the counted prose, and the narration
+    typst compile paper.typ "$work/$1.pdf" 2>/dev/null
+    pdftotext "$work/$1.pdf" "$work/$1-pdf.txt"
+    python3 -c "import readability as r; open('$work/$1-main.txt','w').write(r.clean(r.slice_body(open('paper.typ').read())))"
+    python3 -c "import readability as r; open('$work/$1-si.txt','w').write(r.clean(open('si-body.typ').read()))"
+    (cd audio && python3 extract_prose.py >/dev/null && mv paper_prose.txt "$work/$1-prose.txt")
+  }
+  snap before
   typstyle --inplace --line-width {{fmt_width}} --wrap-text {{typst_sources}}
-  typst compile paper.typ /tmp/fmt-after.pdf
-  pdftotext /tmp/fmt-after.pdf /tmp/fmt-after.txt
-  if diff -q /tmp/fmt-before.txt /tmp/fmt-after.txt >/dev/null; then
-    echo "formatting is output-neutral: extracted PDF text is byte-identical"
-  else
-    echo "WARNING: formatting changed the rendered text --"
-    diff -u /tmp/fmt-before.txt /tmp/fmt-after.txt | head -40
-    exit 1
-  fi
+  snap after
+  rc=0
+  for f in pdf main si prose; do
+    if diff -q "$work/before-$f.txt" "$work/after-$f.txt" >/dev/null; then
+      echo "  $f: unchanged by the reflow"
+    else
+      echo "  $f: CHANGED by the reflow --"
+      diff "$work/before-$f.txt" "$work/after-$f.txt" | head -20
+      rc=1
+    fi
+  done
+  [ $rc -eq 0 ] && echo "reflow is neutral: PDF, word count, readability and narration all unaffected"
+  exit $rc
 
 # Route: Typst HTML export -> pandoc. Three things make it work:
 #   1. --input docx=true bypasses the arkheion template. Its front matter and heading

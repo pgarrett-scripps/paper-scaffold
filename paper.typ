@@ -109,6 +109,16 @@ def example(threshold: float = 0.5) -> bool:
 Inline `code` terms, by contrast, are counted as ordinary words, because
 journals treat a parameter name in running text as a word like any other.
 
+Inline markup is the last construct with special handling. *Strong text* and
+_emphasis_, the latter being how an italicized species name such as
+_Saccharomyces cerevisiae_ is written, both have to reach the word count as
+plain words rather than as literal asterisks and underscores. This matters more
+than it looks, because `just fmt` reflows prose to 80 columns and will happily
+put the line break inside a two-word italic phrase, which is what defeats a
+naive pattern. Links behave the same way, so the skeleton carries one to #link(
+  "https://typst.app",
+)[the Typst website]. Run `just fmt-verify` after touching any of these.
+
 = Results
 
 Figures are excluded from the word count together with their captions, are
