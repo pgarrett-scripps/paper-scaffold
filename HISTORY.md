@@ -41,6 +41,33 @@ rather than a copy.
 
 ---
 
+## 1.0.1
+
+Three fixes, all found by porting 1.0.0 into a real manuscript (`FeNovo`). None
+of them change an interface, so an existing project can take them by copying
+`justfile`, `readability.py` and `tests/run.py`.
+
+**`just fmt` rebuilt the PDF.** The recipe's closing message was double-quoted
+and contained `` `just paper` ``. just evaluates a backquoted string as a shell
+command, so formatting the sources ran a full compile and printed a word count
+nobody asked for. Single-quoted now, with the explanation above the recipe rather
+than inside it, since recipe-body `#` comments are echoed.
+
+**The sentinel gap did not cover inline code.** `readability.clean` unwraps an
+inline-code span into a bare word, because a journal counts it as one. Under a
+sentinel gap the caller is looking for adjacent duplicate words instead, and an
+unwrapped `` `--proteome-k K` `` reads as a doubled "k K" the author never wrote
+— firing the one duplicate-word rule that gates. Inline code is now dropped
+whole under a non-default gap, and the regression cases cover it.
+
+**CLAUDE.md described checks that no longer exist.** It told an agent that
+`just check` covers audiobook staleness and figure-copy drift. Both were removed
+in 1.0.0 (see "Decisions reversed"), so the instruction sent agents looking for
+output that never appears. It now describes what `check` actually does and points
+at the reversal.
+
+---
+
 ## 1.0.0
 
 First release. The pipeline was extracted from the `dnoise` manuscript, where

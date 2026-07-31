@@ -67,7 +67,14 @@ def clean(text: str, gap: str = " ") -> str:
     text = re.sub(CITE, gap, text)                  # remaining @citekeys / @refs
     # links: #link("url")[shown] -> shown
     text = re.sub(LINK, r"\1", text)
-    text = text.replace("`", "")                    # inline code -> bare word
+    # Inline code is unwrapped to a bare word, because a journal counts it as one.
+    # Under a sentinel gap the caller is instead looking for adjacent duplicate
+    # words, and an unwrapped `--proteome-k K` reads as a doubled "k K" the author
+    # never wrote, so there the whole span goes.
+    if gap == " ":
+        text = text.replace("`", "")                # inline code -> bare word
+    else:
+        text = re.sub(r"`[^`]*`", gap, text)
     # strong/emph markup -> plain (see typst_prose.markup for why)
     for _ in range(3):
         text = re.sub(_markup("*"), r"\1", text)

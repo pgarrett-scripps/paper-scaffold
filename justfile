@@ -217,9 +217,14 @@ test-update:
   @uv run --quiet python tests/run.py --update
 
 # Reflow the hand-written Typst sources to `fmt_width` columns
+#
+# The message below is single-quoted, NOT backquoted. just evaluates a backquoted
+# string as a shell command, so a `just paper` written inside that message ran a
+# full PDF rebuild as a side effect of formatting and printed a word count nobody
+# asked for. Recipe-body `#` comments are echoed too, hence this sits out here.
 fmt:
   typstyle --inplace --line-width {{fmt_width}} --wrap-text {{typst_sources}}
-  @echo "formatted. Rebuild with `just paper` and confirm nothing moved."
+  @echo 'formatted. Rebuild with "just paper" and confirm nothing moved.'
 
 # Exit non-zero if the hand-written sources need reformatting (gate for CI or a hook)
 fmt-check:

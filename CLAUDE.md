@@ -23,9 +23,13 @@ the prose at them, and each hard-fails without them.
 ## Before saying the work is done
 
 Run `just check`. It exits non-zero if the committed PDF predates a source
-commit, if the Word export or an audiobook is older than what it renders, or if a
-figure differs from its upstream copy. "I edited the text" is not done; "`just
-check` is clean" is done.
+commit, if the Word export is older than what it renders, or if `figures/` and
+`si/` are older than the `analysis/` code that generates them. "I edited the
+text" is not done; "`just check` is clean" is done.
+
+It deliberately does not check the audiobooks, and there is no upstream figure
+copy to compare against any more. See HISTORY.md's "Decisions reversed" before
+adding either back.
 
 If you changed prose, also run `just paper` so the word count and readability
 numbers in your report are current, and quote them rather than estimating. Do not silence a prose-check finding by editing prose_check.py. Add it to

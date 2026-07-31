@@ -179,7 +179,14 @@ def structural_cases() -> bool:
     dup_cases = [
         ("math between duplicates", 'the human and $N_h$ and yeast counts', 0),
         ("citation between duplicates", "reported and @smith2020 and confirmed", 0),
+        # Inline code is unwrapped to a bare word for counting, so under the
+        # sentinel gap it has to be dropped instead, or its last token collides
+        # with the word after it.
+        ("code metavariable", "Run it with `--proteome-k K` first.", 0),
+        ("code between duplicates", "defined in `f()` in `g.rs` today", 0),
+        ("adjacent citations", "a database @smith2020 @jones2021 exists", 0),
         ("genuine doubled word", "this is is a real repetition", 1),
+        ("legitimate double", "the result that that model gives is fine", 0),
     ]
     for name, src, want in dup_cases:
         found = pc.check("t", readability.clean(src),
