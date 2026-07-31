@@ -18,6 +18,21 @@ fmt_width := "80"
 default:
   @just --list
 
+# Which paper-scaffold version this manuscript is built on, and the state of the
+# working tree. The version comes from pyproject.toml, which is copied along with
+# the scaffold, so it answers the question in a derived project too.
+# See HISTORY.md for the versioning policy and how to upgrade.
+version:
+  #!/usr/bin/env bash
+  set -uo pipefail
+  v=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+  echo "paper-scaffold $v"
+  if git rev-parse --git-dir >/dev/null 2>&1; then
+    dirty=$(git status --porcelain | wc -l)
+    echo "  commit  $(git log -1 --format='%h %ad %s' --date=short)"
+    [ "$dirty" -gt 0 ] && echo "  tree    $dirty uncommitted change(s)" || echo "  tree    clean"
+  fi
+
 # One-time (and after any pyproject change): build the Python environment. uv
 # resolves and locks it, so every machine gets the same versions. The analysis has
 # its own separate environment; `just assets` builds it on demand.

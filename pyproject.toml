@@ -1,6 +1,9 @@
 [project]
 name = "paper"
-version = "0"
+# The paper-scaffold version this manuscript is built on. Travels with the
+# scaffold when it is copied, so a project can always say where it came from.
+# See HISTORY.md for what bumps major, minor, and patch.
+version = "1.0.0"
 description = "Python toolchain for building the manuscript"
 requires-python = ">=3.10"
 

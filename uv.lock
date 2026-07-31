@@ -931,7 +931,7 @@ wheels = [
 
 [[package]]
 name = "paper"
-version = "0"
+version = "1.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "cairosvg" },
