@@ -34,10 +34,9 @@ and uncited figures, and reports long sentences, verbosity, repetition, and
 unexpanded acronyms as warnings you should read rather than silence. `just
 density` shows which section is densest relative to the rest of the paper.
 
-If you changed inline markup, math, links, or cross-references, run `just test`
-and `just fmt-verify`. Those constructs are handled by regexes that a reflow can
-break silently, which has happened before (see the `fmt-verify` comment in the
-justfile for the three specific cases).
+If you changed inline markup, math, links, or cross-references, run `just test`.
+Those constructs are recognized by regexes in `typst_prose.py` that a reflow can
+break silently, which has happened three times (see that file for the cases).
 
 If you taught an extractor to handle a new construct, add a case for it to
 `tests/fixture.typ` and regenerate the golden files with `just test-update`,

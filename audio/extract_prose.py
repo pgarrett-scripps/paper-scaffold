@@ -23,57 +23,19 @@ from config import (  # noqa: F401  (re-exported for make_audiobook.py)
 
 OUT = Path(__file__).resolve().parent / "paper_prose.txt"
 
+# The shared Typst-recognition primitives live one level up, beside the
+# manuscript. strip_balanced is re-exported because make_audiobook.py imports it
+# from here.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from typst_prose import (  # noqa: E402
+    LINK,
+    REFN,
+    markup as _markup,
+    strip_balanced,
+)
+
 BODY_START = re.compile(r"(?m)^// >>> BODY START.*$")
 BODY_END = re.compile(r"(?m)^// <<< BODY END.*$")
-
-
-def _markup(delim):
-    """Pattern for one inline-markup pair (`*strong*`, `_emph_`), tolerant of the
-    line break `just fmt` may have put inside it.
-
-    typstyle --wrap-text reflows prose to `fmt_width` columns and will happily
-    break `_Saccharomyces cerevisiae_` across two lines. A `[^_\\n]+` body then
-    stops matching and Piper pronounces the literal underscores.
-
-    Allowing the newline is not enough on its own: it lets the pair span lines and
-    match things that are not markup at all, such as a filename glob (`smooth_*`)
-    or a subscript left behind after math is verbalized (`"median"_"orig"`). So the
-    delimiter must also sit where markup can sit -- not butted against an
-    identifier character or a quote, and not against the whitespace inside the pair.
-    """
-    d = re.escape(delim)
-    body = rf"(?:[^{d}\n]|\n(?!\s*\n))+?"
-    return rf'(?<![A-Za-z0-9_"]){d}(?!\s)({body})(?<!\s){d}(?![A-Za-z0-9_"])'
-
-
-def strip_balanced(text, opener):
-    """Remove `opener` ... matching-close-paren blocks (e.g. #figure( ... ))."""
-    out = []
-    i = 0
-    while i < len(text):
-        j = text.find(opener, i)
-        if j == -1:
-            out.append(text[i:])
-            break
-        out.append(text[i:j])
-        # find the matching close paren starting at the '(' in opener
-        k = j + len(opener) - 1  # index of '('
-        depth = 0
-        while k < len(text):
-            if text[k] == "(":
-                depth += 1
-            elif text[k] == ")":
-                depth -= 1
-                if depth == 0:
-                    k += 1
-                    break
-            k += 1
-        # also swallow a trailing " <label>" anchor if present
-        m = re.match(r"\s*<[^>]+>", text[k:])
-        if m:
-            k += m.end()
-        i = k
-    return "".join(out)
 
 
 def _bracket_block(text, start):
@@ -134,16 +96,12 @@ def clean(text):
     text = re.sub(r"#sub\[([^\]]*)\]", r"\1", text)
 
     # 5. cross-refs: #refn(<...>) and bare @label citations (labels may contain -)
-    #    The \s* are load-bearing: typstyle breaks a long line inside the call,
-    #    leaving `#refn(\n  <sec:x>\n)`, and a one-line-only pattern then leaves
-    #    a bare `#refn(` behind for the voice to read aloud as "refn".
-    text = re.sub(r"#refn\(\s*<[^>]*>\s*,?\s*\)", "", text)
+    text = re.sub(REFN, "", text)
     text = re.sub(r"\(@[^)]*\)", "", text)              # (@fig:x) parenthetical refs
     text = re.sub(r"@[A-Za-z0-9:_-]+", "", text)        # remaining @citekeys / @refs
 
-    # 6. links: #link("url")[shown text] -> shown text. The url argument may sit
-    #    on its own line after a reflow, hence the \s*.
-    text = re.sub(r'#link\(\s*"[^"]*"\s*,?\s*\)\s*\[([^\]]*)\]', r"\1", text)
+    # 6. links: #link("url")[shown text] -> shown text
+    text = re.sub(LINK, r"\1", text)
 
     # 7. inline code -> the bare word, with spaces kept. Stripping the backticks
     #    alone glues the term to the preceding word, which the voice then runs
@@ -151,7 +109,7 @@ def clean(text):
     text = re.sub(r"`([^`]*)`", r" \1 ", text)
 
     # 8. strong *...* and emphasis _..._ -> plain (do a couple of passes).
-    #    See _markup() for why this is not just [^*\n]+.
+    #    See typst_prose.markup() for why this is not just [^*\n]+.
     for _ in range(3):
         text = re.sub(_markup("*"), r"\1", text)
         text = re.sub(_markup("_"), r"\1", text)

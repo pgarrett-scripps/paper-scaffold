@@ -57,11 +57,13 @@ check:
 
   just check-pdf || rc=1
 
-  # paper.docx and the .m4b files are gitignored, so mtime is the only signal here.
-  # Each artifact is compared against ITS OWN inputs: the Word export renders the
-  # whole manuscript including the generated tables and figures, but the audiobooks
-  # narrate prose only and never read si/ or figures/, so holding them against a
-  # regenerated table would report drift that cannot exist.
+  # paper.docx is gitignored, so mtime is the only signal here.
+  #
+  # The audiobooks are deliberately NOT checked. Every prose edit would mark them
+  # stale, and clearing that costs minutes of narration, so the warning was almost
+  # always present and almost never acted on. A nag with an expensive fix is a nag
+  # people learn to scroll past, and it was eroding trust in the rest of this
+  # output. Rebuild them with `just audiobook-all` when you actually want them.
   newest() { ls -t "$@" 2>/dev/null | head -1; }
   check_artifact() {   # <artifact> <label> <input>...
     local f="$1" label="$2"; shift 2
@@ -76,8 +78,6 @@ check:
   }
   check_artifact paper.docx "just docx" \
     paper.typ config.typ si-body.typ references.bib si/*.typ figures/*.png
-  check_artifact audio/paper.m4b "just audiobook" paper.typ config.typ
-  check_artifact audio/paper_si.m4b "just audiobook-si" si-body.typ config.typ
 
   just check-assets || rc=1
 
@@ -119,9 +119,6 @@ check-assets:
     exit 1
   fi
   echo "figures/ and si/ are current with analysis/"
-
-# Compile paper.pdf (main text + Supporting Information appended as one PDF)
-pdf: paper
 
 # The SI is included from si-body.typ as an appendix, so this single PDF holds the
 # whole manuscript; there is no separate supplementary.pdf. si-body.typ is
@@ -170,20 +167,17 @@ watch:
 # read-only in the editor for the same reason.
 #
 # Reflowing markup is output-neutral in Typst, since a single newline is just a
-# space. Verify with `just fmt-verify` if you change the line width.
+# space. `just test` proves it, on a fixture built for the purpose.
 # ---------------------------------------------------------------------------
 
 # Check the prose against the mechanical rules in STYLE.md. Errors are rules with
-# no legitimate exception here (em dash, British spelling, doubled word) and exit
-# non-zero. Warnings are judgement calls (long sentences, verbosity, repetition)
-# and are reported without failing, because a checker that fails the build over
-# the word "very" gets disabled within a week.
+# no legitimate exception here (em dash, British spelling, doubled word, an
+# uncited figure) and exit non-zero. Warnings are judgement calls (long sentences,
+# verbosity, repetition, citation order) and are reported without failing, because
+# a checker that fails the build over the word "very" gets disabled within a week.
+# Add --strict to treat warnings as failures: uv run python prose_check.py --strict
 prose-check:
   @uv run --quiet python prose_check.py
-
-# Same, but treat the judgement calls as failures too
-prose-check-strict:
-  @uv run --quiet python prose_check.py --strict
 
 # Assert the prose extractors still handle every construct, and still do so after
 # a reflow. Runs against tests/fixture.typ, which is NOT part of the manuscript --
@@ -205,55 +199,6 @@ fmt:
 # Exit non-zero if the hand-written sources need reformatting (gate for CI or a hook)
 fmt-check:
   typstyle --check --line-width {{fmt_width}} --wrap-text {{typst_sources}}
-
-# Show what `just fmt` would change, without writing anything
-fmt-diff:
-  typstyle --diff --line-width {{fmt_width}} --wrap-text {{typst_sources}}
-
-# Prove a reflow changes nothing that matters, on BOTH axes.
-#
-# The PDF is the obvious one. The other is the prose that readability.py and
-# audio/extract_prose.py strip out of the source with regexes, several of which
-# have to assume a construct sits on one line -- which is exactly what
-# --wrap-text stops being true. In the manuscript this scaffold came from, a
-# reflow silently split `#refn(<tab:x>)`, `_Saccharomyces cerevisiae_` and
-# `#link(` across lines: the PDF was untouched, but the narration gained a
-# spoken "and)." and a pair of literal underscores. So check both.
-#
-# Uses git to restore the sources, so they must be committed first.
-fmt-verify:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  if ! git diff --quiet -- {{typst_sources}}; then
-    echo "error: {{typst_sources}} have uncommitted changes; commit or stash first"
-    exit 1
-  fi
-  command -v pdftotext >/dev/null || { echo "error: pdftotext not found (poppler-utils)"; exit 1; }
-  work=$(mktemp -d); trap 'git checkout -- {{typst_sources}}; rm -rf "$work"' EXIT
-  # One-liners on purpose: a line at column 0 inside a recipe body ends the
-  # recipe, so neither a heredoc nor a multi-line `python -c` string works here.
-  snap() {   # <tag> -- the rendered text, the counted prose, and the narration
-    typst compile paper.typ "$work/$1.pdf" 2>/dev/null
-    pdftotext "$work/$1.pdf" "$work/$1-pdf.txt"
-    uv run --quiet python -c "import readability as r; open('$work/$1-main.txt','w').write(r.clean(r.slice_body(open('paper.typ').read())))"
-    uv run --quiet python -c "import readability as r; open('$work/$1-si.txt','w').write(r.clean(open('si-body.typ').read()))"
-    (cd audio && uv run --quiet python extract_prose.py >/dev/null && mv paper_prose.txt "$work/$1-prose.txt")
-  }
-  snap before
-  typstyle --inplace --line-width {{fmt_width}} --wrap-text {{typst_sources}}
-  snap after
-  rc=0
-  for f in pdf main si prose; do
-    if diff -q "$work/before-$f.txt" "$work/after-$f.txt" >/dev/null; then
-      echo "  $f: unchanged by the reflow"
-    else
-      echo "  $f: CHANGED by the reflow --"
-      diff "$work/before-$f.txt" "$work/after-$f.txt" | head -20
-      rc=1
-    fi
-  done
-  [ $rc -eq 0 ] && echo "reflow is neutral: PDF, word count, readability and narration all unaffected"
-  exit $rc
 
 # Route: Typst HTML export -> pandoc. Three things make it work:
 #   1. --input docx=true bypasses the arkheion template. Its front matter and heading
@@ -332,14 +277,6 @@ audiobook-si: _audio-check
 
 # Both chaptered audiobooks (main text, then SI).
 audiobook-all: audiobook audiobook-si
-
-# Flat narration of the main text, no chapters: paper.wav + paper.mp3 + paper.opus.
-audio: _audio-check
-  cd audio && ./make_audio.sh
-
-# Cover art only (audio/cover_main.png, audio/cover_si.png).
-audio-cover: _audio-check
-  cd audio && uv run --quiet --group audio python make_cover.py
 
 # Fail early with a fix-it hint when the untracked toolchain is missing.
 _audio-check:

@@ -181,8 +181,6 @@ paper the long lines are the prose.
 |---|---|
 | `just fmt` | Reflow the hand-written sources in place |
 | `just fmt-check` | Exit non-zero if reformatting is needed (CI / pre-commit gate) |
-| `just fmt-diff` | Show what would change, writing nothing |
-| `just fmt-verify` | Prove formatting is output-neutral by diffing the PDF's extracted text before and after |
 
 `typst_sources` deliberately excludes `si/*.typ`, which the generator scripts own
 and would rewrite unformatted on the next run. `.vscode/settings.json` marks them
@@ -198,6 +196,11 @@ throughout.
 
 `tests/fixture.typ` carries a case for each, and `just test` asserts the extracted
 prose is unchanged by a reflow. Add a case there when you add a construct.
+
+The recognition patterns those checks protect (`#refn(`, `#link(`, emphasis, and
+the balanced-paren stripper) live in `typst_prose.py`, imported by both
+`readability.py` and `audio/extract_prose.py`. They are shared because keeping
+them in two files meant fixing each of those three bugs twice.
 
 ### Reading the prose metrics
 

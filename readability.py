@@ -23,6 +23,8 @@ import re
 import sys
 from pathlib import Path
 
+from typst_prose import LINK, REFN, markup as _markup, strip_balanced as _strip_balanced
+
 HERE = Path(__file__).resolve().parent
 PAPER = HERE / "paper.typ"
 SI = HERE / "si-body.typ"
@@ -36,53 +38,6 @@ _ABBR = [
     "Sec.", "approx.", "ca.", "no.", "Dr.", "Prof.", "sp.", "spp.", "al.",
     "min.", "Inc.", "Ltd.", "St.",
 ]
-
-
-def _markup(delim: str) -> str:
-    """Pattern for one inline-markup pair (`*strong*`, `_emph_`), tolerant of the
-    line break `just fmt` may have put inside it.
-
-    typstyle --wrap-text reflows prose to `fmt_width` columns and will happily
-    break `_Saccharomyces cerevisiae_` across two lines. A `[^_\\n]+` body then
-    stops matching and the literal underscores survive into the word count and
-    the narration.
-
-    Allowing the newline is not enough on its own: it lets the pair span lines and
-    match things that are not markup at all, such as a filename glob (`smooth_*`)
-    or a subscript left behind by math (`"median"_"orig"`). So the delimiter must
-    also sit where markup can sit -- not butted against an identifier character or
-    a quote, and not against the whitespace inside the pair.
-    """
-    d = re.escape(delim)
-    body = rf"(?:[^{d}\n]|\n(?!\s*\n))+?"
-    return rf'(?<![A-Za-z0-9_"]){d}(?!\s)({body})(?<!\s){d}(?![A-Za-z0-9_"])'
-
-
-def _strip_balanced(text: str, opener: str) -> str:
-    """Remove `opener` ... matching-close-paren blocks (e.g. #figure( ... ))."""
-    out, i = [], 0
-    while i < len(text):
-        j = text.find(opener, i)
-        if j == -1:
-            out.append(text[i:])
-            break
-        out.append(text[i:j])
-        k = j + len(opener) - 1  # index of the '('
-        depth = 0
-        while k < len(text):
-            if text[k] == "(":
-                depth += 1
-            elif text[k] == ")":
-                depth -= 1
-                if depth == 0:
-                    k += 1
-                    break
-            k += 1
-        m = re.match(r"\s*<[^>]+>", text[k:])  # swallow a trailing " <label>"
-        if m:
-            k += m.end()
-        i = k
-    return "".join(out)
 
 
 def clean(text: str) -> str:
@@ -101,14 +56,13 @@ def clean(text: str) -> str:
     # cross-refs and citations. The \s* are load-bearing: typstyle breaks a long
     # line inside the call, leaving `#refn(\n  <sec:x>\n)`, and a one-line-only
     # pattern then leaks the bare `#refn(` and `)` into the prose as words.
-    text = re.sub(r"#refn\(\s*<[^>]*>\s*,?\s*\)", " ", text)
+    text = re.sub(REFN, " ", text)
     text = re.sub(r"\(@[^)]*\)", " ", text)         # (@fig:example) parentheticals
     text = re.sub(r"@[A-Za-z0-9:_-]+", " ", text)   # remaining @citekeys / @refs
-    # links: #link("url")[shown] -> shown (the url may sit on its own line after
-    # a reflow, hence the \s*)
-    text = re.sub(r'#link\(\s*"[^"]*"\s*,?\s*\)\s*\[([^\]]*)\]', r"\1", text)
+    # links: #link("url")[shown] -> shown
+    text = re.sub(LINK, r"\1", text)
     text = text.replace("`", "")                    # inline code -> bare word
-    # strong/emph markup -> plain (see _markup() for why it is not just [^*\n]+)
+    # strong/emph markup -> plain (see typst_prose.markup for why)
     for _ in range(3):
         text = re.sub(_markup("*"), r"\1", text)
         text = re.sub(_markup("_"), r"\1", text)

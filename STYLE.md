@@ -153,8 +153,8 @@ that cites it.
 ## Mechanics
 
 Reflow with `just fmt` before committing prose changes, so diffs stay line-scoped
-and reviewable. Run `just test` and `just fmt-verify` if you touched inline
-markup, math, links, or cross-references.
+and reviewable. Run `just test` if you touched inline markup, math, links, or
+cross-references.
 
 Check `just readability` when a section starts to feel dense. It is a rough signal
 rather than a target, but a Flesch-Kincaid grade drifting well past the rest of
