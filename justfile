@@ -140,6 +140,18 @@ watch:
 # space. Verify with `just fmt-verify` if you change the line width.
 # ---------------------------------------------------------------------------
 
+# Check the prose against the mechanical rules in STYLE.md. Errors are rules with
+# no legitimate exception here (em dash, British spelling, doubled word) and exit
+# non-zero. Warnings are judgement calls (long sentences, verbosity, repetition)
+# and are reported without failing, because a checker that fails the build over
+# the word "very" gets disabled within a week.
+prose-check:
+  @python3 prose_check.py
+
+# Same, but treat the judgement calls as failures too
+prose-check-strict:
+  @python3 prose_check.py --strict
+
 # Assert the prose extractors still handle every construct, and still do so after
 # a reflow. Runs against tests/fixture.typ, which is NOT part of the manuscript --
 # placeholder prose in paper.typ gets deleted the moment real writing starts, so

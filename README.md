@@ -48,6 +48,7 @@ Nothing else should need editing.
 | `just si-assets` | Regenerate SI tables and re-copy figures from the analysis tree |
 | `just check` | Report every artifact that has fallen behind its source |
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
+| `just prose-check` | Check the prose against the mechanical rules in STYLE.md |
 | `just audio-setup` | One-time: fetch Piper, the voice model, and the ffmpeg venv |
 | `just audiobook` | Chaptered `.m4b` of the main text |
 | `just all` | PDF + Word + both audiobooks, then `just check` |

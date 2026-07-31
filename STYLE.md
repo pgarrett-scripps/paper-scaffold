@@ -24,6 +24,58 @@ items in a list whose items already contain commas.
 Applies to running prose only. Typst markup keeps its own punctuation
 (`#figure(caption: [...])`).
 
+## Spelling
+
+**American English throughout.** Not British, and not mixed, which is what
+actually happens when nobody says so. The traps that recur: analyze not analyse,
+normalize not normalise, color not colour, behavior not behaviour, center not
+centre, modeled and labeled with one L, toward not towards, while not whilst,
+among not amongst.
+
+Journal names in the bibliography keep whatever spelling they publish under.
+
+## Sentences
+
+**One idea per sentence.** A run-on is usually two findings that got welded with
+a comma or an "and". Split them. If a sentence needs a comma to hold two
+independent clauses together, it needed a full stop.
+
+Keep most sentences under about 25 words. `just readability` reports mean words
+per sentence, so this is checkable rather than a matter of taste. A section
+drifting well above the rest of the paper is a section to break up.
+
+**Shorter is better.** Use not utilize, show not demonstrate, because not due to
+the fact that, to not in order to, about not approximately in running prose. The
+long form never reads as more rigorous, only as more words.
+
+Prefer the verb to the noun built from it. "We measured the shift" beats "a
+measurement of the shift was performed". Nominalization is the main engine of
+academic verbosity and it hides who did what.
+
+Cut redundant pairs ("each and every", "first and foremost") and double hedges
+("may possibly suggest"). Hedge once or not at all.
+
+## Repetition
+
+Repetition is the most common thing a reader notices and the easiest to fix.
+Watch for it at four scales:
+
+- **Word.** The same distinctive word twice in a sentence, or in adjacent
+  sentences. Ordinary words are fine to repeat, and a technical term should be
+  repeated rather than replaced with a synonym (see below). It is the incidental
+  vocabulary that grates.
+- **Sentence opening.** Three sentences in a row starting "We found", or every
+  paragraph in a section opening with "The". Vary the entry point.
+- **Content.** A result stated in Results and then restated in Discussion in the
+  same words. The Discussion should say what it means, not say it again.
+- **Caption and body.** A caption that paraphrases the paragraph citing it is
+  wasted space. The caption says what the figure shows; the body says what to
+  take from it.
+
+The one thing to repeat deliberately is a defined technical term. Consistency
+beats elegant variation, and a synonym introduced for variety reads as a second
+concept.
+
 ## Words
 
 Say what a number is before you say what it means. "MS1 peaks fell by 84.9%,
@@ -128,6 +180,6 @@ Fill this in for your submission and delete the placeholders.
 - **Journal:**
 - **Word limits:** main text, abstract (check with `just wordcount`)
 - **Reference style:** set `paper-bib-style` in `config.typ`
-- **Figure requirements:** format, resolution, colour mode
+- **Figure requirements:** format, resolution, color mode
 - **Submission format:** PDF or Word (`just docx`)
 - **Known deviations from this file's house style:**

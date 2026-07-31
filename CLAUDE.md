@@ -28,7 +28,10 @@ figure differs from its upstream copy. "I edited the text" is not done; "`just
 check` is clean" is done.
 
 If you changed prose, also run `just paper` so the word count and readability
-numbers in your report are current, and quote them rather than estimating.
+numbers in your report are current, and quote them rather than estimating. Run
+`just prose-check` too: it fails on em dashes, British spellings, and doubled
+words, and reports long sentences, verbosity, and repetition as warnings you
+should read rather than silence.
 
 If you changed inline markup, math, links, or cross-references, run `just test`
 and `just fmt-verify`. Those constructs are handled by regexes that a reflow can
