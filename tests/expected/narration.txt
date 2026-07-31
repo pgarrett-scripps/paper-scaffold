@@ -4,6 +4,8 @@ The word counter excludes citations, the readability report drops them, and the 
 
 An ordinary reference to keeps its supplement. A bare-number one prints as Section through the helper.
 
+Typst's own form has to be stripped too, and is the more natural thing for an author to write. A pattern that knew only the helper left a bare "ref" in the word count, the reading-level score and the narration, and went unnoticed because the PDF was correct throughout.
+
 = Inline markup
 
 Strong text and emphasis both reach the prose as plain words. An italicized binomial such as Saccharomyces cerevisiae is the two-word case that a reflow splits down the middle. So is E. coli directly after a slash, as in human/yeast/E. coli, which must still be recognized.
@@ -23,6 +25,8 @@ A display equation is dropped rather than read aloud:
 Block code is exempt from the word count and skipped by the narrator:
 
 Inline code terms, by contrast, count as ordinary words.
+
+A Unicode escape denotes a character and must reach the prose as one: a subscript written log\u{2082} is a single word to a reader, not the four the raw escape tokenizes into, and the narrator needs a character it can speak.
 
 = Figures and tables
 

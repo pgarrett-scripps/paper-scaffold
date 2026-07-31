@@ -30,6 +30,11 @@ call ended the outer parenthetical early.
 An ordinary reference to @sec:second keeps its supplement. A bare-number one
 prints as Section #refn(<sec:second>) through the helper.
 
+Typst's own #ref(<sec:second>) form has to be stripped too, and is the more
+natural thing for an author to write. A pattern that knew only the helper left a
+bare "ref" in the word count, the reading-level score and the narration, and went
+unnoticed because the PDF was correct throughout.
+
 = Inline markup <sec:second>
 
 *Strong text* and _emphasis_ both reach the prose as plain words. An italicized
@@ -72,6 +77,10 @@ def example(threshold: float = 0.5) -> bool:
 ```
 
 Inline `code` terms, by contrast, count as ordinary words.
+
+A Unicode escape denotes a character and must reach the prose as one: a subscript
+written log\u{2082} is a single word to a reader, not the four the raw escape
+tokenizes into, and the narrator needs a character it can speak.
 
 = Figures and tables
 

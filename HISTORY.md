@@ -41,6 +41,52 @@ rather than a copy.
 
 ---
 
+## 1.0.2
+
+Five fixes, all found by porting the scaffold into a second real manuscript
+(`koth`). None change an interface; an existing project takes them by copying
+`typst_prose.py`, `readability.py`, `prose_check.py` and `tests/`.
+
+**`#ref(<x>)` was not recognized.** `typst_prose.REFN` matched only the
+manuscript's own `#refn(` helper. Typst's native `#ref(` is the more natural
+thing for an author to write, and koth is written almost entirely in it. The
+result was a bare `#ref( )` surviving into the word count, the reading-level
+score and the narration, in 68 places, with the PDF correct throughout. `REFN` is
+now `#refn?\(`, and `tests/run.py` forbids a leaked `#ref` the way it already
+forbade `refn`.
+
+**Reference SITES were counted as float definitions.** `check_reference_order`
+scanned for a bare `<fig:x>`, which `#ref(<fig:x>)` and `#refn(<fig:x>)` contain
+just as a definition does. Each float was therefore numbered by its LAST
+occurrence in the file, so a figure cited twice moved. In koth the checker
+believed the main text defined 15 figures, in citation order, and reported a
+"Figure 10" that does not exist; there are five. A definition is now a label
+following a closing paren, which is where Typst attaches one. The same scan in
+`check_structure` had the same fault, attributing a float to whichever document
+cited it first.
+
+**Tables labelled `tab:` were invisible.** The float vocabulary was `fig|tbl|eq`.
+koth labels every table `tab:`, so all 37 of them were silently exempt from the
+uncited-float and reference-order checks while the checker reported clean. The
+prefix is a project convention, not a Typst rule, so both spellings are now
+recognized through one `FLOAT` constant. Fixing this immediately turned up an SI
+table that nothing cited.
+
+**`\u{XXXX}` escapes reached the prose verbatim.** A manuscript writing
+subscripts as `log\u{2082}` had the word counter treat that as one opaque token
+and the narrator read it aloud as "log u 2082", 41 times.
+`typst_prose.unescape_unicode()` resolves the escape to the character, so the
+count sees the word a reader sees and the narrator's spoken-Unicode map can
+handle the result like any other symbol.
+
+**`word-repetition` fired on repeated file paths.** It ran on the prose with
+inline code UNWRAPPED, because a journal counts an inline-code term as a word. A
+sentence listing three reproducer scripts under one directory then read as that
+directory name three times. It now runs on `spellable`, the same code-removed
+text the spelling check uses, for the same reason. That was 12 of koth's 18
+findings, and a checker whose warnings are mostly noise is a checker nobody
+reads.
+
 ## 1.0.1
 
 Three fixes, all found by porting 1.0.0 into a real manuscript (`FeNovo`). None

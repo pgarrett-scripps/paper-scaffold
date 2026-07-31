@@ -43,7 +43,9 @@ import extract_prose  # noqa: E402
 # should have been dropped whole rather than partially stripped.
 FORBIDDEN = [
     "fixturecaption",  # a figure caption leaked
-    "refn",            # a cross-reference call leaked
+    "refn",            # the bare-number cross-reference helper leaked
+    "#ref",            # Typst's own #ref( call leaked. Matched with the "#" so
+                       # ordinary words like "reference" do not trip it.
     "#link",           # a link call leaked
     "sym.",            # a symbol token leaked
     "lovelace1843",    # a citation key leaked
@@ -165,6 +167,24 @@ def structural_cases() -> bool:
          f"{fig.format(cap='see @fig:b', label='fig:a')}\n"
          f"{fig.format(cap='c', label='fig:b')}\n"
          f"Cites @fig:a then @fig:b.", 0),
+        # A reference site must not be mistaken for a definition. `#ref(<fig:b>)`
+        # contains the same `<fig:b>` token a definition does, so a bare-label
+        # scan numbered each figure by its LAST occurrence anywhere in the file.
+        # Here fig:a is mentioned again after fig:b, which under that scan makes
+        # fig:a "Figure 5" and fig:b "Figure 4", and this correctly ordered text
+        # is reported as out of order. Real manuscripts cite figures more than
+        # once, so this is the normal case, not a corner one.
+        ("#ref sites are not definitions",
+         f"{fig.format(cap='c', label='fig:a')}\n"
+         f"{fig.format(cap='c', label='fig:b')}\n"
+         f"Cites #ref(<fig:a>), then #ref(<fig:b>), then #ref(<fig:a>) again.", 0),
+        # A `tab:`-prefixed table is a float like any other. A checker that knew
+        # only `tbl:` exempted every table in a real manuscript while reporting
+        # clean.
+        ("tab: prefix is recognized",
+         f"Cites @tab:b then @tab:a.\n"
+         f"{fig.format(cap='c', label='tab:a')}\n"
+         f"{fig.format(cap='c', label='tab:b')}", 1),
     ]
     ok = True
     for name, src, want in cases:
@@ -220,6 +240,39 @@ def structural_cases() -> bool:
         ok = False
     if re.findall(typst_prose.CITE, "See @sec:methods.") != ["@sec:methods"]:
         print("  citation pattern: dropped a real key suffix")
+        ok = False
+
+    # The definition scan must see exactly the floats a document contains, in
+    # source order, however many times each is referenced.
+    src = ("See #ref(<fig:b>) and #ref(<fig:a>) and @fig:b again.\n"
+           + fig.format(cap="c", label="fig:a") + "\n"
+           + fig.format(cap="c", label="fig:b") + "\n")
+    got = [m.group(1) for m in pc.DEFINITION.finditer(src)]
+    if got != ["fig:a", "fig:b"]:
+        print(f"  definition scan: expected ['fig:a', 'fig:b'], got {got}")
+        ok = False
+
+    # A term repeated only inside inline-code spans is not repetitive prose.
+    rep_cases = [
+        ("repeated only in code paths",
+         "Reproducers: `a/scripts/x.py`, `a/scripts/y.py`, `a/scripts/z.py`.", 0),
+        ("genuinely repeated in prose",
+         "The tolerance sets the tolerance used when the tolerance is applied.", 1),
+    ]
+    for name, src2, want in rep_cases:
+        found = pc.check("t", readability.clean(src2),
+                         readability.clean(pc.no_code(src2)),
+                         readability.clean(src2, gap=pc.GAP))
+        got2 = len([f for f in found if f.rule == "word-repetition"])
+        if got2 != want:
+            print(f"  word repetition [{name}]: expected {want}, got {got2}")
+            ok = False
+
+    # A Typst \u{XXXX} escape resolves to the character it denotes, so the word
+    # count sees one word and the narrator has a symbol it can speak.
+    import typst_prose as tp
+    if tp.unescape_unicode(r"log\u{2082} ratio") != "log\u2082 ratio":
+        print("  unescape_unicode: did not resolve \\u{2082}")
         ok = False
 
     # An uncited figure is an error; a cited one is not.

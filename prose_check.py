@@ -210,8 +210,15 @@ def check(label: str, text: str, spellable: str | None = None,
                 add("opener-run", f"{run} sentences in a row open with {word!r}", word)
             run, first = 1, i
 
-    # a distinctive word repeated inside one sentence
-    for s in sents:
+    # A distinctive word repeated inside one sentence.
+    #
+    # Run on `spellable`, the prose with inline-code spans REMOVED rather than
+    # unwrapped, for the same reason the spelling check does. A sentence listing
+    # three reproducer scripts under one directory is not repetitive prose, but
+    # unwrapping the backticks turns the directory name into an ordinary word
+    # appearing three times. That was 12 of one manuscript's 18 findings, and a
+    # checker whose warnings are mostly noise is a checker nobody reads.
+    for s in sentences(spellable):
         seen: dict[str, int] = {}
         for w in re.findall(r"[A-Za-z][A-Za-z'-]{3,}", s.lower()):
             if w in COMMON:
@@ -249,7 +256,29 @@ ACRONYM_OK = {
 }
 
 
-KIND = {"fig": "Figure", "tbl": "Table", "eq": "Equation"}
+KIND = {"fig": "Figure", "tbl": "Table", "tab": "Table", "eq": "Equation"}
+
+# Label prefixes that name a float. `tbl:` and `tab:` are BOTH here because the
+# prefix is a project convention, not a Typst rule. A manuscript using `tab:`
+# throughout had all 37 of its tables silently exempted from the uncited-float
+# and reference-order checks, while the checker reported cleanly. Add a prefix
+# here rather than renaming a manuscript's labels.
+FLOAT = r"(?:fig|tbl|tab|eq)"
+
+# Where a float is DEFINED, as opposed to referenced.
+#
+# A bare `<fig:x>` cannot tell the two apart: `#ref(<fig:x>)` and `#refn(<fig:x>)`
+# contain the identical token, so a bare-label scan counts every citation site as
+# another figure and numbers each float by its LAST occurrence in the file. In the
+# manuscript that found this, the checker believed the main text defined 15
+# figures, in an order set by where they were cited, and named a "Figure 10" that
+# does not exist. There are five.
+#
+# Typst attaches a label to the element it follows, so a definition is a label
+# after the closing paren of the `#figure(...)` call. A reference is a label
+# INSIDE a call's parentheses. Anchoring on the preceding `)` separates them
+# exactly, and tolerates the line break typstyle may put in between.
+DEFINITION = re.compile(rf"\)\s*<({FLOAT}:[A-Za-z0-9_-]+)>")
 
 
 def check_reference_order(sources: dict[str, str]) -> list[Finding]:
@@ -277,10 +306,9 @@ def check_reference_order(sources: dict[str, str]) -> list[Finding]:
     out = []
     for name, src in sources.items():
         # Numbering order: where each #figure/#table actually sits.
-        defined = [m.group(1) for m in
-                   re.finditer(r"<((?:fig|tbl):[A-Za-z0-9_-]+)>", src)]
+        defined = [m.group(1) for m in DEFINITION.finditer(src)]
         number, label_of = {}, {}
-        for kind in ("fig", "tbl"):
+        for kind in ("fig", "tbl", "tab"):
             seq = [d for d in defined if d.startswith(kind + ":")]
             for i, label in enumerate(seq):
                 number[label] = i + 1
@@ -290,11 +318,11 @@ def check_reference_order(sources: dict[str, str]) -> list[Finding]:
         prose = readability._strip_balanced(src, "#figure(")
         cited: list[str] = []
         for m in re.finditer(
-                r"(?:@|#refn\(\s*<)((?:fig|tbl):[A-Za-z0-9_-]+)", prose):
+                rf"(?:@|#refn?\(\s*<)({FLOAT}:[A-Za-z0-9_-]+)", prose):
             if m.group(1) not in cited:
                 cited.append(m.group(1))
 
-        for kind in ("fig", "tbl"):
+        for kind in ("fig", "tbl", "tab"):
             seq = [c for c in cited if c.startswith(kind + ":") and c in number]
             jumped: dict[int, list[int]] = {}
             highest = 0
@@ -332,17 +360,20 @@ def check_structure(sources: dict[str, str]) -> list[Finding]:
 
     labels, refs = {}, set()
     for name, src in sources.items():
-        for m in re.finditer(r"<((?:fig|tbl|eq):[A-Za-z0-9_-]+)>", src):
+        # Definitions only -- see DEFINITION. A bare-label scan also matched
+        # every `#ref(<fig:x>)`, attributing a float to whichever document cited
+        # it first rather than to the one that contains it.
+        for m in DEFINITION.finditer(src):
             labels.setdefault(m.group(1), name)
-    for m in re.finditer(r"@((?:fig|tbl|eq):[A-Za-z0-9_-]+)", joined):
+    for m in re.finditer(rf"@({FLOAT}:[A-Za-z0-9_-]+)", joined):
         refs.add(m.group(1))
-    for m in re.finditer(r"#refn\(\s*<((?:fig|tbl|eq):[A-Za-z0-9_-]+)>", joined):
+    for m in re.finditer(rf"#refn?\(\s*<({FLOAT}:[A-Za-z0-9_-]+)>", joined):
         refs.add(m.group(1))
 
     for label, where in sorted(labels.items()):
         if label not in refs:
-            kind = {"fig": "figure", "tbl": "table", "eq": "equation"}[
-                label.split(":")[0]]
+            kind = {"fig": "figure", "tbl": "table", "tab": "table",
+                    "eq": "equation"}[label.split(":")[0]]
             out.append(Finding(
                 "uncited-figure", "error",
                 f"{kind} <{label}> is never referenced in the text "

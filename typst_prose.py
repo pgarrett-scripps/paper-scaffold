@@ -19,11 +19,17 @@ from __future__ import annotations
 
 import re
 
-# A cross-reference through the manuscript's `refn` helper. The \s* are
-# load-bearing: typstyle breaks long lines INSIDE the call, so this can arrive as
-# `#refn(\n  <tab:x>,\n)`. Matched without them, the leftover `)` closes the
-# surrounding `(@...)` parenthetical early and the wrong span gets stripped.
-REFN = r"#refn\(\s*<[^>]*>\s*,?\s*\)"
+# An explicit cross-reference call: Typst's own `#ref(<x>)` or a manuscript's
+# `#refn(<x>)` helper. BOTH forms have to be here. `#ref(` is the more natural
+# thing for an author to write, and a pattern that only knew the helper left a
+# bare `#ref( )` in the word count, the reading-level score and the narration --
+# in 68 places in the manuscript that found this, with the PDF correct throughout.
+#
+# The \s* are load-bearing for a different reason: typstyle breaks long lines
+# INSIDE the call, so this can arrive as `#ref(\n  <tab:x>,\n)`. Matched without
+# them, the leftover `)` closes the surrounding `(@...)` parenthetical early and
+# the wrong span gets stripped.
+REFN = r"#refn?\(\s*<[^>]*>\s*,?\s*\)"
 
 # `#link("url")[shown text]` -> group 1 is the shown text. The url argument may
 # sit on its own line after a reflow.
@@ -36,6 +42,25 @@ LINK = r'#link\(\s*"[^"]*"\s*,?\s*\)\s*\[([^\]]*)\]'
 # `@smith2020: the counts` lost the colon that introduced the clause. Typst's own
 # parser stops at the same place.
 CITE = r"@[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*"
+
+
+# A Typst Unicode escape, `\u{2082}`. A manuscript writing subscripts that way
+# (log\u{2082} ratios) otherwise has the escape reach the prose verbatim: the word
+# counter counts "log\u{2082}" as one opaque token and the narrator reads it aloud
+# as "log u 2082". Resolving it to the character it denotes is what both consumers
+# want, and it lets the narrator's spoken-Unicode map handle the result like any
+# other symbol.
+UNICODE_ESCAPE = re.compile(r"\\u\{([0-9A-Fa-f]{1,6})\}")
+
+
+def unescape_unicode(text: str) -> str:
+    """Resolve Typst `\\u{XXXX}` escapes to the characters they denote."""
+    def sub(m: "re.Match[str]") -> str:
+        try:
+            return chr(int(m.group(1), 16))
+        except (ValueError, OverflowError):
+            return m.group(0)
+    return UNICODE_ESCAPE.sub(sub, text)
 
 
 def markup(delim: str) -> str:

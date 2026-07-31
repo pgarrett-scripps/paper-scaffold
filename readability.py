@@ -23,7 +23,14 @@ import re
 import sys
 from pathlib import Path
 
-from typst_prose import CITE, LINK, REFN, markup as _markup, strip_balanced as _strip_balanced
+from typst_prose import (
+    CITE,
+    LINK,
+    REFN,
+    markup as _markup,
+    strip_balanced as _strip_balanced,
+    unescape_unicode,
+)
 
 HERE = Path(__file__).resolve().parent
 PAPER = HERE / "paper.typ"
@@ -113,6 +120,10 @@ def clean(text: str, gap: str = " ") -> str:
     text = re.sub(r"#[a-z][a-z0-9.]*(?:\([^()]*\))?\s*\[", "[", text)
     text = text.replace("[", " ").replace("]", " ")
     text = re.sub(r"<[A-Za-z0-9:_-]+>", gap, text)  # stray labels
+    # Escapes: \u{2082} -> the character, so "log\u{2082}" counts as the one word
+    # a reader sees rather than an opaque token. Before \_ and \@, since the
+    # escape's own backslash would otherwise be ambiguous.
+    text = unescape_unicode(text)
     text = text.replace(r"\@", "@").replace(r"\_", "_")
     return re.sub(r"\s+", " ", text).strip()
 
