@@ -364,8 +364,16 @@ def check_structure(sources: dict[str, str]) -> list[Finding]:
     for acr, n in sorted(counts.items()):
         if n < 2 or acr.upper() in ACRONYM_OK:
             continue
-        defined = (re.search(rf"\(\s*{re.escape(acr)}s?\s*\)", prose)
-                   or re.search(rf"\b{re.escape(acr)}s?\s*\([A-Za-z]", prose))
+        # Counted as defined if it appears inside a parenthetical that also
+        # contains ordinary words, or is itself followed by one. That covers the
+        # bare "(HYE)" and the forms an author actually writes:
+        # "(human, yeast and E. coli, abbreviated HYE)", "(HYE, see Methods)".
+        # Requiring the bare form alone reported a defined acronym as undefined.
+        esc = re.escape(acr)
+        defined = (
+            re.search(rf"\([^()]*\b{esc}s?\b[^()]*\)", prose)
+            or re.search(rf"\b{esc}s?\s*\([A-Za-z]", prose)
+        )
         if not defined:
             out.append(Finding(
                 "unexpanded-acronym", "warn",

@@ -184,6 +184,22 @@ def structural_cases() -> bool:
             print(f"  doubled word [{name}]: expected {want}, got {got}")
             ok = False
 
+    # An acronym counts as defined by any parenthetical that names it alongside
+    # ordinary words, not only the bare "(ACR)" form.
+    acr_cases = [
+        ("bare form", "The mix (HYE) was used. HYE again.", 0),
+        ("abbreviated inside a list",
+         "three species (human, yeast and E. coli, abbreviated HYE). HYE again.", 0),
+        ("expansion first", "time of flight (TOF) matters. TOF again.", 0),
+        ("never defined", "We used XYZ here. XYZ again.", 1),
+    ]
+    for name, src, want in acr_cases:
+        got = len([f for f in pc.check_structure({"t": src})
+                   if f.rule == "unexpanded-acronym"])
+        if got != want:
+            print(f"  acronym [{name}]: expected {want}, got {got}")
+            ok = False
+
     # A citation key must not swallow a colon that is punctuation.
     import typst_prose
     if re.findall(typst_prose.CITE, "@smith2020: the counts") != ["@smith2020"]:
