@@ -129,10 +129,52 @@ def main() -> int:
                 print(f"  {name}: LEAKED {bad!r} -- ...{hit.group(0)}...")
                 ok = False
 
+    ok &= structural_cases()
+
     if ok:
         print(f"  all extractor checks pass ({len(flat)} outputs, "
-              f"reflow-invariant, no leaks)")
+              f"reflow-invariant, no leaks) + structural cases")
     return 0 if ok else 1
+
+
+def structural_cases() -> bool:
+    """Table-driven cases for prose_check's source-level checks.
+
+    These are pure functions over a string, so they get real cases rather than a
+    golden file. The caption case is the one worth keeping: a figure that
+    cross-references a later figure from inside its own caption must not count as
+    the text having reached that figure.
+    """
+    import prose_check as pc
+
+    fig = '#figure(image("x.png"), caption: [{cap}]) <{label}>'
+    cases = [
+        ("in order", f"Cites @fig:a then @fig:b.\n"
+                     f"{fig.format(cap='c', label='fig:a')}\n"
+                     f"{fig.format(cap='c', label='fig:b')}", 0),
+        ("out of order", f"Cites @fig:b then @fig:a.\n"
+                         f"{fig.format(cap='c', label='fig:a')}\n"
+                         f"{fig.format(cap='c', label='fig:b')}", 1),
+        ("caption ref does not count",
+         f"{fig.format(cap='see @fig:b', label='fig:a')}\n"
+         f"{fig.format(cap='c', label='fig:b')}\n"
+         f"Cites @fig:a then @fig:b.", 0),
+    ]
+    ok = True
+    for name, src, want in cases:
+        got = len(pc.check_reference_order({"t": src}))
+        if got != want:
+            print(f"  reference order [{name}]: expected {want} finding(s), got {got}")
+            ok = False
+
+    # An uncited figure is an error; a cited one is not.
+    uncited = len(pc.check_structure({"t": fig.format(cap="c", label="fig:x")})[0])
+    cited = len(pc.check_structure(
+        {"t": "See @fig:x.\n" + fig.format(cap="c", label="fig:x")})[0])
+    if (uncited, cited) != (1, 0):
+        print(f"  uncited-figure check: expected (1, 0), got ({uncited}, {cited})")
+        ok = False
+    return ok
 
 
 if __name__ == "__main__":

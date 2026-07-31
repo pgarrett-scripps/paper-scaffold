@@ -215,10 +215,13 @@ that depart from *this paper's own median* by 1.6x. A Methods section running at
 three times your own parenthetical rate is a real signal you can act on.
 
 `just prose-check` enforces the mechanical rules in STYLE.md and adds two
-structural checks: a figure or table that no text ever references (an error, since
-most journals require every figure and table to be cited, and a reader who is
-never sent to a figure will not look at it), and an acronym used repeatedly but
-never expanded (a warning, since what counts as common knowledge is field-specific).
+structural checks. A figure or table that no text ever references is an error,
+since most journals require every one to be cited and a reader who is never sent
+to a figure will not look at it. Two more are warnings: figures cited out of
+numerical order (a copy-editing return at many journals, but a conventions
+paragraph legitimately forward-references, so it does not gate), and an acronym
+used repeatedly but never expanded (what counts as common knowledge is
+field-specific).
 
 ### `tests/` is the permanent smoke test
 

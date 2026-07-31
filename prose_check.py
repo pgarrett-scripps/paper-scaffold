@@ -223,6 +223,72 @@ ACRONYM_OK = {
 }
 
 
+KIND = {"fig": "Figure", "tbl": "Table", "eq": "Equation"}
+
+
+def check_reference_order(sources: dict[str, str]) -> list[str]:
+    """Figures and tables should be first cited in numerical order.
+
+    Typst numbers them by order of appearance in the source, so the number a
+    reader sees is fixed by where the #figure sits. Journals then require the text
+    to reach them in that order, and citing Figure 3 before Figure 2 is a
+    copy-editing return at many publishers. Reordering prose during revision is
+    exactly how it happens.
+
+    A WARNING rather than an error, because there is one defensible exception: a
+    conventions or overview paragraph that legitimately forward-references a later
+    figure. Take it seriously anyway, since a journal will.
+
+    Two details make this correct rather than approximately right. A reference
+    inside a figure's own caption does not count as the text reaching it, so
+    figure blocks are stripped before looking for citations. And each document is
+    scored on its own sequence, because the SI restarts at S1.
+
+    Reported one line per offending EARLY citation, not one per figure it jumps
+    ahead of. A single early mention of Figure 7 puts six later figures out of
+    order, and six near-identical messages describing one edit is noise.
+    """
+    out = []
+    for name, src in sources.items():
+        # Numbering order: where each #figure/#table actually sits.
+        defined = [m.group(1) for m in
+                   re.finditer(r"<((?:fig|tbl):[A-Za-z0-9_-]+)>", src)]
+        number, label_of = {}, {}
+        for kind in ("fig", "tbl"):
+            seq = [d for d in defined if d.startswith(kind + ":")]
+            for i, label in enumerate(seq):
+                number[label] = i + 1
+                label_of[(kind, i + 1)] = label
+
+        # Citation order, ignoring cross-references made from inside a caption.
+        prose = readability._strip_balanced(src, "#figure(")
+        cited: list[str] = []
+        for m in re.finditer(
+                r"(?:@|#refn\(\s*<)((?:fig|tbl):[A-Za-z0-9_-]+)", prose):
+            if m.group(1) not in cited:
+                cited.append(m.group(1))
+
+        for kind in ("fig", "tbl"):
+            seq = [c for c in cited if c.startswith(kind + ":") and c in number]
+            jumped: dict[int, list[int]] = {}
+            highest = 0
+            for label in seq:
+                n = number[label]
+                if n < highest:
+                    jumped.setdefault(highest, []).append(n)
+                else:
+                    highest = n
+            for early, skipped in jumped.items():
+                lo, hi = min(skipped), max(skipped)
+                span = f"{KIND[kind]} {lo}" if lo == hi else \
+                    f"{KIND[kind]}s {lo}–{hi}"
+                out.append(
+                    f"{name}: {KIND[kind]} {early} (<{label_of[(kind, early)]}>) "
+                    f"is cited before {span}; either move its first mention later "
+                    f"or move the {KIND[kind].lower()} earlier")
+    return out
+
+
 def check_structure(sources: dict[str, str]) -> tuple[list[str], list[str]]:
     """Checks that need the Typst source rather than the extracted prose.
 
@@ -251,6 +317,8 @@ def check_structure(sources: dict[str, str]) -> tuple[list[str], list[str]]:
             errors.append(f"{where}: {kind} <{label}> is never referenced in the "
                           f"text (most journals require every figure and table "
                           f"to be cited)")
+
+    warnings += check_reference_order(sources)
 
     # An acronym used more than once but never followed by, or preceded by, a
     # parenthetical expansion anywhere in the manuscript.
