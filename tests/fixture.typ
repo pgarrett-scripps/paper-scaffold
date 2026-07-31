@@ -50,7 +50,15 @@ drops its URL.
 Inline math such as $alpha$, a subscripted one such as $t_"obs" <= t_"max"$, and a
 quoted-subscript one such as $|"median"_"orig" - "median"_"arm"|$ are verbalized by
 the narrator and dropped by the readability report. Symbol tokens
-#sym.minus 3, #sym.tilde 5, and 10 #sym.plus.minus 2 become words.
+#sym.minus 3, #sym.tilde 5, and 10 #sym.plus.minus 2 become words, and an arrow
+reads as a word too: 0.43 #sym.arrow.r 0.49. A token with no mapping is dropped
+rather than spelled out: 0.5 #sym.prec 0.9.
+
+A reference list that loses its numbers must not keep the conjunction that joined
+them (Tables #refn(<tbl:fixture>) and #refn(<tbl:fixture>)).
+
+#let fixture-directive = 1
+// A Typst directive and a line comment must never be narrated.
 
 A display equation is dropped rather than read aloud:
 

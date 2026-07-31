@@ -129,6 +129,12 @@ def main() -> int:
                 print(f"  {name}: LEAKED {bad!r} -- ...{hit.group(0)}...")
                 ok = False
 
+    # An unmapped symbol token must be recorded, not silently swallowed. The
+    # FORBIDDEN sweep above only proves it never reaches the narration.
+    if "#sym.prec" not in extract_prose.UNMAPPED:
+        print("  unmapped symbol tokens are not being recorded in UNMAPPED")
+        ok = False
+
     ok &= structural_cases()
 
     if ok:

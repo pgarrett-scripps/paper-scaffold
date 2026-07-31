@@ -72,7 +72,21 @@ def extract_body(raw):
     return raw[a.end():b.start()]
 
 
+# Tokens that reached clean() with no mapping in config.SYM. Collected rather
+# than ignored: an unmapped token narrates as "sym arrow r", and the fixture test
+# only pins the tokens the fixture happens to contain, so a manuscript can carry
+# one the fixture never saw. main() reports these, so a missing mapping shows up
+# at build time instead of on playback.
+UNMAPPED: set[str] = set()
+
+
 def clean(text):
+    # 0a. Typst directives and line comments. A document's front matter can carry
+    #     its own `#let` helpers, and the SI's overview chapter starts before the
+    #     first heading, so without this the audiobook opens by reading source.
+    text = re.sub(r"(?m)^\s*#(?:import|let|set|show)\b.*$", " ", text)
+    text = re.sub(r"(?m)^\s*//.*$", " ", text)
+
     # 0. remove fenced code blocks and #raw(...) config dumps
     text = re.sub(r"```.*?```", " ", text, flags=re.S)
     text = strip_balanced(text, "#raw(")
@@ -89,6 +103,13 @@ def clean(text):
         text = text.replace(k, MATH[k])
     for k in sorted(SYM, key=len, reverse=True):
         text = text.replace(k, SYM[k])
+    # Anything still spelled #sym.* has no mapping. Drop it and remember it:
+    # silence narrates better than "sym arrow r", and UNMAPPED makes the
+    # omission visible at build time.
+    for m in re.finditer(r"#sym\.[A-Za-z0-9.]+", text):
+        UNMAPPED.add(m.group(0))
+    text = re.sub(r"#sym\.[A-Za-z0-9.]+", " ", text)
+
     # any leftover simple $...$ -> inner text without $
     text = re.sub(r"\$([^$]*)\$", lambda m: m.group(1), text)
 
@@ -137,6 +158,10 @@ def clean(text):
     text = re.sub(r"\(\s+", "(", text)
     text = re.sub(r"\s+\)", ")", text)
     text = re.sub(r"\(\s*\)", "", text)
+    # A stripped cross-reference can leave the conjunction that joined it:
+    #   "in Tables #refn(<a>) and #refn(<b>))" -> "in Tables and)"
+    # Drop a coordinator left dangling against punctuation.
+    text = re.sub(r"\s+\b(?:and|or)\b\s*(?=[)\].,;:])", "", text)
     text = re.sub(r"([;,:])\1+", r"\1", text)     # ";;" (removed mid-sentence ref)
     text = re.sub(r"[;,]\s*([.)])", r"\1", text)  # "; ." / ", )" -> "." / ")"
 
@@ -172,6 +197,10 @@ def main():
 
     words = len((OUT.read_text()).split())
     print(f"wrote {OUT}  ({words} words, ~{words/150:.1f} min at 150 wpm)")
+    if UNMAPPED:
+        print(f"note: {len(UNMAPPED)} unmapped symbol token(s) dropped rather than "
+              f"narrated: {', '.join(sorted(UNMAPPED))}")
+        print("      add them to SYM in audio/config.py to have them spoken.")
 
 
 if __name__ == "__main__":

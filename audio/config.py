@@ -65,6 +65,9 @@ SYM: dict[str, str] = {
     r"#sym.tilde": "approximately ",
     r"#sym.space": " ",
     r"#sym.times": "times ",
+    r"#sym.arrow.r": "to ",
+    r"#sym.arrow.l": "from ",
+    r"#sym.arrow.lr": "versus ",
 }
 
 # Cover art palette. The default is a dark slate with a cyan accent.
