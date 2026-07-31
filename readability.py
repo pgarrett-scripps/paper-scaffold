@@ -78,8 +78,10 @@ def clean(text: str) -> str:
     # math: DROP entirely (exempt), including any leftover $...$
     text = re.sub(r"#sym\.[A-Za-z0-9.]+", " ", text)
     text = re.sub(r"\$[^$]*\$", " ", text)
-    # cross-refs and citations
-    text = re.sub(r"#refn\(<[^>]*>\)", " ", text)
+    # cross-refs and citations. The \s* are load-bearing: typstyle breaks a long
+    # line inside the call, leaving `#refn(\n  <sec:x>\n)`, and a one-line-only
+    # pattern then leaks the bare `#refn(` and `)` into the prose as words.
+    text = re.sub(r"#refn\(\s*<[^>]*>\s*,?\s*\)", " ", text)
     text = re.sub(r"\(@[^)]*\)", " ", text)         # (@fig:example) parentheticals
     text = re.sub(r"@[A-Za-z0-9:_-]+", " ", text)   # remaining @citekeys / @refs
     # links: #link("url")[shown] -> shown

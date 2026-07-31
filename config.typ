@@ -53,8 +53,8 @@
   sections in paper.typ and si-body.typ, and keep the machinery. The skeleton
   deliberately includes one figure, one display equation, one inline equation,
   one table, one auto-generated Supporting Information table, two citations, and
-  one cross-reference, because each of those is a construct that some part of the
-  toolchain handles specially and would otherwise go untested until the
+  one cross-reference, because each of those is a construct that some part of
+  the toolchain handles specially and would otherwise go untested until the
   manuscript was already long.
 ]
 
@@ -73,7 +73,9 @@
   seen
 }
 
-#let affiliation-number(affil) = paper-affiliations.position(x => x == affil) + 1
+#let affiliation-number(affil) = (
+  paper-affiliations.position(x => x == affil) + 1
+)
 
 // "Ada Lovelace^1, Grace Hopper^2" for the Word front matter, which has no
 // template to build an author line for it. Derived rather than retyped, so the

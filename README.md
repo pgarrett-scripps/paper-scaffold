@@ -40,6 +40,7 @@ Nothing else should need editing.
 |---|---|
 | `just paper` | Compile `paper.pdf`, then print word counts and readability |
 | `just watch` | Live preview, recompiling on save |
+| `just fmt` | Reflow the hand-written Typst sources (typstyle, 80 cols) |
 | `just docx` | Export `paper.docx` for journals and co-authors |
 | `just wordcount` | Journal-style counts without rebuilding |
 | `just readability` | Flesch-Kincaid / reading ease / fog without rebuilding |
@@ -133,6 +134,56 @@ without installing Typst. `check-pdf` is what keeps that honest.
 
 Typst's HTML export prints "ignored during HTML export" warnings for layout-only
 constructs. Those are expected. The PDF path is entirely unaffected by the flag.
+
+### Formatting: the editor and the CLI must agree
+
+`just fmt` runs [typstyle](https://github.com/Enter-tainer/typstyle), which is the
+same engine the [tinymist](https://marketplace.visualstudio.com/items?itemName=myriad-dreamin.tinymist)
+editor extension uses as its formatter backend. So format-on-save and `just fmt`
+can produce byte-identical output, but only if they are configured identically,
+and by default they are not:
+
+| | tinymist default | `just fmt` |
+|---|---|---|
+| Line width | 120 | `fmt_width` (80) |
+| Prose wrapping | off | on (`--wrap-text`) |
+
+Left alone, every save reflows the manuscript one way and every `just fmt`
+reflows it back, producing a churning diff that neither tool owns. The committed
+`.vscode/settings.json` pins `tinymist.formatterPrintWidth` and
+`tinymist.formatterProseWrap` to match the justfile. If you change `fmt_width`,
+change both.
+
+`--wrap-text` is the flag that matters for a manuscript: without it typstyle
+formats code and leaves markup lines however long they already were, and in a
+paper the long lines are the prose.
+
+| Command | Does |
+|---|---|
+| `just fmt` | Reflow the hand-written sources in place |
+| `just fmt-check` | Exit non-zero if reformatting is needed (CI / pre-commit gate) |
+| `just fmt-diff` | Show what would change, writing nothing |
+| `just fmt-verify` | Prove formatting is output-neutral by diffing the PDF's extracted text before and after |
+
+`typst_sources` deliberately excludes `si/*.typ`, which the generator scripts own
+and would rewrite unformatted on the next run. `.vscode/settings.json` marks them
+read-only in the editor for the same reason.
+
+**Reformatting can break the prose extractors.** typstyle will break a long line
+*inside* a function call, turning `#refn(<sec:methods>)` into
+
+```typst
+Section #refn(
+  <sec:methods>
+)
+```
+
+Any stripper regex written for the one-line form then leaks a bare `#refn(` and
+`)` into the word count, the readability score, and the narration, where the
+voice reads "refn" aloud. The patterns in `readability.py` and
+`audio/extract_prose.py` allow the whitespace for this reason. If you add your own
+inline helper, make its pattern whitespace-tolerant too, and run `just fmt-verify`
+plus a quick look at `audio/paper_prose.txt` after the first reformat.
 
 ### Audio
 

@@ -7,6 +7,15 @@
 # out of the box.
 analysis_root := "analysis"
 
+# The hand-written Typst sources, for `just fmt`. Add files here as the
+# manuscript grows (a reviewer-response letter, a cover letter, a shared macro
+# file). Deliberately does NOT include si/*.typ -- see the `fmt` recipe.
+typst_sources := "config.typ paper.typ si-body.typ"
+
+# Line width for typstyle. Must stay in step with `tinymist.formatterPrintWidth`
+# in .vscode/settings.json, or format-on-save and `just fmt` will fight.
+fmt_width := "80"
+
 # Default target
 default:
   @just --list
@@ -108,6 +117,66 @@ readability:
 # Live preview, recompiling on save
 watch:
   typst watch paper.typ
+
+# ---------------------------------------------------------------------------
+# Formatting (typstyle). This is the same engine the tinymist editor extension
+# uses as its formatter backend, so format-on-save and `just fmt` produce
+# identical output -- PROVIDED .vscode/settings.json keeps tinymist's
+# formatterPrintWidth and formatterProseWrap in step with `fmt_width` and
+# --wrap-text above. tinymist's own defaults are 120 columns and prose wrapping
+# OFF, which disagree with both, so without that file every save and every
+# `just fmt` would reflow the source the other way.
+#
+# --wrap-text is the flag that matters for a manuscript. Without it typstyle
+# formats code and leaves markup lines however long they already were, and in a
+# paper the long lines are prose.
+#
+# SCOPE. `typst_sources` deliberately excludes si/*.typ. Those are written by the
+# scripts in scripts/, so formatting them would be undone on the next
+# regeneration and show up as spurious diffs. .vscode/settings.json marks them
+# read-only in the editor for the same reason.
+#
+# Reflowing markup is output-neutral in Typst, since a single newline is just a
+# space. Verify with `just fmt-verify` if you change the line width.
+# ---------------------------------------------------------------------------
+
+# Reflow the hand-written Typst sources to `fmt_width` columns
+fmt:
+  typstyle --inplace --line-width {{fmt_width}} --wrap-text {{typst_sources}}
+  @echo "formatted. Rebuild with `just paper` and confirm nothing moved."
+
+# Exit non-zero if the hand-written sources need reformatting (gate for CI or a hook)
+fmt-check:
+  typstyle --check --line-width {{fmt_width}} --wrap-text {{typst_sources}}
+
+# Show what `just fmt` would change, without writing anything
+fmt-diff:
+  typstyle --diff --line-width {{fmt_width}} --wrap-text {{typst_sources}}
+
+# Prove formatting is output-neutral: compare the PDF's extracted text before and
+# after a reformat. Restores the sources either way, so it is safe to run on a
+# dirty tree only if that tree is committed -- it uses git to restore.
+fmt-verify:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if ! git diff --quiet -- {{typst_sources}}; then
+    echo "error: {{typst_sources}} have uncommitted changes; commit or stash first"
+    exit 1
+  fi
+  command -v pdftotext >/dev/null || { echo "error: pdftotext not found (poppler-utils)"; exit 1; }
+  trap 'git checkout -- {{typst_sources}}' EXIT
+  typst compile paper.typ /tmp/fmt-before.pdf
+  pdftotext /tmp/fmt-before.pdf /tmp/fmt-before.txt
+  typstyle --inplace --line-width {{fmt_width}} --wrap-text {{typst_sources}}
+  typst compile paper.typ /tmp/fmt-after.pdf
+  pdftotext /tmp/fmt-after.pdf /tmp/fmt-after.txt
+  if diff -q /tmp/fmt-before.txt /tmp/fmt-after.txt >/dev/null; then
+    echo "formatting is output-neutral: extracted PDF text is byte-identical"
+  else
+    echo "WARNING: formatting changed the rendered text --"
+    diff -u /tmp/fmt-before.txt /tmp/fmt-after.txt | head -40
+    exit 1
+  fi
 
 # Route: Typst HTML export -> pandoc. Three things make it work:
 #   1. --input docx=true bypasses the arkheion template. Its front matter and heading

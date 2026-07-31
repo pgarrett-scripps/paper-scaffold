@@ -115,7 +115,10 @@ def clean(text):
     text = re.sub(r"#sub\[([^\]]*)\]", r"\1", text)
 
     # 5. cross-refs: #refn(<...>) and bare @label citations (labels may contain -)
-    text = re.sub(r"#refn\(<[^>]*>\)", "", text)
+    #    The \s* are load-bearing: typstyle breaks a long line inside the call,
+    #    leaving `#refn(\n  <sec:x>\n)`, and a one-line-only pattern then leaves
+    #    a bare `#refn(` behind for the voice to read aloud as "refn".
+    text = re.sub(r"#refn\(\s*<[^>]*>\s*,?\s*\)", "", text)
     text = re.sub(r"\(@[^)]*\)", "", text)              # (@fig:x) parenthetical refs
     text = re.sub(r"@[A-Za-z0-9:_-]+", "", text)        # remaining @citekeys / @refs
 

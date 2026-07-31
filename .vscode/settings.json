@@ -1,0 +1,29 @@
+{
+  // Typst formatting via the tinymist extension (myriad-dreamin.tinymist).
+  //
+  // These three values MUST match the `just fmt` flags in the justfile
+  // (`fmt_width` and --wrap-text). tinymist's own defaults are 120 columns with
+  // prose wrapping OFF, which disagree with both -- leave them at the defaults
+  // and every format-on-save reflows the manuscript one way while every
+  // `just fmt` reflows it back, producing a churning diff neither tool owns.
+  //
+  // tinymist uses typstyle as its formatter backend, so with these set the
+  // editor and the CLI produce byte-identical output.
+  "tinymist.formatterMode": "typstyle",
+  "tinymist.formatterPrintWidth": 80,
+  "tinymist.formatterProseWrap": true,
+  "tinymist.formatterIndentSize": 2,
+
+  "[typst]": {
+    "editor.defaultFormatter": "myriad-dreamin.tinymist",
+    "editor.formatOnSave": true,
+    "editor.rulers": [80]
+  },
+
+  // Generated tables are owned by scripts/gen_*.py. Marking them read-only stops
+  // an accidental edit (or an accidental format-on-save, which would fight the
+  // next regeneration) before it happens rather than after.
+  "files.readonlyInclude": {
+    "si/*.typ": true
+  }
+}
