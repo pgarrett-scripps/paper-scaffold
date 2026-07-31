@@ -1,0 +1,4 @@
+condition,n,observed,ci_low,ci_high
+Control,12,1.02,0.97,1.08
+Treated,12,2.11,2.01,2.19
+Rescue,11,1.31,1.22,1.42

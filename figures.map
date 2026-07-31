@@ -1,0 +1,14 @@
+# Figures copied into the manuscript from the analysis tree.
+#
+#   <dest under figures/>        <source, relative to `analysis_root` in the justfile>
+#
+# `just figures` copies source -> dest for every row. `just check` byte-compares
+# them and reports drift, which is the trap this file exists to close: a
+# re-analysis updates the plot in the analysis tree and leaves the copy in
+# figures/ untouched, so the manuscript keeps rendering a figure that no longer
+# matches its own numbers, with nothing to flag it.
+#
+# Blank lines and #-comments are ignored. Whitespace-separated, so paths must not
+# contain spaces.
+
+example_figure.png        example_figure.png

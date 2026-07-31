@@ -1,0 +1,29 @@
+# Build artifacts. paper.pdf is deliberately NOT here -- it is tracked, so a
+# reader can get the manuscript from the repo without a Typst install, and
+# `just check-pdf` guards it against going stale.
+paper.docx
+paper.docx.html
+paper.staged.html
+
+# Audio toolchain: engine, voice models, venv, and every generated audio file.
+# Only the scripts in audio/ are tracked, so a fresh clone runs `just audio-setup`.
+audio/piper/
+audio/models/
+audio/.venv/
+audio/chapters/
+audio/chapters_si/
+audio/*.wav
+audio/*.mp3
+audio/*.opus
+audio/*.m4b
+audio/paper_prose.txt
+audio/cover_main.png
+audio/cover_si.png
+
+# Python caches
+__pycache__/
+*.pyc
+
+# The bundled example analysis output. In a real project, analysis_root points
+# at a tree outside this directory and this line does not apply.
+/analysis/
