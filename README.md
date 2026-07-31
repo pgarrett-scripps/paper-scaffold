@@ -4,14 +4,15 @@ A reusable Typst manuscript directory: PDF, Word export, journal word counts,
 readability metrics, auto-generated Supporting Information tables, figure
 staleness checking, and offline audiobook narration.
 
-It ships as a working skeleton rather than a set of blank files. Clone it and
-`just paper` produces a real (if nonsensical) three-page paper before you have
-written anything. That matters more than it sounds, because every tool here
-depends on a specific Typst construct being present, and a blank template
-exercises none of them. The skeleton includes one figure, one display equation,
-one inline equation, one table, one auto-generated SI table, two citations, and
-one cross-reference for exactly that reason. If you delete them all before you
-start writing, you lose the smoke test.
+Clone it and `just paper` produces a compiling three-page skeleton before you
+have written anything. `paper.typ` and `si-body.typ` are placeholders meant to be
+deleted, so they stay short.
+
+Coverage of the constructs the tooling handles specially does **not** live in the
+placeholder prose, because that prose is gone the moment real writing starts. It
+lives in `tests/fixture.typ`, which is never part of the manuscript, and
+`just test` asserts the extractors still handle every case and still do so after
+a reflow. That check survives for the life of the project.
 
 ## Quick start
 
@@ -46,6 +47,7 @@ Nothing else should need editing.
 | `just readability` | Flesch-Kincaid / reading ease / fog without rebuilding |
 | `just si-assets` | Regenerate SI tables and re-copy figures from the analysis tree |
 | `just check` | Report every artifact that has fallen behind its source |
+| `just test` | Assert the prose extractors handle every construct, before and after a reflow |
 | `just audio-setup` | One-time: fetch Piper, the voice model, and the ffmpeg venv |
 | `just audiobook` | Chaptered `.m4b` of the main text |
 | `just all` | PDF + Word + both audiobooks, then `just check` |
@@ -170,20 +172,31 @@ and would rewrite unformatted on the next run. `.vscode/settings.json` marks the
 read-only in the editor for the same reason.
 
 **Reformatting can break the prose extractors.** typstyle will break a long line
-*inside* a function call, turning `#refn(<sec:methods>)` into
+*inside* a function call or an emphasis pair, turning `#refn(<sec:methods>)` and
+`_Saccharomyces cerevisiae_` into three-line forms. Any stripper regex written for
+the one-line version then leaks a bare `#refn(` into the word count and the
+narration, or leaves the literal underscores for the voice to pronounce. Both
+happened in the manuscript this scaffold came from, and the PDF looked fine
+throughout.
 
-```typst
-Section #refn(
-  <sec:methods>
-)
-```
+`tests/fixture.typ` carries a case for each, and `just test` asserts the extracted
+prose is unchanged by a reflow. Add a case there when you add a construct.
 
-Any stripper regex written for the one-line form then leaks a bare `#refn(` and
-`)` into the word count, the readability score, and the narration, where the
-voice reads "refn" aloud. The patterns in `readability.py` and
-`audio/extract_prose.py` allow the whitespace for this reason. If you add your own
-inline helper, make its pattern whitespace-tolerant too, and run `just fmt-verify`
-plus a quick look at `audio/paper_prose.txt` after the first reformat.
+### `tests/` is the permanent smoke test
+
+`tests/fixture.typ` is a deliberately dense pile of every construct any extractor
+special-cases: citations, both reference forms, emphasis across a line break,
+things that only look like markup (`smooth_*`, `"K*,R*"`, `analysis.tdf_bin`),
+links, inline and display math, symbol tokens, block code, and figure captions.
+
+`just test` checks three properties: the extracted prose matches
+`tests/expected/`, a typstyle reflow changes neither output, and no forbidden
+token (a leaked caption, citation key, or call name) appears in the result. `just
+test-update` rewrites the golden files, which is also how a regression gets
+blessed into the baseline by accident, so read the diff.
+
+This is separate from the manuscript on purpose. Anything relying on placeholder
+prose for coverage would be tested once, at clone time, and never again.
 
 ### Audio
 

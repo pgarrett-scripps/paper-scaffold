@@ -140,6 +140,18 @@ watch:
 # space. Verify with `just fmt-verify` if you change the line width.
 # ---------------------------------------------------------------------------
 
+# Assert the prose extractors still handle every construct, and still do so after
+# a reflow. Runs against tests/fixture.typ, which is NOT part of the manuscript --
+# placeholder prose in paper.typ gets deleted the moment real writing starts, so
+# anything relying on it for coverage would be tested once and never again.
+test:
+  @python3 tests/run.py
+
+# Rewrite tests/expected/ from the current extractor behaviour. Review the diff:
+# this is how a regression gets blessed into the baseline by accident.
+test-update:
+  @python3 tests/run.py --update
+
 # Reflow the hand-written Typst sources to `fmt_width` columns
 fmt:
   typstyle --inplace --line-width {{fmt_width}} --wrap-text {{typst_sources}}

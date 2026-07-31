@@ -11,38 +11,29 @@
 // prefix, for enumerations like "Tables S1 and S2".
 #let refn(l) = ref(l, supplement: none)
 
-This overview paragraph sits before the first section heading and is narrated as
-the SI audiobook's opening chapter. Everything above the first `=` heading is
-treated as front matter by the chapter splitter, so keep any orienting text
-here. Replace this with a real summary of what the Supporting Information
-contains.
+Replace this with a summary of what the Supporting Information contains. Text
+above the first `=` heading is the SI audiobook's opening chapter, so keep any
+orienting material here.
 
 = Auto-generated tables <sec:si-tables>
 
-The table below is written by `scripts/gen_example_table.py` from
-`scripts/example_data.csv` and is included rather than pasted. This is the
-single most useful convention in the scaffold. Numbers in the manuscript come
-from the analysis that produced them, so re-running the analysis updates the
-manuscript, and a stale table is a build error rather than something a reader
-has to catch.
-
-Every generated file carries a "do not edit by hand" header for the same reason.
-Regenerate them all with `just si-tables`.
+Replace this section. The table below is written by
+`scripts/gen_example_table.py` and included rather than pasted, so re-running
+the analysis updates the manuscript. Regenerate with `just si-tables`.
 
 #figure(
   include "si/example_table.typ",
-  caption: [An auto-generated table. Regenerate with `just si-tables`; do not
-    edit `si/example_table.typ` directly, as the next run will overwrite it.],
+  caption: [Placeholder, auto-generated. Do not edit `si/example_table.typ`
+    directly, as the next `just si-tables` overwrites it.],
 ) <tbl:si-example>
 
-Cross-references into the SI work from the main text and back, so
-@tbl:si-example and Table #refn(<tbl:si-example>) both resolve, as does a
-reference back to @sec:methods in the main text.
+Cross-references resolve in both directions, so @tbl:si-example and Table #refn(
+  <tbl:si-example>,
+) work here, as does @sec:methods in the main text.
 
 = Reproducibility <sec:si-repro>
 
-State here where the data, code, and analysis scripts live, and which versions
-were used. This section usually carries the accession numbers, a repository URL,
-and the exact command lines needed to reproduce every number in the manuscript.
-
-Replace this placeholder. Keep the section, since most journals now require it.
+Replace this with where the data, code, and analysis scripts live, and which
+versions were used. Accession numbers, a repository URL, and the command lines
+needed to reproduce every number belong here. Keep the section, since most
+journals now require it.
