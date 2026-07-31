@@ -135,11 +135,15 @@ check-assets:
 
 # Hash of the analysis source: every tracked-ish file under analysis/, excluding
 # the heavy inputs and intermediates that do not determine the output.
+# Null-delimited throughout: a plain `find | xargs` splits on whitespace, so a
+# single script named `gen one.py` made sha256sum miss both halves. Its errors go
+# to stderr and the pipeline still exits 0 through cut, so the stamp stayed stable
+# while being computed from the wrong input, which is worse than failing.
 _assets-stamp:
   @find analysis -type f \
       -not -path 'analysis/data/*' -not -path 'analysis/results/*' \
       -not -path 'analysis/.venv/*' -not -name '*.pyc' -not -name 'uv.lock' \
-      | sort | xargs sha256sum | sha256sum | cut -d" " -f1
+      -print0 | sort -z | xargs -0 -r sha256sum | sha256sum | cut -d" " -f1
 
 # The SI is included from si-body.typ as an appendix, so this single PDF holds the
 # whole manuscript; there is no separate supplementary.pdf. si-body.typ is

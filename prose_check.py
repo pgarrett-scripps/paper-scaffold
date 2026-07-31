@@ -168,8 +168,11 @@ def check(label: str, text: str, spellable: str | None = None,
     for m in re.finditer(r"\b(\w+)\s+\1\b", gapped, re.I):
         if m.group(1).lower() in {"had", "that"}:   # legitimately doubles
             continue
+        # Window first, THEN drop the sentinels. Stripping them from the whole
+        # string before indexing shifts every offset after the first removed
+        # construct, which slid the reported context clean off the match.
         errors.append(f"{label}: doubled word {m.group(0)!r}  "
-                      f"{_ctx(gapped.replace(GAP, ''), m.start())}")
+                      f"{_ctx(gapped, m.start()).replace(GAP, '')}")
 
     # --- warnings ---
     for s in sents:
