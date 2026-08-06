@@ -35,7 +35,12 @@ def main() -> int:
     lo = [float(r["observed"]) - float(r["ci_low"]) for r in rows]
     hi = [float(r["ci_high"]) - float(r["observed"]) for r in rows]
 
-    fig, ax = plt.subplots(figsize=(5.0, 3.0), dpi=200)
+    # dpi is set for the size the figure is PRINTED at, not the size it is
+    # saved at. This one is placed at `width: 70%` of a 160 mm text block, so
+    # 5.0 in x 300 dpi = 1500 px lands at ~340 dpi on the page. At the previous
+    # 200 it was 227 dpi, under the 300 floor `just prose-check` enforces --
+    # crisp on screen, soft on paper, and caught only after acceptance.
+    fig, ax = plt.subplots(figsize=(5.0, 3.0), dpi=300)
     ax.errorbar(labels, obs, yerr=[lo, hi], fmt="o", capsize=4,
                 color="#2563eb", ecolor="#94a3b8", markersize=7)
     ax.set_ylabel("Observed ratio")

@@ -54,7 +54,7 @@ check adapts rather than failing.
 | `just assets` | Regenerate every generated figure, table and prose number (delegates to `analysis/`) |
 | `just check` | Report every artifact that has fallen behind its source |
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
-| `just prose-check` | Check the prose against the mechanical rules in STYLE.md |
+| `just prose-check` | Check the prose, plus figure resolution and table shape, against STYLE.md |
 | `just density` | Numerals, parentheticals, acronyms, passives per 1,000 words, and section outliers |
 | `just setup` | Build the Python environment (uv, locked) |
 | `just version` | Which scaffold version this manuscript is built on |

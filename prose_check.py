@@ -348,6 +348,221 @@ def check_reference_order(sources: dict[str, str]) -> list[Finding]:
     return out
 
 
+# An `image("...")` call and whatever arguments follow it, which may include a
+# `width:`. `[^)]` rather than `.` so a reflowed multi-line call still matches.
+IMAGE_CALL = re.compile(r'image\(\s*"([^"]+)"([^)]*)\)')
+WIDTH_PCT = re.compile(r"width:\s*([\d.]+)%")
+
+# Formats with no pixels to count. A DPI figure for them is meaningless.
+VECTOR_SUFFIXES = {".svg", ".pdf", ".eps"}
+
+
+def _png_size(p: Path) -> tuple[int, int] | None:
+    """Pixel dimensions from a PNG header, without decoding the image.
+
+    Done by hand rather than through Pillow so this check runs anywhere the rest
+    of prose_check does, including a bare `python3 tests/run.py`.
+    """
+    with p.open("rb") as fh:
+        head = fh.read(24)
+    if head[:8] != b"\x89PNG\r\n\x1a\n" or head[12:16] != b"IHDR":
+        return None
+    return (int.from_bytes(head[16:20], "big"),
+            int.from_bytes(head[20:24], "big"))
+
+
+def _pixel_width(p: Path) -> int | None:
+    if p.suffix.lower() == ".png":
+        size = _png_size(p)
+        return size[0] if size else None
+    try:                              # JPEG, TIFF and friends, if Pillow is here
+        from PIL import Image
+        with Image.open(p) as im:
+            return im.size[0]
+    except Exception:
+        return None
+
+
+def check_figure_resolution(root: Path | None = None,
+                            cfg: Config | None = None) -> list[Finding]:
+    """Flag a raster figure whose resolution AS PRINTED falls below the limit.
+
+    The number that matters is not what the file stores, it is pixels divided by
+    the width the figure is actually rendered at. A 1000-pixel plot placed at
+    `width: 70%` of a 160 mm text block prints at about 227 dpi and looks soft on
+    paper however crisp it was on screen. Journals reject for this late, after
+    acceptance, when regenerating figures is most annoying.
+
+    The rendered width comes from the `width: NN%` in the `image(...)` call. A
+    call with no width is treated as spanning the full text block, which is what
+    Typst does when it scales an image to its container.
+
+    Vector formats are skipped: they have no resolution to be below.
+    """
+    r = root or HERE
+    c = cfg or Config()
+    min_dpi = c.limit("min-figure-dpi")
+    width_mm = c.limit("figure-text-width-mm")
+    text_in = width_mm / 25.4
+
+    out: list[Finding] = []
+    seen: set[str] = set()
+    for src in sorted(r.glob("*.typ")):
+        for m in IMAGE_CALL.finditer(src.read_text()):
+            rel, args = m.group(1), m.group(2)
+            p = r / rel
+            if not p.is_file() or p.suffix.lower() in VECTOR_SUFFIXES:
+                continue
+            w = WIDTH_PCT.search(args)
+            pct = float(w.group(1)) / 100 if w else 1.0
+            key = f"{rel}@{pct}"
+            if key in seen:
+                continue
+            seen.add(key)
+            px = _pixel_width(p)
+            if px is None:
+                out.append(Finding(
+                    "low-resolution-figure", "warn",
+                    f"{rel} could not be measured (unreadable header, and Pillow "
+                    f"is not available for this format), so its print resolution "
+                    f"is unchecked",
+                    subject=Path(rel).name, where=src.name))
+                continue
+            dpi = px / (text_in * pct)
+            if dpi < min_dpi:
+                out.append(Finding(
+                    "low-resolution-figure", "warn",
+                    f"{rel} prints at ~{dpi:.0f} dpi ({px} px across "
+                    f"{pct * 100:.0f}% of a {width_mm} mm text block), below the "
+                    f"{min_dpi} dpi limit -- regenerate it at a higher savefig "
+                    f"dpi, or place it smaller",
+                    subject=Path(rel).name, where=src.name))
+    return out
+
+
+TABLE_CALL = re.compile(r"#table\(")
+# `columns: 5`, `columns: (left, right)`, or the repeat form `columns: (1fr,) * 5`.
+# The repeat has to be understood: read as a bare tuple it counts one column, and
+# the row count derived from it is then wrong by that factor.
+TABLE_COLUMNS = re.compile(r"columns:\s*(\d+|\([^)]*\)(?:\s*\*\s*\d+)?)")
+
+
+def _column_count(spec: str) -> int:
+    """Columns from a `columns:` value: a count, a tuple, or a repeated tuple."""
+    spec = spec.strip()
+    if spec.isdigit():
+        return int(spec)
+    mult = 1
+    rep = re.search(r"\)\s*\*\s*(\d+)$", spec)
+    if rep:
+        mult = int(rep.group(1))
+        spec = spec[:rep.start() + 1]
+    inner = spec.strip().strip("()")
+    return len([x for x in inner.split(",") if x.strip()]) * mult
+
+
+def _balanced_from(src: str, i: int) -> str:
+    """The text of the call whose opening paren is at or after `i`."""
+    depth, start = 0, src.index("(", i)
+    for j in range(start, len(src)):
+        if src[j] == "(":
+            depth += 1
+        elif src[j] == ")":
+            depth -= 1
+            if depth == 0:
+                return src[start + 1:j]
+    return src[start + 1:]
+
+
+def _cells(src: str) -> list[str]:
+    """Every top-level `[...]` span, which is how Typst writes a table cell.
+
+    Depth-tracked rather than regex-matched: a cell legitimately contains
+    brackets of its own (`[#link(..)[text]]`), and a non-greedy `\\[.*?\\]` cuts
+    it at the first inner close.
+    """
+    out, depth, start = [], 0, None
+    for i, ch in enumerate(src):
+        if ch == "[":
+            if depth == 0:
+                start = i + 1
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+            if depth == 0 and start is not None:
+                out.append(src[start:i])
+                start = None
+    return out
+
+
+def check_table_size(root: Path | None = None,
+                     cfg: Config | None = None) -> list[Finding]:
+    """Flag a table that will not lay out well at the page width.
+
+    None of this is visible from the source. A generated table grows a column
+    per condition or a row per run, and the first sign is a proof where the
+    columns are unreadably narrow, a header stranded on the previous page, or one
+    long cell wrapping to three lines and dragging its row with it. All three are
+    found late, in the PDF, after the analysis is finished.
+
+    Cell length is measured on the visible text, with Typst markup stripped, so
+    `[#emph[Treated]]` counts as the seven characters a reader sees rather than
+    the eighteen the source spends.
+    """
+    r = root or HERE
+    c = cfg or Config()
+    max_cols = c.limit("max-table-columns")
+    max_rows = c.limit("max-table-rows")
+    max_chars = c.limit("max-cell-chars")
+
+    out: list[Finding] = []
+    for src in sorted(list(r.glob("*.typ")) + list((r / "si").glob("*.typ"))):
+        text = src.read_text()
+        where = src.name if src.parent == r else f"si/{src.name}"
+        for m in TABLE_CALL.finditer(text):
+            body = _balanced_from(text, m.start())
+            cm = TABLE_COLUMNS.search(body)
+            if not cm:
+                continue
+            cols = _column_count(cm.group(1))
+            if cols < 1:
+                continue
+
+            cells = _cells(body)
+            rows = -(-len(cells) // cols)      # ceil: a short last row still counts
+
+            if cols > max_cols:
+                out.append(Finding(
+                    "oversized-table", "warn",
+                    f"{where} has {cols} columns (limit {max_cols}); at this "
+                    f"width every column is cramped -- split it, move detail to "
+                    f"the SI, or transpose it",
+                    subject=src.name, where=where))
+            if rows > max_rows:
+                out.append(Finding(
+                    "oversized-table", "warn",
+                    f"{where} has {rows} rows (limit {max_rows}); it will break "
+                    f"across pages -- repeat the header with "
+                    f"`table.header(repeat: true)`, or summarize it",
+                    subject=src.name, where=where))
+
+            longest = ""
+            for cell in cells:
+                plain = re.sub(r"#[a-z][a-z0-9.]*", "", cell)
+                plain = re.sub(r"[\[\]*_`$]", "", plain).strip()
+                if len(plain) > len(longest):
+                    longest = plain
+            if len(longest) > max_chars:
+                out.append(Finding(
+                    "oversized-table", "warn",
+                    f"{where} has a {len(longest)}-character cell (limit "
+                    f"{max_chars}): {longest[:40]!r}... -- it will wrap to "
+                    f"several lines and unbalance the row; shorten it or move it "
+                    f"to the caption",
+                    subject=src.name, where=where))
+    return out
+
+
 def check_orphaned_assets(root: Path | None = None) -> list[Finding]:
     """Flag a generated table or figure that no source file mentions.
 
@@ -519,6 +734,8 @@ def main() -> int:
     findings += check_structure(targets)
     findings += check_derivable_numbers(targets)
     findings += check_orphaned_assets()
+    findings += check_figure_resolution(cfg=cfg)
+    findings += check_table_size(cfg=cfg)
 
     return report(findings, cfg,
                   show_suppressed="--show-suppressed" in sys.argv,

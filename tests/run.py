@@ -330,6 +330,77 @@ def asset_cases() -> bool:
             print("  orphaned-asset: reported stats.json, which is read by id")
             ok = False
 
+        # Print resolution: pixels over the width the figure is RENDERED at, not
+        # the width it was saved at. A file that passes at 100% can fail at 50%
+        # of nothing -- it is the same pixels over a smaller area, so the dpi
+        # goes UP. The direction is easy to get backwards, hence both cases.
+        import struct
+        import zlib
+
+        def png(w: int, h: int) -> bytes:
+            body = b"IHDR" + struct.pack(">II", w, h) + b"\x08\x02\x00\x00\x00"
+            return (b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + body
+                    + struct.pack(">I", zlib.crc32(body)))
+
+        (root / "figures" / "sharp.png").write_bytes(png(3000, 1000))
+        (root / "figures" / "soft.png").write_bytes(png(400, 300))
+        (root / "figures" / "vector.svg").write_text("<svg/>")
+        (root / "figures" / "half.png").write_bytes(png(1000, 500))
+        (root / "paper.typ").write_text(
+            '#include "si/used_table.typ"\n#image("figures/used_figure.png")\n'
+            '#image("figures/sharp.png", width: 100%)\n'
+            '#image("figures/soft.png", width: 100%)\n'
+            '#image("figures/vector.svg", width: 100%)\n'
+            '#image("figures/half.png", width: 30%)\n')
+        flagged = sorted(f.subject
+                         for f in pc.check_figure_resolution(root))
+        # used_figure.png is a 1-byte stub with no readable header, so it is
+        # reported as unmeasurable -- which is the honest outcome, not silence.
+        want_flagged = ["soft.png", "used_figure.png"]
+        if flagged != want_flagged:
+            print(f"  figure resolution: expected {want_flagged}, got {flagged}")
+            ok = False
+
+    # Table shape. None of this is visible from the source: a generated table
+    # grows a column per condition and the first sign is an unreadable proof.
+    tbl = lambda cols, rows, cell="[x]": (
+        "#table(\n  columns: %d,\n" % cols
+        + "".join("  " + ", ".join([cell] * cols) + ",\n" for _ in range(rows))
+        + ")\n")
+    table_cases = [
+        ("normal", tbl(5, 3), 0),
+        ("too many columns", tbl(12, 3), 1),
+        ("too many rows", tbl(3, 50), 1),
+        ("one overlong cell", tbl(3, 2, "[%s]" % ("word " * 20)), 1),
+        ("both dimensions", tbl(12, 50), 2),
+        # A cell's own brackets must not cut it short, or a long cell containing
+        # a link would be measured as a few characters and pass.
+        ("markup does not shorten a cell",
+         tbl(2, 1, "[#emph[%s]]" % ("word " * 20)), 1),
+    ]
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        for name, src, want in table_cases:
+            (root / "t.typ").write_text(src)
+            got = len(pc.check_table_size(root))
+            if got != want:
+                print(f"  table size [{name}]: expected {want}, got {got}")
+                ok = False
+
+    # `columns:` has three spellings and the repeat form is the one that bites:
+    # read as a bare tuple it counts one column, and every row count derived
+    # from it is then wrong by that factor.
+    for spec, want in [("5", 5), ("(left, right, right)", 3),
+                       ("(1fr,) * 12", 12), ("(auto, auto) * 3", 6)]:
+        got = pc._column_count(spec)
+        if got != want:
+            print(f"  column count [{spec}]: expected {want}, got {got}")
+            ok = False
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "figures").mkdir()
+
         # No si/ or figures/ at all is a valid project shape, not a finding.
         bare = Path(d) / "bare"
         bare.mkdir()

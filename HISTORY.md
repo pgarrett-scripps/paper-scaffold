@@ -41,6 +41,45 @@ rather than a copy.
 
 ---
 
+## 1.3.0
+
+Two checks for the defects that only appear in the proof, when the analysis is
+finished and regenerating an asset is most annoying.
+
+**`low-resolution-figure`.** The number that matters is not what the file stores,
+it is pixels divided by the width the figure is actually rendered at. Effective
+dpi is computed from the `width: NN%` in the `image(...)` call against the text
+block, with no width treated as full width, which is how Typst scales an image to
+its container. Vector formats are skipped, having no resolution to be below.
+
+The default text width, 160 mm, is this scaffold's arkheion page measured with
+`typst query` (A4 less 25 mm margins), not a plausible-looking guess. Change
+`figure-text-width-mm` if you change the page, or every dpi is computed against
+the wrong ruler.
+
+The check immediately caught the scaffold's own example figure at 227 dpi. Fixed
+in the generator rather than suppressed: a template that ships below its own
+standard teaches the wrong thing.
+
+**`oversized-table`.** Columns, rows, and the longest cell. A generated table
+grows a column per condition or a row per run, and the first sign is a proof
+where the columns are unreadably narrow, a header is stranded on the previous
+page, or one long cell wraps to three lines and drags its row with it. None of
+that is visible from the source.
+
+Cells are found by tracking bracket depth, not by a non-greedy `\[.*?\]`, because
+a cell legitimately contains brackets of its own and the lazy match cuts it at
+the first inner close -- a long cell containing a link would measure as a few
+characters and pass. `columns:` is read in all three spellings, including the
+repeat form `(1fr,) * 12`: read as a bare tuple it counts one column and every
+row count derived from it is wrong by that factor. Both have regression cases.
+
+New limits, all overridable in `prose-check.toml`: `min-figure-dpi` (300),
+`figure-text-width-mm` (160), `max-table-columns` (8), `max-table-rows` (40),
+`max-cell-chars` (60).
+
+Each check was confirmed to fail its tests when disabled.
+
 ## 1.2.0
 
 Three additions, all additive.

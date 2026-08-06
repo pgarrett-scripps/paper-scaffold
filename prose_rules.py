@@ -56,12 +56,30 @@ RULES: dict[str, tuple[str, str]] = {
     "unexpanded-acronym": ("warn",  "the acronym"),
     "derivable-number":   ("warn",  "the typed value"),
     "orphaned-asset":     ("warn",  "the file name"),
+    "low-resolution-figure": ("warn", "the file name"),
+    "oversized-table":    ("warn",  "the file name"),
 }
 
 DEFAULT_LIMITS = {
     "max-sentence-words": 40,   # a hard run-on line, not the 25-word aim
     "opener-run": 3,            # N consecutive sentences opening with one word
     "repeat-in-sentence": 3,    # times a distinctive word may repeat in a sentence
+    # Effective resolution of a raster figure AS PRINTED, not as stored. 300 is
+    # the usual floor for a halftone or photograph; journals often ask 600 or
+    # more for line art, which most plots are.
+    "min-figure-dpi": 300,
+    # Width of the text block, which is what a `width: 100%` figure spans. The
+    # default is this scaffold's arkheion page measured with `typst query`:
+    # A4 (210 mm) less 25 mm margins. Change it if you change the page or
+    # template, or every DPI here is computed against the wrong ruler.
+    "figure-text-width-mm": 160,
+    # Table shape. A table wider than this cramps every column; longer than this
+    # breaks across pages and loses its header; a cell this long stops being a
+    # value and starts being a paragraph, wrapping to several lines and pushing
+    # the row heights around.
+    "max-table-columns": 8,
+    "max-table-rows": 40,
+    "max-cell-chars": 60,
 }
 
 
