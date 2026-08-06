@@ -27,6 +27,7 @@ from typst_prose import (
     CITE,
     FOOTNOTE,
     strip_links,
+    ASSET,
     REFN,
     markup as _markup,
     resolve_stats,
@@ -120,6 +121,8 @@ def clean(text: str, gap: str = " ") -> str:
     # A table written straight into the prose rather than wrapped in a
     # #figure. Legal, and excluded from a journal word count the same way.
     text = _strip_balanced(text, "#table(", gap)
+    # A generated figure/table referenced by id, outside a #figure block.
+    text = re.sub(ASSET, gap, text)
     # generated numbers -> their value. Resolved, never stripped: this text is
     # what gets counted and scored, and a reader sees the number, not the call.
     text = resolve_stats(text)

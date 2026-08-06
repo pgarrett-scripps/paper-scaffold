@@ -6,10 +6,10 @@
 #     cp -r paper-scaffold /path/to/your-project/paper
 #
 # which copies .git along with everything else. The new manuscript then carries
-# the scaffold's entire history, and two checks quietly answer the wrong
-# question: `just check-pdf` compares the paper against the SCAFFOLD's commits,
-# and `just version` reports the scaffold's last commit as the manuscript's
-# state. Both keep reporting confidently. This script copies the working files,
+# the scaffold's entire history, and `just version` reports the scaffold's last
+# commit as the manuscript's state, confidently and wrongly. It also drags along
+# .build-stamp, which would claim the new paper's outputs were built from sources
+# it has never seen. This script copies the working files,
 # fills in the identity, and starts a fresh history that belongs to the paper.
 #
 # It does NOT touch the placeholder prose in paper.typ, si-body.typ, or the
@@ -147,6 +147,7 @@ tar -C "$SCAFFOLD" -cf - \
     --exclude='*.pyc' \
     --exclude='./paper.pdf' \
     --exclude='./paper-draft.pdf' \
+    --exclude='./.build-stamp' \
     --exclude='./paper.docx' \
     --exclude='./paper.docx.html' \
     . | tar -C "$DEST" -xf -
@@ -256,20 +257,19 @@ p.write_text(re.sub(r'^name = ".*"$', f'name = "{sys.argv[2]}"',
 PY
 
 # ---------------------------------------------------------------------------
-# First build, then first commit, in that order: paper.pdf is tracked, and
-# `just check-pdf` compares its COMMIT against the sources' commits. Committing
-# the sources first and the PDF second would make the new repository's very
-# first `just check` report the paper as stale.
+# Build before the first commit. Neither output is tracked any more, so the order
+# no longer matters to a staleness check -- but both are still built here, and for
+# the same reason as before: `just check` reports a missing paper.pdf or
+# paper.docx as something to rebuild. Without this, the first thing a new
+# manuscript does is fail its own gate over files the author never asked for,
+# which teaches them on day one that the gate is noise.
+#
+# Building also writes .build-stamp, which is what makes that gate pass. The stamp
+# is untracked, so a collaborator who clones the new repository builds their own.
 #
 # The build is best-effort. It needs the network the first time (the arkheion
 # template is fetched from Typst Universe and cached), and a new manuscript
 # started on a plane should still end up with a working directory.
-#
-# The Word export is built too, and not because anyone wants it on day one:
-# paper.docx is gitignored, so `just check` can only judge it by mtime and
-# reports a missing one as something to rebuild. Without this, the first thing a
-# new manuscript does is fail its own gate over a file the author never asked
-# for, which teaches them the gate is noise on day one.
 # ---------------------------------------------------------------------------
 built=0
 if [ "$DO_BUILD" = 1 ]; then
@@ -293,9 +293,7 @@ if [ "$DO_GIT" = 1 ]; then
     # A machine with no configured identity (a fresh laptop, a CI runner) makes
     # `git commit` fail with "please tell me who you are". Falling back to a
     # placeholder keeps the FIRST commit from being the thing that stops someone
-    # -- and the first commit must exist, because `just check-pdf` reports an
-    # uncommitted paper.pdf as a failure. A real identity is still preferred
-    # wherever one is set.
+    # on a fresh laptop. A real identity is still preferred wherever one is set.
     ident=()
     if [ -z "$(git config user.email || true)" ]; then
       ident=(-c "user.name=paper-scaffold" -c "user.email=paper-scaffold@localhost")

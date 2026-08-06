@@ -21,6 +21,8 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+from _assets import record
+
 HERE = Path(__file__).resolve().parent
 SRC = HERE / "example_data.csv"
 PAPER = HERE.parent.parent          # analysis/scripts/ -> analysis/ -> paper/
@@ -63,6 +65,9 @@ def main() -> int:
 
     OUT.parent.mkdir(exist_ok=True)
     OUT.write_text("".join(lines))
+    record("tbl.example", str(OUT.relative_to(PAPER)), kind="table",
+           inputs=[str(SRC.relative_to(PAPER))],
+           desc="Per-condition observed and expected values")
     print(f"wrote {OUT.relative_to(PAPER)}  ({len(body)} rows)")
     return 0
 

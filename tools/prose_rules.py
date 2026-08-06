@@ -57,6 +57,7 @@ RULES: dict[str, tuple[str, str]] = {
     "unexpanded-acronym": ("warn",  "the acronym"),
     "derivable-number":   ("warn",  "the typed value"),
     "orphaned-asset":     ("warn",  "the file name"),
+    "bypassed-asset":     ("error", "the file path"),
     "low-resolution-figure": ("warn", "the file name"),
     "oversized-table":    ("warn",  "the file name"),
     "duplicate-reference": ("error", "the shared DOI"),

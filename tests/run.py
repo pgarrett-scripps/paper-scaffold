@@ -339,6 +339,8 @@ def structural_cases() -> bool:
     ok &= bibliography_cases()
     ok &= asset_cases()
     ok &= stats_cases()
+    ok &= check_stats_cases()
+    ok &= check_assets_cases()
     ok &= suppression_cases()
     ok &= new_paper_cases()
     return ok
@@ -404,6 +406,10 @@ def new_paper_cases() -> bool:
             ("no .git", not (dest / ".git").exists()),
             ("no scripts/", not (dest / "scripts").exists()),
             ("no built pdf", not (dest / "paper.pdf").exists()),
+            # The scaffold's own build stamp describes the scaffold's outputs.
+            # Inherited, it would claim the new paper was built from sources it
+            # has never seen, and `just check` would report clean on day one.
+            ("no .build-stamp", not (dest / ".build-stamp").exists()),
             # The scaffold's CI tests scripts/new-paper.sh and builds the
             # scaffold itself. Inherited into a manuscript it is a workflow that
             # fails on push, forever, over a script the copy does not contain.
@@ -737,6 +743,183 @@ def stats_cases() -> bool:
         ok = False
     except StatError:
         pass
+    return ok
+
+
+def check_stats_cases() -> bool:
+    """tools/check_stats.py: the guard on the one generated file you may edit.
+
+    stats.json came out of the .assets-stamp hash when hand-entered values became
+    a supported thing to write, so these checks are all that stands between a
+    typed number and the prose. Each case below is a way that file has to be able
+    to go wrong.
+
+    The re-derive check is NOT exercised here: it shells out to
+    analysis/scripts/gen_stats.py against the real analysis environment, which is
+    a different thing to test and a slow one. `just check-stats` covers it on
+    every run of the gate.
+    """
+    import json
+    import check_stats as cs
+    ok = True
+
+    def entry(**kw):
+        e = {"value": 1.0, "display": "1.00", "fmt": ".2f", "unit": "",
+             "desc": "d", "expect": {}, "source": "",
+             "origin": {"by": "hand", "note": "protocol"}}
+        e.update(kw)
+        return e
+
+    # <name>, entry overrides, expected error count from the per-entry checks
+    cases = [
+        ("valid hand entry",        {}, 0),
+        ("hand entry with no note", {"origin": {"by": "hand"}}, 1),
+        ("hand entry, blank note",  {"origin": {"by": "hand", "note": "  "}}, 1),
+        ("no origin at all",        {"origin": None}, 1),
+        ("origin with no by",       {"origin": {"note": "x"}}, 1),
+        ("generator that is gone",
+         {"origin": {"by": "analysis/scripts/nope.py"}}, 1),
+        ("generator that exists",
+         {"origin": {"by": "analysis/scripts/gen_stats.py"}}, 0),
+        # A guard that no longer holds. This is the case the whole mechanism
+        # exists for: the prose says "increase", the value went negative.
+        ("sign guard violated",
+         {"value": -1.0, "display": "-1.00", "expect": {"sign": "+"}}, 1),
+        ("sign guard satisfied",   {"expect": {"sign": "+"}}, 0),
+        ("range guard violated",
+         {"value": 8400.0, "display": "8400.00",
+          "expect": {"min": 0, "max": 100}}, 1),
+        # A label carries no guard and must not be treated as a broken number.
+        ("non-numeric with no guard",
+         {"value": "Treated", "display": "Treated", "fmt": "",
+          "expect": {}}, 0),
+        # display and value disagreeing is the edit that changes what a reader
+        # sees without changing what #n() computes with.
+        ("display does not match value", {"display": "9.99"}, 1),
+        ("display missing",        {"display": None}, 1),
+    ]
+    for name, over, want in cases:
+        rec = entry(**over)
+        if over.get("origin", "keep") is None:
+            rec["origin"] = None
+        found = cs._origin("x.y", rec) + cs._display("x.y", rec) + cs._guard("x.y", rec)
+        got = sum(1 for f in found if f.level == "error")
+        if got != want:
+            print(f"  check-stats [{name}]: expected {want} error(s), got {got}"
+                  + (f" -- {[f.msg for f in found]}" if got else ""))
+            ok = False
+
+    # Unused ids are reported against the real manuscript sources, so this only
+    # asserts the shape: an id nothing could possibly call must be reported.
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "stats.json"
+        p.write_text(json.dumps({"values": {"a.b": entry()}}))
+        found = cs._unused({"zzz.never.called.by.anything": entry()})
+        if not any(f.level == "warn" for f in found):
+            print("  check-stats: an unread id was not reported")
+            ok = False
+
+    return ok
+
+
+def check_assets_cases() -> bool:
+    """tools/check_assets.py, and the prose rule that keeps it honest.
+
+    The manifest is only trustworthy because the compile resolves ids through it.
+    Two things have to hold for that: the entries must describe the files that are
+    actually there, and the manuscript must not reach around the mechanism by
+    naming a generated file directly.
+    """
+    import json
+    import check_assets as ca
+    import prose_check as pc
+    ok = True
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "figures").mkdir()
+        (root / "si").mkdir()
+        (root / "analysis" / "scripts").mkdir(parents=True)
+        gen = root / "analysis" / "scripts" / "gen_x_figure.py"
+        gen.write_text("# generator\n")
+        png = root / "figures" / "x.png"
+        png.write_bytes(b"pixels")
+        data = root / "analysis" / "scripts" / "d.csv"
+        data.write_text("a,b\n1,2\n")
+
+        orig_root = ca.ROOT
+        ca.ROOT = root
+        try:
+            def entry(**kw):
+                e = {
+                    "path": "figures/x.png", "kind": "figure", "desc": "",
+                    "hash": ca._sha(png),
+                    "origin": {"by": "analysis/scripts/gen_x_figure.py"},
+                    "inputs": {"analysis/scripts/d.csv": ca._sha(data)},
+                }
+                e.update(kw)
+                return e
+
+            cases = [
+                ("valid entry", {}, 0),
+                ("output edited since generation",
+                 {"hash": "sha256:" + "0" * 64}, 1),
+                ("generator no longer exists",
+                 {"origin": {"by": "analysis/scripts/gone.py"}}, 1),
+                ("declared input has changed",
+                 {"inputs": {"analysis/scripts/d.csv": "sha256:" + "0" * 64}}, 1),
+                ("file does not exist",
+                 {"path": "figures/absent.png"}, 1),
+                ("bad kind", {"kind": "diagram"}, 1),
+                # An input that is not present is the ordinary state of a fresh
+                # clone (analysis/data/ is untracked). It must NOT be an error, or
+                # every clone is red for something the person cannot act on.
+                ("input not present is not an error",
+                 {"inputs": {"analysis/data/absent.csv": "sha256:" + "0" * 64}}, 0),
+            ]
+            for name, over, want in cases:
+                found = ca._entry("fig.x", entry(**over))
+                got = sum(1 for f in found if f.level == "error")
+                if got != want:
+                    print(f"  check-assets [{name}]: expected {want} error(s), "
+                          f"got {got}" + (f" -- {[f.msg for f in found]}" if got else ""))
+                    ok = False
+
+            # A file sitting in a generated directory that no entry claims: the
+            # deleted-generator leftover nothing else can see.
+            (root / "figures" / "stray.png").write_bytes(b"x")
+            if not any(f.id.endswith("stray.png")
+                       for f in ca._unclaimed({"fig.x": entry()})):
+                print("  check-assets: an unclaimed file was not reported")
+                ok = False
+        finally:
+            ca.ROOT = orig_root
+
+    # The bypass rule: naming a declared asset directly goes around the manifest,
+    # so assets.json quietly stops describing the manuscript.
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "assets.json"
+        p.write_text(json.dumps({"values": {
+            "fig.example": {"path": "figures/example_figure.png",
+                            "kind": "figure"},
+            "tbl.example": {"path": "si/example_table.typ", "kind": "table"},
+        }}))
+        cases = [
+            ("by id", '#figure(fig("fig.example"), caption: [x])', 0),
+            ("figure by filename",
+             '#figure(image("figures/example_figure.png"), caption: [x])', 1),
+            ("table by filename", '#include "si/example_table.typ"', 1),
+            # Not every image is a generated asset. A logo or a hand-drawn
+            # schematic is named directly and must not be flagged.
+            ("undeclared image is fine", '#image("figures/logo.png")', 0),
+            ("mentioned in a comment", '// image("figures/example_figure.png")', 0),
+        ]
+        for name, src, want in cases:
+            got = len(pc.check_bypassed_assets({"t": src}, p))
+            if got != want:
+                print(f"  bypassed-asset [{name}]: expected {want}, got {got}")
+                ok = False
+
     return ok
 
 

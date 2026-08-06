@@ -1,7 +1,15 @@
-# Build artifacts. paper.pdf is deliberately NOT here -- it is tracked, so a
-# reader can get the manuscript from the repo without a Typst install, and
-# `just check-pdf` guards it against going stale.
+# Build artifacts. paper.pdf used to be tracked so a reader could get the
+# manuscript without a Typst install. It is not any more: git keeps every version
+# of a binary forever, a clone pays for all of them, and removing one means
+# rewriting history. Ship the PDF as a release asset or a CI artifact instead.
+#
+# Staleness is answered without git now -- `just paper` and `just docx` record
+# the hash of what they rendered in .build-stamp and `just check-build` recompares
+# it. .build-stamp is untracked too, because it describes local build output:
+# tracking it would let a rebuild here report every other checkout stale.
+paper.pdf
 paper-draft.pdf
+.build-stamp
 # just viz diagnostics: regenerated on demand, never part of the manuscript
 viz/
 paper.docx

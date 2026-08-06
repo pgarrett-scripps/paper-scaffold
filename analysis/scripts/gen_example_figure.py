@@ -17,6 +17,8 @@ from pathlib import Path
 
 import matplotlib
 
+from _assets import record
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
@@ -56,6 +58,12 @@ def main() -> int:
     # `just check` see every regeneration as a real change.
     fig.savefig(OUT, metadata={"Software": None})
     plt.close(fig)
+    # Declare it, so the manuscript can reference it as fig("fig.example")
+    # instead of naming the file. inputs= is the DATA this was built from; the
+    # script and its imports are recorded automatically.
+    record("fig.example", str(OUT.relative_to(PAPER)), kind="figure",
+           inputs=[str(SRC.relative_to(PAPER))],
+           desc="Observed ratio by condition, with confidence intervals")
     print(f"wrote {OUT.relative_to(PAPER)}")
     return 0
 

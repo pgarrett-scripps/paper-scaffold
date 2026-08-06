@@ -20,9 +20,10 @@
 // the extractors resolve them here already -- the word count, the readability
 // report and the SI narration all read #s() out of this file.
 //
-// Delete this import along with stats.typ, si/stats.json and analysis/scripts/
+// Delete this import along with stats.typ, stats.json and analysis/scripts/
 // gen_stats.py if the project states no computed numbers in its prose.
 #import "stats.typ": n, s
+#import "assets.typ": fig, tbl
 
 Replace this with a summary of what the Supporting Information contains. Text
 above the first `=` heading is the SI audiobook's opening chapter, so keep any
@@ -35,7 +36,7 @@ Replace this section. The table below is written by
 re-running the analysis updates the manuscript. Regenerate with `just assets`.
 
 #figure(
-  include "si/example_table.typ",
+  tbl("tbl.example"),
   caption: [Placeholder, auto-generated. Do not edit `si/example_table.typ`
     directly, as the next `just assets` overwrites it.],
 ) <tbl:si-example>

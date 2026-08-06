@@ -31,6 +31,7 @@ from typst_prose import (  # noqa: E402
     CITE,
     FOOTNOTE,
     strip_links,
+    ASSET,
     REFN,
     markup as _markup,
     resolve_stats,
@@ -97,6 +98,8 @@ def clean(text):
     text = strip_balanced(text, "#figure(")
     # A bare #table( in running prose, not wrapped in a #figure.
     text = strip_balanced(text, "#table(")
+    # Same for a bare fig()/tbl() call: an image is not narration.
+    text = re.sub(ASSET, " ", text)
 
     # 1a. generated numbers -> their value. Resolved, never stripped: a stripped
     #     call loses the figure from the spoken sentence, an unstripped one has

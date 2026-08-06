@@ -1,6 +1,12 @@
 // Numbers read from the analysis rather than typed into the prose.
 //
-// si/stats.json is written by analysis/scripts/gen_stats.py from the same data
+// stats.json is a file YOU own that the analysis contributes to. Each entry
+// records `origin.by`: the script that generated it, or "hand" for one you typed
+// in yourself with a note saying where it came from. A generator replaces only
+// its own entries, so `just assets` never clobbers a hand-written value, and
+// `just check-stats` re-runs every guard against whatever is in the file.
+//
+// Most of it is written by analysis/scripts/gen_stats.py from the same data
 // the generated tables and figures come from, so a sentence and the table beside
 // it cannot disagree. Declaring a value there also lets it carry a guard: a
 // number the prose calls an increase fails the build the day it turns negative,
@@ -15,10 +21,10 @@
 // Usage:  #import "stats.typ": s
 //         ... rose by #s("effect.treated_over_control") points ...
 //
-// Delete this file, si/stats.json and gen_stats.py if the project has no numbers
+// Delete this file, stats.json and gen_stats.py if the project has no numbers
 // worth generating. Nothing else depends on them.
 
-#let paper-stats = json("si/stats.json")
+#let paper-stats = json("stats.json")
 
 // DRAFT MODE (`just draft`, i.e. --input draft=true). An unknown id renders a
 // loud placeholder instead of stopping the compile.
@@ -35,8 +41,9 @@
 
 #let _missing(id) = {
   if not draft-mode {
-    panic("si/stats.json has no value '" + id + "'. Declare it in "
-      + "analysis/scripts/gen_stats.py, or fix the id. "
+    panic("stats.json has no value '" + id + "'. Declare it in "
+      + "analysis/scripts/gen_stats.py, or add it to stats.json by hand with "
+      + "origin.by = \"hand\" and a note. Or fix the id. "
       + "To keep writing with it unresolved: just draft")
   }
   none
@@ -44,7 +51,7 @@
 
 #let _entry(id) = {
   if type(paper-stats) != dictionary or "values" not in paper-stats {
-    panic("si/stats.json has no `values` table; regenerate it with `just assets`")
+    panic("stats.json has no `values` table; regenerate it with `just assets`")
   }
   if id not in paper-stats.values {
     _missing(id)
@@ -73,7 +80,7 @@
 // sum quietly produce a wrong answer, which is worse than not compiling.
 #let n(id) = {
   if id not in paper-stats.values {
-    panic("si/stats.json has no value '" + id + "', and `n` cannot be drafted "
+    panic("stats.json has no value '" + id + "', and `n` cannot be drafted "
       + "around: a placeholder number would make the arithmetic that reads it "
       + "silently wrong. Declare it, or use `s` if the value is only displayed.")
   }

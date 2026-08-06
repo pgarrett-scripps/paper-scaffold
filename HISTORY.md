@@ -45,6 +45,168 @@ rather than a copy.
 
 ---
 
+## 3.0.0
+
+Everything the analysis produces -- numbers, figures, tables -- is now declared
+in a manifest and referenced by id, and every output stopped being tracked in
+git. Two threads, and they meet in the same place: staleness is answered by
+hashing content, never by asking git what it remembers.
+
+Major, and this time by the letter of the policy as well as its spirit.
+`paper.typ` and `si-body.typ` reference figures and tables differently,
+`si/stats.json` moved, `analysis/` scripts gained a call they did not have, and
+`just check-pdf` no longer exists.
+
+### paper.pdf is no longer tracked, and no check reads git
+
+`paper.pdf` was tracked so a reader could get the manuscript without installing
+Typst. That is a real benefit and it was not worth the cost: git keeps every
+version of a binary forever, a clone pays for all of them, and getting one back
+out means rewriting history. Ship it as a release asset or a CI artifact.
+
+`just check-pdf` went with it, because it compared git commit dates and there is
+no longer a commit to compare. `just check-build` replaces it. `just paper` and
+`just docx` each record the sha256 of every source they rendered into
+`.build-stamp`; the check recomputes and compares.
+
+`.build-stamp` is untracked too, and has to be: it describes local build output.
+Tracking it would mean a rebuild on one machine reports every other checkout
+stale, for a file those checkouts do not have.
+
+The separate mtime check for `paper.docx` is gone, folded into the same
+mechanism. It had been quietly wrong: its input list globbed `si/*.typ`, which
+does not match `si/stats.json`, so changing a generated number never marked the
+Word export stale. The old git check had its own version of the same hole --
+`stats.typ` and `wordcount.typ` were not in its source list, so editing either
+left the PDF looking current. Both are covered now.
+
+No check reads git history any more, which means they all work in an exported
+tree, a shallow clone, or no repository at all. CI dropped `fetch-depth: 0`.
+`just doctor` no longer lists git as required by anything.
+
+**Upgrading:** add `paper.pdf` and `.build-stamp` to `.gitignore`, run
+`git rm --cached paper.pdf`, and rebuild once so the stamp exists. A recipe that
+called `just check-pdf` should call `just check-build`.
+
+### stats.json is a file you own
+
+It moved from `si/` to the manuscript root, and that is not cosmetic. `si/` means
+"written by the analysis, never edit" everywhere else in this directory, and this
+file is now one you are invited to edit.
+
+Every entry records `origin.by`: the script that generated it, or the literal
+`"hand"`. A generator replaces only its own entries when it runs, so a number
+typed in by hand survives `just assets` instead of being silently overwritten by
+the next one. That was the actual bug: the old `write()` rebuilt the whole file
+from scratch, so anything added by hand lasted until the next regeneration and
+then vanished.
+
+A hand entry must carry `origin.note` saying where the number came from. It is
+guarded exactly as tightly as a derived one; what it cannot have is
+re-derivation, so the note is the audit trail instead.
+
+`stats.json` came out of the `.assets-stamp` output hash, necessarily: that hash
+exists to report any edit as wrong, and editing is now the point.
+
+### `just check-stats` replaces the hash that used to guard it
+
+Per entry, rather than one hash over the file:
+
+- every `expect` guard re-run against the value **as committed**. Previously
+  guards fired only while `gen_stats.py` ran, which did nothing for a value
+  edited afterwards and nothing at all for a typed one.
+- `gen_stats.py` re-run into a scratch file and diffed, so a generated number
+  edited by hand is caught outright. This is the one check here that establishes
+  something rather than checking consistency, and it is affordable only because
+  that generator is a single fast script. There is no equivalent for figures.
+- `display` re-derived from `value` and `fmt`, catching an edit to one that no
+  longer matches the other -- the edit that changes what a reader sees without
+  changing what `#n("id")` computes with.
+- a `by` naming a script that no longer exists.
+- a hand entry with no note.
+- ids nothing reads (a warning; the opposite direction already panics at compile).
+
+**Upgrading:** `git mv si/stats.json stats.json`, repoint `json("si/stats.json")`
+in `stats.typ`, and run `just assets` once. Entries written before this release
+have no `origin`, and the first generator to declare one claims it -- so the
+upgrade is a no-op rather than a conflict.
+
+### Figures and tables are declared and referenced by id
+
+`assets.json` is the same contract for files. Each generator calls `record(...)`
+to declare what it wrote; the manuscript references the id:
+
+```typst
+#figure(fig("fig.example", width: 70%), caption: [...]) <fig:example>
+```
+
+The indirection is the entire point, and it is worth being precise about why. A
+manifest that sits beside the files it describes rots, because nothing reads it
+and nothing notices when it stops being true. This one is on the path the compile
+takes: an undeclared id stops the build the same way an undeclared `#s("id")`
+does. The ledger is load-bearing rather than bookkeeping.
+
+Verified before building on it that Typst accepts a computed path for both
+`image()` and `include`, on 0.14.2, the version floor. `include` was the one in
+doubt -- `import` requires a literal -- and it works.
+
+`just check-assets-manifest` then checks per entry: the output still hashes to
+what was recorded, the generator still exists, and the declared inputs are
+unchanged. The first two are attributed to a specific file, which the old
+`analysis/ has changed` could not do. The third is new capability: `_stamp-source`
+deliberately skips `analysis/data/`, so a changed dataset was invisible to every
+check in the pipeline.
+
+A new `bypassed-asset` error in `prose-check` reports a declared file named
+directly rather than through its id. Without it the mechanism is opt-in and
+erodes on the first hurried edit.
+
+Inputs are part automatic and part declared, and the split is deliberate. The
+generator and every module it imports from `analysis/` are recorded by walking
+`sys.modules`, which is exact because an import is always Python-level. Data
+files are declared by hand. The automatic version was considered and rejected:
+an audit hook on `open` cannot see the reads HDF5, parquet and most binary
+readers do from C, so it would record an empty input set for precisely the
+formats that matter. A missed input means a stale figure reported as current --
+failing open, where every other check here fails closed.
+
+`.assets-stamp` is kept for that reason. It over-approximates and nags; the
+manifest under-approximates because it only knows what was declared. Dropping it
+would trade a check that fails closed for one that fails open.
+
+**Upgrading:** add `record(...)` to each generator, import `fig`/`tbl` in
+`paper.typ` and `si-body.typ`, replace `image("figures/x.png")` with
+`fig("id")` and `include "si/x.typ"` with `tbl("id")`, and add both to
+`wordcount.typ`'s eval scope. That last one is the step that bites: the import
+alone is not enough, the scope names them again, and missing it leaves
+`just paper` working while `just wordcount` fails with `unknown variable: fig`.
+
+### Two bugs found by testing rather than by reasoning
+
+**A bare `fig()` call leaked into the word count and the narration.** Nearly
+every call is inside a `#figure(...)` that is stripped whole, so the case was
+easy to miss by inspection; a bare one in running prose came through verbatim,
+id and all, to be counted as words and read aloud. Both extractors strip it now,
+with fixture cases including the reflowed and layout-argument forms.
+
+**The first `_code_inputs()` recorded 257 inputs for one figure.** `analysis/`
+contains `.venv/`, so "every imported module under analysis/" meant every
+site-package the generator touched -- PIL, matplotlib, the lot. Left in, a
+dependency upgrade would have marked every figure stale.
+
+### Also
+
+- `analysis/justfile`'s `clean` no longer deletes `stats.json`. It holds
+  hand-entered values as well as generated ones, and deleting it to "clean"
+  throws away the half no script can rebuild.
+- `check_orphaned_assets` skips anything declared in `assets.json`. It matches
+  filenames against the prose, and once assets are referenced by id the filename
+  never appears there, so every declared asset looked orphaned.
+- `_stamp-manuscript` covers `stats.json`, `assets.typ` and `assets.json`.
+- `new-paper.sh` excludes `.build-stamp` from the copy, with a test. Inherited,
+  it would claim the new paper's outputs were built from sources it has never
+  seen, and `just check` would report clean on day one.
+
 ## 2.0.0
 
 The scaffold became something that can be handed to someone else. Until now it

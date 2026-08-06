@@ -34,11 +34,10 @@ scripted run needs no terminal:
 ./scripts/new-paper.sh --help
 ```
 
-**Do not start a paper with `cp -r`.** It copies `.git` too, and the new
-manuscript then carries the scaffold's history: `just check-pdf` compares the
-paper against the *scaffold's* commits, and `just version` reports the
-scaffold's last commit as the manuscript's state. Both keep reporting
-confidently while answering the wrong question.
+**Do not start a paper with `cp -r`.** It copies `.git` too, so `just version`
+reports the *scaffold's* last commit as the manuscript's state — confidently, and
+wrongly. It also drags along `.build-stamp`, which then claims the new paper's
+outputs were built from sources it has never seen.
 
 Then, in the new directory:
 
@@ -54,8 +53,9 @@ directory is in a shippable state.
 
 Three parts are optional. `analysis/` (no generated assets) and `audio/` (no
 narration) can simply be deleted: every recipe and check adapts rather than
-failing. The generated-numbers mechanism (`stats.typ` + `si/stats.json` +
-`analysis/scripts/gen_stats.py`) also comes out, but not by deleting alone —
+failing. The generated-numbers mechanism (`stats.typ` + `stats.json` +
+`analysis/scripts/gen_stats.py`) and the generated-asset one (`assets.typ` +
+`assets.json`) also come out, but not by deleting alone —
 Typst cannot conditionally import a file that is not there, so three `.typ` files
 have to drop their import. The exact edits are under
 [Numbers in prose](#numbers-in-prose-sid-not-a-typed-numeral).
@@ -91,8 +91,9 @@ have to drop their import. The exact edits are under
 
 ```
 paper.typ  config.typ  si-body.typ    the manuscript
-stats.typ  wordcount.typ              Typst helpers it imports
-references.bib  paper.pdf             bibliography, and the tracked output
+stats.typ  assets.typ  wordcount.typ  Typst helpers it imports
+stats.json  assets.json               what the analysis declared: numbers, figures
+references.bib                        the bibliography
 justfile  pyproject.toml              how to build it, and what with
 prose-check.toml                      this project's prose exceptions
 
@@ -159,8 +160,8 @@ is typed by hand, and that is where drift lives: a unit error, a percentage
 stale after a re-run, a value fixed in the table but not in the paragraph beside
 it.
 
-`analysis/scripts/gen_stats.py` declares every number the prose states and writes
-`si/stats.json`. The manuscript reads it back:
+`analysis/scripts/gen_stats.py` declares the numbers the prose states and writes
+them into `stats.json`. The manuscript reads them back:
 
 ```typst
 the treated group scored #s("effect.treated_over_control") over control
@@ -177,6 +178,34 @@ Three things make it hold:
   shipping "fell by -3.1%". A plausibility band catches the unit error.
 - **`just prose-check` flags a typed numeral** that matches a declared value, so
   the rule is enforced rather than merely intended.
+- **`just check-stats` re-checks the committed file.** It re-runs every guard
+  against the values as they sit in `stats.json`, re-runs the generator and diffs
+  the values it owns, and reports ids nothing reads. The guards above only fire
+  while the generator runs, which does nothing for a value edited afterwards.
+
+### stats.json is yours, not just the analysis's
+
+Every entry records `origin.by`: the script that generated it, or `"hand"`. A
+generator rewrites only its own entries, so a number you add by hand survives
+`just assets` instead of being silently overwritten by it.
+
+```json
+"cohort.sites": {
+  "value": 4, "display": "4",
+  "expect": {"sign": "+"},
+  "origin": {"by": "hand", "note": "study protocol v3, Table 1"}
+}
+```
+
+A hand entry must carry `origin.note` saying where the number came from, and it
+is guarded exactly as tightly as a derived one. What it cannot get is
+re-derivation: `check-stats` recomputes generated values from the data and
+compares, and nothing can do that for a number that came off a printout. The
+note is the audit trail instead.
+
+That is also why `stats.json` sits at the manuscript root rather than under
+`si/`, and why it is not part of the `.assets-stamp` hash: a file you are invited
+to edit cannot be guarded by "did anything change".
 
 Rounding is set once per value with `fmt`, next to the analysis, so every mention
 is punctuated identically.
@@ -199,19 +228,83 @@ Typst has no conditional import and no way to ask whether a file exists, so the
 references have to come out by hand; each one is commented to say so.
 
 ```bash
-rm stats.typ si/stats.json analysis/scripts/gen_stats.py
+rm stats.typ stats.json analysis/scripts/gen_stats.py
 ```
 
 1. Delete the `#import "stats.typ": n, s` line from **`paper.typ`,
    `si-body.typ` and `wordcount.typ`**. All three carry it.
 2. In `wordcount.typ`, also drop the helpers from the eval scope:
-   `scope: (refn: refn, s: s, n: n)` becomes `scope: (refn: refn)`. The import
-   alone is not enough — this line names them again, and missing it is the one
-   that bites, because `just paper` still works and only `just wordcount` fails.
+   `scope: (refn: refn, s: s, n: n, fig: asset-fig, tbl: asset-tbl)` becomes
+   `scope: (refn: refn, fig: asset-fig, tbl: asset-tbl)`. The import alone is not
+   enough — this line names them again, and missing it is the one that bites,
+   because `just paper` still works and only `just wordcount` fails.
 3. Remove any `#s()` / `#n()` calls left in the prose.
+
+The generated-**assets** mechanism comes out the same way and separately:
+
+```bash
+rm assets.typ assets.json
+```
+
+Delete the `#import "assets.typ": fig, tbl` line from `paper.typ` and
+`si-body.typ`, drop `fig: asset-fig, tbl: asset-tbl` (and the import above it)
+from `wordcount.typ`, remove the `record(...)` calls from the generators in
+`analysis/scripts/`, and go back to naming files directly:
+`#figure(image("figures/x.png"), ...)`.
 
 Verified by doing exactly this to a copy and confirming `just paper`,
 `just wordcount`, `just readability` and the narration all still work.
+
+### Figures and tables by id: `fig("fig.x")`, not a filename
+
+The same contract as numbers, for files. Each generator calls `record(...)` to
+declare what it wrote, into `assets.json`:
+
+```json
+"fig.example": {
+  "path": "figures/example_figure.png",
+  "kind": "figure",
+  "hash": "sha256:b100e70d…",
+  "origin": {"by": "analysis/scripts/gen_example_figure.py"},
+  "inputs": {
+    "analysis/scripts/gen_example_figure.py": "sha256:1b2fcdf2…",
+    "analysis/scripts/example_data.csv":      "sha256:c19c8377…"
+  }
+}
+```
+
+and the manuscript references the id rather than the path:
+
+```typst
+#figure(fig("fig.example", width: 70%), caption: [...]) <fig:example>
+```
+
+**Referencing by id is what makes the manifest worth having.** A manifest that
+merely sits beside the files it describes rots, because nothing reads it. This
+one is on the path the compile takes, so an undeclared id stops the build the
+same way an undeclared `#s("id")` does — it cannot quietly stop being true.
+`just prose-check` reports naming a declared asset directly as an error, which is
+what keeps the bypass closed.
+
+`just check-assets-manifest` then checks per entry: the output still hashes to
+what was recorded (so a hand-edit to a generated file is caught and *attributed*),
+the generator still exists, and the declared inputs are unchanged.
+
+Inputs are part automatic, part declared. The generator and every module it
+imports from `analysis/` are recorded by walking `sys.modules`, which is exact
+because imports are always Python-level. **Data files are declared by hand**
+(`inputs=[...]`), because the automatic version is not exact: an audit hook on
+`open` cannot see reads that HDF5, parquet and most binary readers do from C, and
+would record an empty input set for precisely the formats that matter. A missed
+input means a stale figure reported as current, so that half stays explicit.
+
+An input that is not present — the normal state of a fresh clone, since
+`analysis/data/` is untracked — is reported as unverified, never as stale.
+
+`.assets-stamp` is kept alongside this, deliberately. The stamp hashes all of
+`analysis/` and so over-approximates: it nags rather than misses. The manifest
+under-approximates, since it only knows what was declared. Dropping the stamp
+would trade a check that fails closed for one that fails open.
 
 ### `analysis/` lives inside the manuscript, and writes to it directly
 
@@ -234,9 +327,9 @@ Keep `assets` as the front door and the manuscript never has to care.
 A paper with no computed results simply has no `analysis/` directory, and the
 recipes say so instead of failing.
 
-`figures/` and `si/` are generated but **tracked**, for the same reason
-`paper.pdf` is: a fresh clone must compile without re-running an analysis that
-may take hours. `just check-assets` guards that with a content stamp of the
+`figures/` and `si/` are generated but **tracked**, so a fresh clone compiles
+without re-running an analysis that may take hours. (`paper.pdf` is not tracked —
+see below.) `just check-assets` guards that with a content stamp of the
 analysis source, recorded in `.assets-stamp` when `just assets` runs, so editing
 a generator and forgetting to re-run it is reported rather than shipped.
 
@@ -250,16 +343,24 @@ to satisfy it.
 It exits non-zero if anything is stale, and covers the three failure modes that
 actually happen:
 
-- A tracked `paper.pdf` committed before a source fix. This is checked by comparing
-  *commit dates*, not mtimes, because a fresh clone rewrites every mtime and would
-  report a false alarm.
-- `paper.docx` or an `.m4b` older than the text it renders or narrates. Each
-  artifact is compared against its own inputs, so a regenerated SI table does not
-  wrongly mark the audiobooks stale (they never read `si/`).
+- `paper.pdf` or `paper.docx` built from sources that have since changed. `just
+  paper` and `just docx` record the hash of what they rendered in `.build-stamp`;
+  `just check-build` recompares it.
 - `figures/` and `si/` older than the `analysis/` code that generates them.
 
-`paper.pdf` is deliberately tracked in git, so a reader can get the manuscript
-without installing Typst. `check-pdf` is what keeps that honest.
+**Neither output is tracked in git**, and neither is `.build-stamp`. Git keeps
+every version of a binary forever, a clone pays for all of them, and removing one
+means rewriting history. Ship the PDF as a release asset or a CI artifact.
+
+That is also why staleness is a content hash rather than a commit date: nothing
+here reads git history any more, so the checks work in an exported tree, a shallow
+clone, or no repository at all. `.build-stamp` stays untracked because it
+describes *local* build output — tracking it would let a rebuild on one machine
+report every other checkout stale.
+
+The audiobooks are deliberately not checked. Every prose edit would mark them
+stale and clearing that costs minutes of narration, so the warning was almost
+always present and almost never acted on.
 
 ### The Word export is more delicate than it looks
 
@@ -431,7 +532,7 @@ whether the ones you have are new enough.
 
 - `typst` **0.14 or newer**, `just`, `uv`, `python3`
 - `typstyle` for `just fmt` and `just fmt-check` (`cargo install typstyle`)
-- `git` for `just check-pdf`, which skips itself outside a repository
+- `git` is **not** required by any check; the staleness checks are content hashes
 - a network connection for `just audio-setup` (the voice model) and the first
   PDF build (the `arkheion` template)
 

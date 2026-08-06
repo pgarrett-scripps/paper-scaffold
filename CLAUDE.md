@@ -9,9 +9,22 @@ what the pipeline does and [STYLE.md](STYLE.md) for prose conventions.
 `analysis/scripts/gen_*_table.py` and carry an "AUTO-GENERATED, do not edit by
 hand" header. An edit survives until the next `just assets` and then vanishes,
 usually unnoticed. Change the generator or the data it reads.
+`just check-assets-manifest` catches it now, and names the file.
+
+**`stats.json` is the exception: you MAY edit it.** It is the one generated file
+that is also yours. Add a value with `origin.by = "hand"` and an `origin.note`
+saying where the number came from, and `just assets` will not overwrite it. A
+number that a script could compute still belongs in `gen_stats.py`; this is for
+the ones no script can — a protocol figure, a vendor spec, a value from a paper.
 
 **Never hand-edit files under `figures/`.** They are written by `analysis/`.
 Change the script that produces the plot and run `just assets`.
+
+**Never name a generated figure or table by filename.** They are declared in
+`assets.json` by the script that writes them and referenced by id:
+`#figure(fig("fig.example"), caption: [...])`. Naming the path directly bypasses
+the manifest, so it stops describing the manuscript; `just prose-check` reports
+that as an error. Add a new one by calling `record(...)` in the generator.
 
 **Never type a result into the prose.** Declare it in
 `analysis/scripts/gen_stats.py` and read it back as `#s("id")`. A typed numeral
@@ -53,9 +66,17 @@ What `verify` runs, and what each one is for:
 - **`just prose-check`** -- fails on em dashes, British spellings, doubled words,
   and uncited figures; reports long sentences, verbosity, repetition, and
   unexpanded acronyms as warnings you should read rather than silence.
-- **`just check`** -- a committed PDF that predates a source commit, a Word
-  export older than what it renders, `figures/` and `si/` older than the
-  `analysis/` code behind them.
+- **`just check-stats`** -- re-runs every guard in `stats.json` against the
+  committed values, re-runs `gen_stats.py` and diffs the values it owns, insists a
+  hand-entered number carries a note, and reports ids nothing reads.
+- **`just check-assets-manifest`** -- per generated file: does it still hash to
+  what was recorded, does its generator still exist, have its declared inputs
+  changed, and does anything reference it.
+- **`just check`** -- a `paper.pdf` or `paper.docx` built from sources that have
+  since changed, and `figures/` and `si/` older than the `analysis/` code behind
+  them. Neither output is tracked in git; `just paper` and `just docx` record what
+  they rendered in `.build-stamp` and `just check-build` recompares it. No check
+  reads git history, so they all work outside a repository.
 
 `just check` deliberately does not check the audiobooks, and there is no upstream
 figure copy to compare against any more. See HISTORY.md's "Decisions reversed"
@@ -87,18 +108,35 @@ construct in `paper.typ`: that prose is placeholder and gets deleted.
 ## When adding a table or figure
 
 A table: copy `analysis/scripts/gen_example_table.py`, keep the filename pattern
-`gen_*_table.py` so `just assets` picks it up with no wiring, write a bare
+`gen_*_table.py` so `just assets` picks it up with no wiring, and write a bare
 `#table(...)` into `../../si/` with the auto-generated header and no caption or
-label, then wrap it in a `#figure` in `si-body.typ` where the caption and label
-live.
+label. Then wrap it in a `#figure` in `si-body.typ`, where the caption and label
+live:
+
+```typst
+#figure(tbl("tbl.yourname"), caption: [...]) <tbl:yourname>
+```
 
 A figure: copy `analysis/scripts/gen_example_figure.py`, keep the pattern
 `gen_*_figure.py`, and write straight into `../../figures/`. Set
 `metadata={"Software": None}` and seed any RNG, or every regeneration churns the
-PNG bytes and shows up as a diff that is not a real change.
+PNG bytes and shows up as a diff that is not a real change. Reference it as
+`#figure(fig("fig.yourname", width: 70%), caption: [...]) <fig:yourname>`.
 
-Then `just assets && git add figures si .assets-stamp`, because all three are
-tracked.
+**Either way, call `record(...)` at the end of the generator**, which is what
+declares the id the manuscript uses:
+
+```python
+from _assets import record
+record("fig.yourname", str(OUT.relative_to(PAPER)), kind="figure",
+       inputs=[str(SRC.relative_to(PAPER))], desc="what it shows")
+```
+
+`inputs` is the DATA it read; the script and its imports are recorded
+automatically. Paths are relative to the manuscript root, not to `analysis/`.
+
+Then `just assets && git add figures si assets.json stats.json .assets-stamp`,
+because all of those are tracked.
 
 ## Editing the Typst preamble
 

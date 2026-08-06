@@ -90,7 +90,7 @@ doctor:
   report just     just     required "every recipe in this file"      just --version
   report uv       uv       required "the Python toolchain"           uv --version
   report python3  python3  required "tools/wordcount.sh"                   python3 --version
-  report git      git      optional "just check-pdf (skipped without it)" git --version
+  report git      git      optional "not required by any check; version reporting" git --version
   report typstyle typstyle optional "just fmt and just fmt-check"    typstyle --version
   report curl     curl     optional "not required; handy for diagnosis" curl --version
 
@@ -203,6 +203,8 @@ verify:
 
   stage "extractors (just test)"         "" just test
   stage "prose rules (just prose-check)" "" just prose-check
+  stage "numbers (just check-stats)"     "" just check-stats
+  stage "assets (just check-assets-manifest)" "" just check-assets-manifest
   stage "staleness (just check)"         "" just check
 
   echo ""
@@ -224,29 +226,18 @@ check:
   set -uo pipefail
   rc=0
 
-  just check-pdf || rc=1
-
-  # paper.docx is gitignored, so mtime is the only signal here.
+  # One mechanism for both outputs now: a content stamp written at build time.
+  # This replaced a git commit-date check for paper.pdf and an mtime check for
+  # paper.docx, which disagreed with each other and each missed something -- the
+  # mtime list globbed si/*.typ, so a changed number never marked the Word export
+  # stale.
   #
   # The audiobooks are deliberately NOT checked. Every prose edit would mark them
   # stale, and clearing that costs minutes of narration, so the warning was almost
   # always present and almost never acted on. A nag with an expensive fix is a nag
   # people learn to scroll past, and it was eroding trust in the rest of this
   # output. Rebuild them with `just audiobook-all` when you actually want them.
-  newest() { ls -t "$@" 2>/dev/null | head -1; }
-  check_artifact() {   # <artifact> <label> <input>...
-    local f="$1" label="$2"; shift 2
-    local src; src=$(newest "$@")
-    if [ ! -f "$f" ]; then
-      echo "MISSING: $f -- rebuild: $label"
-      rc=1
-    elif [ -n "$src" ] && [ "$f" -ot "$src" ]; then
-      echo "STALE:   $f is older than $src -- rebuild: $label"
-      rc=1
-    fi
-  }
-  check_artifact paper.docx "just docx" \
-    paper.typ config.typ si-body.typ references.bib si/*.typ figures/*.png
+  just check-build || rc=1
 
   just check-assets || rc=1
 
@@ -278,6 +269,25 @@ check:
 # total: the edit renders correctly, every staleness check reports current, and
 # the next `just assets` silently overwrites it. An "AUTO-GENERATED" header is a
 # request; this is a check.
+# stats.json is the one generated file you are allowed to edit, so it is the one
+# a content hash cannot guard. This re-runs every declared guard against the
+# committed values, re-derives the generated ones by running gen_stats.py and
+# diffing, insists a hand-entered number says where it came from, and reports
+# values nothing reads.
+# Check stats.json: guards, provenance, and generated values against the analysis
+check-stats:
+  @uv run --quiet python tools/check_stats.py
+
+# assets.json is the same contract for figures and tables: declared by the script
+# that writes them, referenced from the prose by id. Because the compile resolves
+# those ids, the manifest cannot rot into a file nobody reads -- which is what
+# makes these checks worth running. Complements .assets-stamp rather than
+# replacing it: the stamp over-approximates and fails closed, this names the
+# specific file and can see data inputs the stamp deliberately skips.
+# Check assets.json: output hashes, generators, declared inputs, and references
+check-assets-manifest:
+  @uv run --quiet python tools/check_assets.py
+
 # Fail if the generated figures/tables predate, or diverge from, the analysis
 check-assets:
   #!/usr/bin/env bash
@@ -331,9 +341,10 @@ _stamp-source:
       -not -path 'analysis/.venv/*' -not -name '*.pyc' -not -name 'uv.lock' \
       -print0 | sort -z | xargs -0 -r sha256sum | sha256sum | cut -d" " -f1
 
-# Hash of what the analysis produced. si/stats.json is included: it is generated
-# by gen_stats.py exactly like the tables, and hand-editing a value there would
-# otherwise change every number in the prose with nothing to notice.
+# Hash of what the analysis produced. stats.json is deliberately NOT here: it
+# moved to the manuscript root and is now a file you may edit, with per-entry
+# `origin.by` recording what wrote each value. `just check-stats` guards it
+# instead, which a whole-file hash cannot do once hand-editing is allowed.
 _stamp-output:
   @find figures si -type f -not -name '*.pyc' \
       -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum | sha256sum | cut -d" " -f1
@@ -369,6 +380,7 @@ draft:
 # Compile paper.typ -> paper.pdf, then print word counts and readability
 paper:
   typst compile paper.typ
+  @just _record-build paper.pdf
   @bash tools/wordcount.sh
   @echo ""
   @uv run --quiet python tools/readability.py
@@ -492,6 +504,7 @@ docx:
   typst compile --features html --input docx=true -f html paper.typ paper.docx.html
   uv run --quiet python tools/typst2docx.py paper.docx.html paper.docx
   @rm -f paper.docx.html
+  @just _record-build paper.docx
 
 # ---------------------------------------------------------------------------
 # Generated assets. The contract: numbers and plots in the manuscript are written
@@ -590,30 +603,65 @@ audio-clean:
   rm -f audio/paper.wav audio/paper.mp3 audio/paper.opus audio/paper.m4b audio/paper_si.m4b
   rm -f audio/paper_prose.txt audio/cover_main.png audio/cover_si.png
 
-# paper.pdf is a TRACKED build artifact (see .gitignore) -- it is the reviewable
-# output, so a reader can get it from the repo without a Typst install. That makes
-# it the one thing here that can silently disagree with its own source. Compare
-# commit dates, not mtimes, since a fresh clone or checkout rewrites every mtime
-# and would report a false alarm.
-# Fail if the committed paper.pdf is older than the manuscript source it was built from
-check-pdf:
+# paper.pdf and paper.docx are UNTRACKED build artifacts (see .gitignore). Large
+# binaries do not belong in git: every version is kept forever, a clone pays for
+# all of them, and getting one back out means rewriting history.
+#
+# So staleness is answered by a CONTENT STAMP rather than by git. `just paper` and
+# `just docx` record the hash of the sources they rendered; this recompares it.
+# No git, no mtimes -- mtimes are rewritten by a clone or a checkout, which is why
+# the git version existed in the first place.
+#
+# .build-stamp is itself untracked, and has to be: it describes local build output.
+# Tracking it would mean a rebuild on one machine reports every other checkout
+# stale, for a file those checkouts do not have.
+#
+# The trade this accepts: a reader can no longer get the PDF from the repository
+# without a Typst install. Attach it to a release or a CI artifact instead.
+# Fail if paper.pdf or paper.docx no longer matches the source it was built from
+check-build:
   #!/usr/bin/env bash
   set -uo pipefail
-  if ! git rev-parse --git-dir >/dev/null 2>&1; then
-    echo "note:    not a git repository, skipped the paper.pdf staleness check"
-    exit 0
-  fi
-  pdf_commit=$(git log -1 --format=%H -- paper.pdf)
-  if [ -z "$pdf_commit" ]; then echo "paper.pdf is not committed yet"; exit 1; fi
-  sources="paper.typ config.typ si-body.typ references.bib si figures"
-  stale=$(git log --format=%ct "$pdf_commit"..HEAD -- $sources | head -1)
-  if [ -n "$stale" ]; then
-    echo "STALE: paper.pdf predates these source commits --"
-    git log --oneline "$pdf_commit"..HEAD -- $sources | sed 's/^/  /'
-    echo "  fix: just paper && git add paper.pdf"
-    exit 1
-  fi
-  echo "paper.pdf is current with $sources"
+  rc=0
+  now=$(just _stamp-manuscript)
+  for out in paper.pdf paper.docx; do
+    recipe=$([ "$out" = "paper.pdf" ] && echo "just paper" || echo "just docx")
+    was=$(grep -m1 "^$out " .build-stamp 2>/dev/null | cut -d" " -f2)
+    if [ ! -f "$out" ]; then
+      echo "MISSING: $out -- rebuild: $recipe"
+      rc=1
+    elif [ -z "$was" ]; then
+      # Built before this check existed, or written by something other than the
+      # recipe. Reported rather than guessed at: assuming current would hide the
+      # exact case the stamp is for.
+      echo "UNKNOWN: $out has no entry in .build-stamp -- rebuild: $recipe"
+      rc=1
+    elif [ "$now" != "$was" ]; then
+      echo "STALE:   $out was built from different sources -- rebuild: $recipe"
+      rc=1
+    fi
+  done
+  [ $rc -eq 0 ] && echo "paper.pdf and paper.docx are current with the source"
+  exit $rc
+
+# Hash of everything the manuscript renders: the hand-written sources and the
+# generated assets they pull in. stats.typ and wordcount.typ are included here and
+# were missing from the git-based check they replace, so editing either one used
+# to leave the PDF looking current.
+_stamp-manuscript:
+  @find paper.typ config.typ si-body.typ stats.typ stats.json assets.typ \
+      assets.json wordcount.typ references.bib si figures -type f -not -name '*.pyc' \
+      -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum | sha256sum | cut -d" " -f1
+
+# Record that <name> was just built from the current sources. Rewrites only its
+# own line, so building the PDF does not claim the Word export is current too.
+_record-build name:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  touch .build-stamp
+  { grep -v "^{{name}} " .build-stamp || true; } > .build-stamp.tmp
+  echo "{{name}} $(just _stamp-manuscript)" >> .build-stamp.tmp
+  mv .build-stamp.tmp .build-stamp
 
 # Remove the built PDF and Word export
 clean:

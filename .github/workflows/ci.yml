@@ -38,12 +38,10 @@ jobs:
         typst: ["0.14.2", "0.15.1"]
 
     steps:
+      # A shallow checkout is fine: no check reads git history any more. Staleness
+      # is a content stamp written at build time (`just check-build`), so this
+      # needs the files and nothing else.
       - uses: actions/checkout@v4
-        with:
-          # check-pdf compares COMMIT DATES, so it needs real history. At the
-          # default depth of 1 it cannot see whether a source commit came after
-          # the one that built paper.pdf, and reports clean either way.
-          fetch-depth: 0
 
       # Tools go in a user-owned directory rather than /usr/local/bin, which is
       # not reliably writable across the runner images (and differs again on an
@@ -91,9 +89,10 @@ jobs:
 
       - run: just setup
 
-      # Build before verifying, exactly as CLAUDE.md tells a human to. paper.docx
-      # is gitignored, so `just check` sees a missing one on a fresh clone and
-      # correctly asks for a rebuild.
+      # Build before verifying, exactly as CLAUDE.md tells a human to. Neither
+      # output is tracked, so a fresh clone has neither and `just check` correctly
+      # asks for both. Building also writes the .build-stamp that check-build
+      # compares against.
       - run: just paper
       - run: just docx
 
@@ -184,8 +183,8 @@ jobs:
 
       # The generated directory must pass the scaffold's own staleness gate
       # immediately. It is the check most likely to be wrong in a fresh copy,
-      # since it reasons about commit dates and a stamp that were both written
-      # seconds ago by the script rather than by a person.
+      # since every stamp it reads was written seconds ago by the script rather
+      # than by a person.
       - name: The generated manuscript is already clean
         working-directory: ${{ runner.temp }}/generated
         run: |

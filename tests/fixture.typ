@@ -133,6 +133,16 @@ reason until it leaked verbatim.
 Whole figures, including their captions, are excluded from the word count and are
 never narrated.
 
+A generated figure or table is pulled in by id rather than by filename, through
+the helpers in assets.typ. Nearly always inside a `#figure` block that is stripped
+whole, so the case that matters is a bare one in running prose: here is a
+figure #fig("fig.example") and here is a table #tbl("tbl.example"), both of which
+must vanish rather than leaving the id behind to be counted and read aloud. A
+call carrying layout arguments #fig("fig.example", width: 70%) goes the same way,
+as does the reflowed form #fig(
+  "fig.example",
+) that a wrapped line produces.
+
 #figure(
   table(
     columns: 2,

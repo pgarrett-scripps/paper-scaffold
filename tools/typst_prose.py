@@ -47,7 +47,7 @@ STATS_N = r'#n\(\s*"([^"]+)"\s*,?\s*\)'
 
 # Written by analysis/scripts/gen_stats.py, beside the generated SI tables.
 # .parent.parent because this file lives in tools/; si/ is at the root.
-STATS_JSON = Path(__file__).resolve().parent.parent / "si" / "stats.json"
+STATS_JSON = Path(__file__).resolve().parent.parent / "stats.json"
 
 # An explicit cross-reference call: Typst's own `#ref(<x>)` or a manuscript's
 # `#refn(<x>)` helper. BOTH forms have to be here. `#ref(` is the more natural
@@ -87,6 +87,23 @@ LINK = r'#link\(\s*"[^"]*"\s*,?\s*\)(?:\s*\[([^\]]*)\])?'
 # footnote should count toward a journal limit, or be read aloud at all, is a
 # policy question and a separate one from this.
 FOOTNOTE = r"#footnote\s*\["
+
+
+# A generated figure or table pulled in by id: `fig("fig.x")` / `tbl("tbl.x")`
+# from assets.typ. Dropped entirely, like the `#figure(...)` block and the bare
+# `#table(` these normally sit inside -- an image is not words, and the id is a
+# key rather than something to read aloud.
+#
+# Nearly always wrapped in a `#figure(...)` that is already stripped whole, so
+# this only bites on a bare call in running prose. It went unhandled at first for
+# exactly that reason, and the id leaked into the word count and the narration:
+# "A sentence with a bare #fig("fig.example") call" came through verbatim.
+#
+# Optional leading # so it matches both the markup call and the code-mode one
+# inside a larger expression. The argument list is matched non-greedily up to the
+# first close paren, which is enough: the arguments are a quoted id and simple
+# named values like `width: 70%`.
+ASSET = r'#?(?:fig|tbl)\(\s*"[^"]*"[^()]*\)'
 
 
 def strip_links(text: str) -> str:
@@ -133,7 +150,7 @@ def unescape_unicode(text: str) -> str:
 
 
 def resolve_stats(text: str, path: Path | None = None) -> str:
-    """Substitute `#s("id")` and `#n("id")` with their values from si/stats.json.
+    """Substitute `#s("id")` and `#n("id")` with their values from stats.json.
 
     `s` resolves to the display string (already rounded by the analysis), `n` to
     the raw value, matching what Typst renders for each.

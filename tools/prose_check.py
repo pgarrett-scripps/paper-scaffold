@@ -767,9 +767,25 @@ def check_orphaned_assets(root: Path | None = None) -> list[Finding]:
     include, so a project that reads an asset in some way this does not model
     still counts as using it. A false negative here is much cheaper than telling
     someone to delete a file the manuscript needs.
+
+    Anything declared in assets.json is skipped, because that file answers the
+    same question properly: tools/check_assets.py reports an id nothing
+    references AND a file no entry claims. A filename scan cannot see either once
+    the manuscript refers to assets by id -- the name never appears in the prose,
+    so every declared asset would look orphaned. This rule now covers only the
+    assets that are not in the manifest.
     """
     r = root or ROOT
     sources = " ".join(p.read_text() for p in sorted(r.glob("*.typ")))
+
+    declared: set[str] = set()
+    manifest = r / "assets.json"
+    if manifest.is_file():
+        try:
+            declared = {rec.get("path") for rec
+                        in json.loads(manifest.read_text()).get("values", {}).values()}
+        except json.JSONDecodeError:
+            pass
 
     out: list[Finding] = []
     for kind, folder, pattern in (("table", "si", "*.typ"),
@@ -783,6 +799,9 @@ def check_orphaned_assets(root: Path | None = None) -> list[Finding]:
             # stats.json is read through stats.typ by id, never by filename.
             if f.name == "stats.json":
                 continue
+            # Declared in assets.json: check_assets.py owns this question.
+            if f.relative_to(r).as_posix() in declared:
+                continue
             if f.name not in sources:
                 out.append(Finding(
                     "orphaned-asset", "warn",
@@ -790,6 +809,47 @@ def check_orphaned_assets(root: Path | None = None) -> list[Finding]:
                     f"it, so this {kind} is rebuilt on every `just assets` and "
                     f"appears nowhere in the manuscript",
                     subject=f.name, where=folder))
+    return out
+
+
+def check_bypassed_assets(sources: dict[str, str],
+                          assets_path: Path | None = None) -> list[Finding]:
+    """Flag a generated file pulled in by filename instead of by id.
+
+    assets.json is only trustworthy because the compile goes through it: an
+    undeclared id stops the build. Writing `#image("figures/x.png")` directly
+    goes around that, and the manifest quietly stops describing the manuscript.
+    So this is the rule that makes the rest of the mechanism hold, and it is an
+    error rather than a warning for the same reason an uncited figure is.
+
+    Only DECLARED paths are flagged. A logo, a schematic drawn by hand, a
+    photograph -- none of those come from the analysis and none belong in the
+    manifest, so naming one directly is exactly right.
+    """
+    p = assets_path or (ROOT / "assets.json")
+    if not p.is_file():
+        return []
+    try:
+        values = json.loads(p.read_text()).get("values", {})
+    except json.JSONDecodeError:
+        return []
+    by_path = {rec.get("path"): id for id, rec in values.items()}
+
+    out: list[Finding] = []
+    pat = re.compile(r'#?(?:image|include)\s*\(?\s*"((?:figures|si)/[^"]+)"')
+    for name, src in sources.items():
+        for m in pat.finditer(re.sub(r"//[^\n]*", " ", src)):
+            path = m.group(1)
+            id = by_path.get(path)
+            if not id:
+                continue          # not a declared asset; nothing to bypass
+            helper = "tbl" if values[id].get("kind") == "table" else "fig"
+            out.append(Finding(
+                "bypassed-asset", "error",
+                f"{path} is named directly, but it is a generated asset declared "
+                f"as '{id}'. Reference it as {helper}(\"{id}\") so assets.json "
+                f"stays the thing the manuscript actually reads",
+                subject=path, where=name, context=_ctx(src, m.start())))
     return out
 
 
@@ -925,6 +985,7 @@ def main() -> int:
                           readability.clean(src, gap=GAP), cfg)
     findings += check_structure(targets)
     findings += check_derivable_numbers(targets)
+    findings += check_bypassed_assets(targets)
     findings += check_orphaned_assets()
     findings += check_figure_resolution(cfg=cfg)
     findings += check_table_size(cfg=cfg)

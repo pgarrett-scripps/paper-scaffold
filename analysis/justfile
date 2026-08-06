@@ -61,5 +61,10 @@ stats:
 
 # Remove generated assets from the manuscript. Rarely wanted: they are tracked,
 # so `git checkout` is usually the better undo.
+#
+# ../stats.json is deliberately NOT removed. It holds hand-entered values as well
+# as generated ones, and deleting it to "clean" would throw away the half no
+# script can rebuild. Re-running `just stats` rewrites the generated entries in
+# place, which is the actual undo for that file.
 clean:
-  rm -f ../figures/*.png ../si/*.typ ../si/stats.json
+  rm -f ../figures/*.png ../si/*.typ
