@@ -53,11 +53,24 @@ density:
 # SCOPE. This does NOT re-run the analysis. The figures and tables under
 # figures/ and si/ come from `just assets`, which may take hours. `check` reports
 # drift in those too, without rebuilding anything.
-# Rebuild every artifact this directory owns: PDF, Word, and both audiobooks
-all: paper docx audiobook-all
-  @echo ""
-  @echo "PDF, Word and both audiobooks rebuilt from the current source."
-  @just check
+#
+# audio/ is optional: a project that does not want narration deletes the
+# directory, and this skips the audiobooks rather than failing. Making it a hard
+# dependency meant `just all` broke on a manuscript that had removed a feature it
+# never asked for.
+# Rebuild every artifact this directory owns: PDF, Word, and the audiobooks if audio/ is present
+all: paper docx
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if [ -d audio ]; then
+    just audiobook-all
+    echo ""
+    echo "PDF, Word and both audiobooks rebuilt from the current source."
+  else
+    echo ""
+    echo "PDF and Word rebuilt from the current source (no audio/, narration skipped)."
+  fi
+  just check
 
 # Covers the three ways a manuscript directory actually goes stale: a tracked
 # paper.pdf committed before a source fix, generated artifacts older than the
@@ -148,6 +161,26 @@ _assets-stamp:
 # The SI is included from si-body.typ as an appendix, so this single PDF holds the
 # whole manuscript; there is no separate supplementary.pdf. si-body.typ is
 # body-only and is never compiled on its own.
+# Compile while the numbers are still in flux -> paper-draft.pdf.
+#
+# `#s("id")` normally panics on an unknown id, which is right for a real build: a
+# number that stopped existing must not render blank. While drafting it is the
+# wrong trade. Renaming a value breaks every call site at once, and until the
+# last one is fixed there is no PDF at all -- not even to read the paragraph you
+# were in the middle of writing.
+#
+# Here an unresolved id becomes a loud `?id?` placeholder instead. It writes
+# paper-draft.pdf, NEVER paper.pdf, so a placeholder cannot end up in a file
+# anyone mistakes for the finished paper. That is also why `check` needs to know
+# nothing about this mode.
+#
+# `n("id")` still fails, draft mode included: no placeholder can stand in for a
+# number inside an expression without making the arithmetic quietly wrong.
+# Compile with unresolved numbers shown as placeholders -> paper-draft.pdf
+draft:
+  typst compile --input draft=true paper.typ paper-draft.pdf
+  @echo 'wrote paper-draft.pdf -- unresolved numbers appear as ?id?; `just paper` is the real build'
+
 # Compile paper.typ -> paper.pdf, then print word counts and readability
 paper:
   typst compile paper.typ
@@ -357,4 +390,4 @@ check-pdf:
 
 # Remove the built PDF and Word export
 clean:
-  rm -f paper.pdf paper.docx paper.docx.html
+  rm -f paper.pdf paper-draft.pdf paper.docx paper.docx.html

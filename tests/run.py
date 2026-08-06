@@ -37,7 +37,15 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "audio"))
 
 import readability  # noqa: E402
-import extract_prose  # noqa: E402
+
+# audio/ is optional: a project that wants no narration deletes the directory.
+# The extractor tests that do not involve it must still run, so this is a soft
+# import rather than a hard one. Everything narration-specific is then skipped,
+# and the run says so instead of quietly testing half of what it claims to.
+try:
+    import extract_prose  # noqa: E402
+except ImportError:
+    extract_prose = None
 
 # Words that must never appear in extracted prose. Each marks a construct that
 # should have been dropped whole rather than partially stripped.
@@ -55,10 +63,10 @@ FORBIDDEN = [
 
 def extract(src: str) -> dict[str, str]:
     body = readability.slice_body(src)
-    return {
-        "readability": readability.clean(body),
-        "narration": extract_prose.clean(extract_prose.extract_body(src)),
-    }
+    out = {"readability": readability.clean(body)}
+    if extract_prose is not None:
+        out["narration"] = extract_prose.clean(extract_prose.extract_body(src))
+    return out
 
 
 def reflowed(src: str) -> str:
@@ -133,15 +141,16 @@ def main() -> int:
 
     # An unmapped symbol token must be recorded, not silently swallowed. The
     # FORBIDDEN sweep above only proves it never reaches the narration.
-    if "#sym.prec" not in extract_prose.UNMAPPED:
+    if extract_prose is not None and "#sym.prec" not in extract_prose.UNMAPPED:
         print("  unmapped symbol tokens are not being recorded in UNMAPPED")
         ok = False
 
     ok &= structural_cases()
 
     if ok:
+        note = "" if extract_prose is not None else ", no audio/ so narration skipped"
         print(f"  all extractor checks pass ({len(flat)} outputs, "
-              f"reflow-invariant, no leaks) + structural cases")
+              f"reflow-invariant, no leaks) + structural cases{note}")
     return 0 if ok else 1
 
 
@@ -285,8 +294,49 @@ def structural_cases() -> bool:
         print(f"  uncited-figure check: expected (1, 0), got ({uncited}, {cited})")
         ok = False
     ok &= boundary_cases()
+    ok &= asset_cases()
     ok &= stats_cases()
     ok &= suppression_cases()
+    return ok
+
+
+def asset_cases() -> bool:
+    """A generated asset nothing includes, which every staleness check calls
+    current because it is -- it is simply not in the paper."""
+    import prose_check as pc
+    ok = True
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "si").mkdir()
+        (root / "figures").mkdir()
+        (root / "si" / "used_table.typ").write_text("#table()")
+        (root / "si" / "orphan_table.typ").write_text("#table()")
+        (root / "si" / "stats.json").write_text("{}")
+        (root / "figures" / "used_figure.png").write_bytes(b"x")
+        (root / "figures" / "orphan_figure.png").write_bytes(b"x")
+        (root / "paper.typ").write_text(
+            '#include "si/used_table.typ"\n#image("figures/used_figure.png")\n')
+
+        found = pc.check_orphaned_assets(root)
+        got = sorted(f.subject for f in found)
+        want = ["orphan_figure.png", "orphan_table.typ"]
+        if got != want:
+            print(f"  orphaned-asset: expected {want}, got {got}")
+            ok = False
+        # stats.json is read by id through stats.typ, never by filename, so it
+        # must never be reported however the manuscript is written.
+        if any(f.subject == "stats.json" for f in found):
+            print("  orphaned-asset: reported stats.json, which is read by id")
+            ok = False
+
+        # No si/ or figures/ at all is a valid project shape, not a finding.
+        bare = Path(d) / "bare"
+        bare.mkdir()
+        (bare / "paper.typ").write_text("= Title\n")
+        if pc.check_orphaned_assets(bare):
+            print("  orphaned-asset: reported findings for a project with no assets")
+            ok = False
     return ok
 
 

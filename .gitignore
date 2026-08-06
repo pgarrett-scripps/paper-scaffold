@@ -1,6 +1,7 @@
 # Build artifacts. paper.pdf is deliberately NOT here -- it is tracked, so a
 # reader can get the manuscript from the repo without a Typst install, and
 # `just check-pdf` guards it against going stale.
+paper-draft.pdf
 paper.docx
 paper.docx.html
 paper.staged.html

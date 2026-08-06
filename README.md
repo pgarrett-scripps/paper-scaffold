@@ -35,11 +35,17 @@ Then:
 
 Nothing else should need editing.
 
+Three parts are optional and can simply be deleted: `analysis/` (no generated
+assets), `audio/` (no narration), and `stats.typ` + `si/stats.json` +
+`analysis/scripts/gen_stats.py` (no numbers stated in prose). Every recipe and
+check adapts rather than failing.
+
 ## What to run
 
 | Command | Does |
 |---|---|
 | `just paper` | Compile `paper.pdf`, then print word counts and readability |
+| `just draft` | Compile `paper-draft.pdf` with unresolved `#s()` numbers shown as `?id?` |
 | `just watch` | Live preview, recompiling on save |
 | `just fmt` | Reflow the hand-written Typst sources (typstyle, 80 cols) |
 | `just docx` | Export `paper.docx` for journals and co-authors |
@@ -126,6 +132,12 @@ Three things make it hold:
 
 Rounding is set once per value with `fmt`, next to the analysis, so every mention
 is punctuated identically.
+
+While ids are still in flux, `just draft` renders an unresolved one as a loud
+`?id?` placeholder instead of stopping the compile, and writes `paper-draft.pdf`
+so a placeholder can never reach the real PDF. `n("id")` fails even there: no
+placeholder can stand in for a number inside an expression without making the
+arithmetic that reads it silently wrong.
 
 Delete `stats.typ`, `si/stats.json` and `gen_stats.py` if a project states no
 computed numbers. Nothing else depends on them.
