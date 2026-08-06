@@ -25,11 +25,13 @@ Usage:
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
 
 import readability
+import typst_prose
 from prose_rules import Config, Finding, list_rules, load_config, report
 
 HERE = Path(__file__).resolve().parent
@@ -346,6 +348,55 @@ def check_reference_order(sources: dict[str, str]) -> list[Finding]:
     return out
 
 
+def check_derivable_numbers(sources: dict[str, str],
+                            stats_path: Path | None = None) -> list[Finding]:
+    """Flag a numeral typed into the prose that the analysis already computes.
+
+    This is the check that makes "do not hard-code numbers" enforceable rather
+    than aspirational. `#s("id")` guarantees the numbers it covers; nothing
+    otherwise notices the sentence that was typed by hand and now disagrees with
+    the table beside it.
+
+    Only DISTINCTIVE values are compared: a display string with a decimal point
+    or a thousands separator, or four characters or more. A declared "3" would
+    otherwise match every "3" in the manuscript, and a checker whose warnings are
+    mostly noise is one nobody reads.
+
+    `#s(...)` calls are removed before the scan, so a number the prose already
+    derives is not reported as if it were typed.
+    """
+    p = stats_path or typst_prose.STATS_JSON
+    if not p.is_file():
+        return []
+    values = json.loads(p.read_text()).get("values", {})
+
+    wanted = {}
+    for id, rec in values.items():
+        d = str(rec.get("display", "")).strip()
+        if not re.fullmatch(r"[+-]?[\d,]*\.?\d+", d):
+            continue                      # not a number: a label, a flag
+        bare = d.lstrip("+-")
+        if not ("." in bare or "," in bare or len(bare) >= 4):
+            continue                      # too common to match on
+        wanted.setdefault(bare, []).append(id)
+
+    out: list[Finding] = []
+    for name, src in sources.items():
+        # Drop the derived calls first, then inline code (a parameter value is
+        # not a result), then everything else that is not prose.
+        stripped = re.sub(typst_prose.STATS, " ", src)
+        prose = readability.clean(no_code(stripped))
+        for bare, ids in sorted(wanted.items()):
+            for m in re.finditer(rf"(?<![\d.,]){re.escape(bare)}(?![\d.,])", prose):
+                out.append(Finding(
+                    "derivable-number", "warn",
+                    f"'{bare}' is typed here but the analysis computes it as "
+                    f"{' / '.join(ids)} -- read it with #s(\"{ids[0]}\") so the "
+                    f"sentence cannot drift from the data",
+                    subject=bare, where=name, context=_ctx(prose, m.start())))
+    return out
+
+
 def check_structure(sources: dict[str, str]) -> list[Finding]:
     """Checks that need the Typst source rather than the extracted prose.
 
@@ -425,6 +476,7 @@ def main() -> int:
                           readability.clean(no_code(src)),
                           readability.clean(src, gap=GAP), cfg)
     findings += check_structure(targets)
+    findings += check_derivable_numbers(targets)
 
     return report(findings, cfg,
                   show_suppressed="--show-suppressed" in sys.argv,

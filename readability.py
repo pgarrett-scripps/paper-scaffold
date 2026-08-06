@@ -28,6 +28,7 @@ from typst_prose import (
     LINK,
     REFN,
     markup as _markup,
+    resolve_stats,
     strip_balanced as _strip_balanced,
     unescape_unicode,
 )
@@ -93,6 +94,9 @@ def clean(text: str, gap: str = " ") -> str:
     text = re.sub(r"```.*?```", gap, text, flags=re.S)
     text = _strip_balanced(text, "#raw(", gap)
     text = _strip_balanced(text, "#figure(", gap)
+    # generated numbers -> their value. Resolved, never stripped: this text is
+    # what gets counted and scored, and a reader sees the number, not the call.
+    text = resolve_stats(text)
     # math: DROP entirely (exempt), including any leftover $...$
     text = re.sub(r"#sym\.[A-Za-z0-9.]+", gap, text)
     text = re.sub(r"\$[^$]*\$", gap, text)

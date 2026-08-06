@@ -32,6 +32,7 @@ from typst_prose import (  # noqa: E402
     LINK,
     REFN,
     markup as _markup,
+    resolve_stats,
     strip_balanced,
 )
 
@@ -93,6 +94,19 @@ def clean(text):
 
     # 1. remove whole figure blocks (captions are not prose)
     text = strip_balanced(text, "#figure(")
+
+    # 1a. generated numbers -> their value. Resolved, never stripped: a stripped
+    #     call loses the figure from the spoken sentence, an unstripped one has
+    #     the narrator read the lookup call aloud.
+    text = resolve_stats(text)
+
+    # 1b. An explicitly signed number, which `fmt="+.2f"` in gen_stats.py is
+    #     meant to produce, reaches the voice as a bare "+". Spell it, or a
+    #     stated increase narrates as an unsigned figure and the sentence loses
+    #     the very thing the sign was carrying.
+    #     The `+` in the lookbehind is load-bearing: without it `C++11` narrates
+    #     as "C plus 11".
+    text = re.sub(r"(?<![\w.+])\+(?=\d)", "plus ", text)
 
     # 2. display equations are dropped rather than read; a block of notation read
     #    aloud is noise, and the surrounding prose always restates it in words.

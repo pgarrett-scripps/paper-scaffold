@@ -13,8 +13,13 @@ usually unnoticed. Change the generator or the data it reads.
 **Never hand-edit files under `figures/`.** They are written by `analysis/`.
 Change the script that produces the plot and run `just assets`.
 
-**Never type a result into the prose that no generated table or figure backs.**
-If a number is worth stating, it is worth being traceable.
+**Never type a result into the prose.** Declare it in
+`analysis/scripts/gen_stats.py` and read it back as `#s("id")`. A typed numeral
+drifts from the table beside it and nothing notices; `just prose-check` reports
+one that matches a declared value. Guard anything the sentence assumes: if the
+prose says "fell", declare it `sign="-"` so a re-run that reverses the sign fails
+the build instead of shipping "fell by -3.1%". If a number is worth stating, it
+is worth being traceable.
 
 **Never delete the `// >>> BODY START` / `// <<< BODY END` markers** in
 `paper.typ`. The word counter, the readability report, and the narrator all slice

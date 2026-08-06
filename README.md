@@ -45,7 +45,7 @@ Nothing else should need editing.
 | `just docx` | Export `paper.docx` for journals and co-authors |
 | `just wordcount` | Journal-style counts without rebuilding |
 | `just readability` | Flesch-Kincaid / reading ease / fog without rebuilding |
-| `just assets` | Regenerate every generated figure and table (delegates to `analysis/`) |
+| `just assets` | Regenerate every generated figure, table and prose number (delegates to `analysis/`) |
 | `just check` | Report every artifact that has fallen behind its source |
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
 | `just prose-check` | Check the prose against the mechanical rules in STYLE.md |
@@ -97,6 +97,38 @@ matching the filename pattern.
 
 The point is that a number in the manuscript should be traceable to the analysis
 that produced it. Re-run the analysis and the manuscript updates.
+
+### Numbers in prose: `#s("id")`, not a typed numeral
+
+A table tracks the analysis because a script writes it. A number in a *sentence*
+is typed by hand, and that is where drift lives: a unit error, a percentage
+stale after a re-run, a value fixed in the table but not in the paragraph beside
+it.
+
+`analysis/scripts/gen_stats.py` declares every number the prose states and writes
+`si/stats.json`. The manuscript reads it back:
+
+```typst
+the treated group scored #s("effect.treated_over_control") over control
+```
+
+Three things make it hold:
+
+- **An unknown id fails the build.** `#s(...)` panics at compile time, so a
+  number that stops existing is loud rather than blank. `readability.py` and the
+  narrator resolve the same call, because they read the source, not the PDF.
+- **Guards run when the file is generated.** A value can be declared `sign="-"`
+  or `between=(0, 100)`. If a sentence says "fell" and a re-run turns the value
+  positive, `just assets` fails and names the assumption, instead of the paper
+  shipping "fell by -3.1%". A plausibility band catches the unit error.
+- **`just prose-check` flags a typed numeral** that matches a declared value, so
+  the rule is enforced rather than merely intended.
+
+Rounding is set once per value with `fmt`, next to the analysis, so every mention
+is punctuated identically.
+
+Delete `stats.typ`, `si/stats.json` and `gen_stats.py` if a project states no
+computed numbers. Nothing else depends on them.
 
 ### `analysis/` lives inside the manuscript, and writes to it directly
 

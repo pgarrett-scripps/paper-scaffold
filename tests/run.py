@@ -285,7 +285,111 @@ def structural_cases() -> bool:
         print(f"  uncited-figure check: expected (1, 0), got ({uncited}, {cited})")
         ok = False
     ok &= boundary_cases()
+    ok &= stats_cases()
     ok &= suppression_cases()
+    return ok
+
+
+def stats_cases() -> bool:
+    """The generated-number mechanism: resolution, guards, and the check that
+    catches a number typed by hand.
+
+    Deliberately NOT in fixture.typ. The fixture's golden files would then depend
+    on whatever values a project's gen_stats.py happens to declare, so every
+    project would see a spurious diff on its first edit. These use a temporary
+    stats file instead and stay true whatever the project computes.
+    """
+    import json
+    import prose_check as pc
+    import typst_prose as tp
+    ok = True
+
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "stats.json"
+        p.write_text(json.dumps({"values": {
+            "a.pct":   {"display": "84.2", "value": 84.23},
+            "a.count": {"display": "1,204", "value": 1204},
+            "a.small": {"display": "3", "value": 3},
+            "a.label": {"display": "Treated", "value": "Treated"},
+        }}))
+
+        # 1. resolution: substitutes the display string, survives a reflow inside
+        #    the call, and is a no-op on prose that uses none.
+        res = [
+            ("plain", 'fell by #s("a.pct")%', "fell by 84.2%"),
+            ("reflowed", 'fell by #s(\n  "a.pct",\n)%', "fell by 84.2%"),
+            ("untouched", "no calls here", "no calls here"),
+        ]
+        for name, src, want in res:
+            got = tp.resolve_stats(src, p)
+            if got != want:
+                print(f"  stats resolve [{name}]: expected {want!r}, got {got!r}")
+                ok = False
+
+        # 2. an unknown id fails loudly rather than deleting a number silently.
+        try:
+            tp.resolve_stats('#s("a.nope")', p)
+            print("  stats resolve: an unknown id did not raise")
+            ok = False
+        except SystemExit:
+            pass
+
+        # 3. derivable-number: fires on a typed value, silent on a derived one,
+        #    and ignores values too short to match without noise.
+        cases = [
+            ("typed distinctive", "recovery reached 84.2% overall.", 1),
+            ("typed with separator", "we enrolled 1,204 participants.", 1),
+            ("derived", 'recovery reached #s("a.pct")% overall.', 0),
+            ("too common to flag", "there were 3 conditions.", 0),
+            ("inside a larger number", "the id was 184.25 exactly.", 0),
+            ("inline code is not a result", "pass `--threshold 84.2` to it.", 0),
+        ]
+        for name, src, want in cases:
+            got = len(pc.check_derivable_numbers({"t": src}, p))
+            if got != want:
+                print(f"  derivable-number [{name}]: expected {want}, got {got}")
+                ok = False
+
+        # 4. no stats.json at all: the mechanism is optional, so this is silent.
+        if pc.check_derivable_numbers({"t": "84.2"}, Path(d) / "absent.json"):
+            print("  derivable-number: reported findings with no stats.json")
+            ok = False
+
+    # 5. guards. Each must fail at declaration, which is the whole point: the
+    #    build breaks when the analysis changes, not when a reader notices.
+    sys.path.insert(0, str(ROOT / "analysis" / "scripts"))
+    try:
+        from _stats import StatError, Stats
+    except ImportError:
+        print("  stats guards: analysis/scripts/_stats.py not importable")
+        return False
+
+    guards = [
+        ("sign flip", 1.09, dict(sign="-")),
+        ("out of range", 1.09, dict(between=(0, 1))),
+        ("guard on a non-number", "Treated", dict(sign="+")),
+        ("nonsense sign", 1.0, dict(sign="up")),
+    ]
+    for name, value, kw in guards:
+        try:
+            Stats().add("x.y", value, **kw)
+            print(f"  stats guard [{name}]: accepted a value it should reject")
+            ok = False
+        except StatError:
+            pass
+
+    # A value that satisfies its guard is accepted, and rounding is applied.
+    st = Stats()
+    st.add("x.y", 84.23, fmt=".1f", sign="+", between=(0, 100))
+    if st._values["x.y"]["display"] != "84.2":
+        print(f"  stats guard: fmt not applied -- {st._values['x.y']['display']!r}")
+        ok = False
+    try:
+        st.add("x.y", 1)
+        print("  stats guard: a duplicate id was accepted")
+        ok = False
+    except StatError:
+        pass
     return ok
 
 

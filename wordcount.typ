@@ -27,6 +27,11 @@
 // into the eval scope so the sliced body evaluates.
 #let refn(l) = ref(l, supplement: none)
 
+// The generated-number lookup, same as paper.typ imports. Injected below for the
+// same reason as refn: the sliced body calls it, and an eval scope missing a
+// helper fails the whole count rather than just that number.
+#import "stats.typ": n, s
+
 #let src = read("paper.typ")
 #let start-m = src.match(regex("(?m)^// >>> BODY START.*$"))
 #let end-m = src.match(regex("(?m)^// <<< BODY END.*$"))
@@ -38,7 +43,7 @@
 #let main-body = eval(
   src.slice(start-m.end, end-m.start),
   mode: "markup",
-  scope: (refn: refn),
+  scope: (refn: refn, s: s, n: n),
 )
 #let si-body = include "si-body.typ"
 

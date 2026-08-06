@@ -17,7 +17,23 @@ puts them there.
 """
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
+
+# A number pulled from the analysis through the manuscript's `s` helper:
+# `#s("effect.treated_fold")`. Tolerant of a reflow putting a break inside the
+# call, like every other pattern here.
+#
+# These MUST be resolved rather than stripped. The word count and the narration
+# read the SOURCE, not the compiled PDF, so a stripped call silently deletes a
+# number from the count and a spoken sentence loses its figure, while an
+# unstripped one leaks `#s("effect.treated_fold")` into both. Only substituting
+# the real value leaves the extractors seeing what a reader sees.
+STATS = r'#s\(\s*"([^"]+)"\s*,?\s*\)'
+
+# Written by analysis/scripts/gen_stats.py, beside the generated SI tables.
+STATS_JSON = Path(__file__).resolve().parent / "si" / "stats.json"
 
 # An explicit cross-reference call: Typst's own `#ref(<x>)` or a manuscript's
 # `#refn(<x>)` helper. BOTH forms have to be here. `#ref(` is the more natural
@@ -61,6 +77,34 @@ def unescape_unicode(text: str) -> str:
         except (ValueError, OverflowError):
             return m.group(0)
     return UNICODE_ESCAPE.sub(sub, text)
+
+
+def resolve_stats(text: str, path: Path | None = None) -> str:
+    """Substitute `#s("id")` with its display value from si/stats.json.
+
+    A no-op when the text contains no such call, so a manuscript that does not
+    use the mechanism (and has no stats.json) still extracts. When it IS used,
+    both a missing file and an unknown id raise: the same failure Typst gives at
+    compile time, rather than a number quietly vanishing from the word count.
+    """
+    if not re.search(STATS, text):
+        return text
+    p = path or STATS_JSON
+    if not p.is_file():
+        raise SystemExit(
+            f'error: prose uses #s("...") but {p} is missing; '
+            f"regenerate it with `just assets`")
+    values = json.loads(p.read_text()).get("values", {})
+
+    def repl(m: re.Match) -> str:
+        id = m.group(1)
+        if id not in values:
+            raise SystemExit(
+                f"error: {p.name} has no value '{id}'; declare it in "
+                f"analysis/scripts/gen_stats.py, or fix the id in the prose")
+        return str(values[id].get("display", ""))
+
+    return re.sub(STATS, repl, text)
 
 
 def markup(delim: str) -> str:

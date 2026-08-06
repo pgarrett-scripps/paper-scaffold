@@ -41,6 +41,49 @@ rather than a copy.
 
 ---
 
+## 1.1.0
+
+**Numbers in prose are generated, guarded, and checked.** Tables and figures
+always tracked the analysis, because a script wrote them. Numbers in sentences
+were typed, and that is where drift lives: a unit error, a percentage stale after
+a re-run, a value corrected in the table but not in the paragraph beside it. A
+manuscript built on this scaffold had exactly that failure, in three places, with
+the tables correct throughout.
+
+New and additive. An existing project takes it by copying `stats.typ`,
+`typst_prose.py`, `readability.py`, `prose_check.py`, `prose_rules.py`,
+`audio/extract_prose.py`, `analysis/scripts/_stats.py` and `gen_stats.py`, then
+adding the `stats` recipe to `analysis/justfile` and `s` to the eval scope in
+`wordcount.typ`. A project that states no computed numbers deletes the three
+stats files and is otherwise unaffected.
+
+- `analysis/scripts/gen_stats.py` declares every number the prose states and
+  writes `si/stats.json`. ONE script, not a glob like the table and figure
+  generators: they would all write the same file, so a second would silently
+  clobber the first.
+- `#s("id")` reads it back and **panics at compile time** on an unknown id.
+  `readability.py` and the narrator resolve the same call, since both read the
+  source rather than the PDF. Stripping it would silently delete a number from
+  the word count; leaving it would leak the call text into the narration.
+- **Guards run at generation.** `sign="-"` and `between=(0, 100)` are assertions
+  about what the analysis is allowed to produce. The case they exist for: a
+  sentence reads "fell by #s(...)%", a re-run turns the value positive, and the
+  paper ships "fell by -3.1%". The build now fails first, naming the assumption
+  the sentence makes, rather than a reader finding it.
+- **`derivable-number`** flags a typed numeral matching a declared value, which
+  is what turns the convention into something enforced rather than intended.
+
+Only *distinctive* values are compared: a decimal point, a thousands separator,
+or four characters or more. A declared `3` would otherwise match every `3` in the
+manuscript, and 1.0.2 already recorded what a mostly-noise checker is worth.
+
+Rounding stays with the analysis, set per value with `fmt`. Typst has no
+equivalent of siunitx, and reimplementing rounding in the document would put the
+same decision in two places.
+
+Every guard and the new rule were verified by breaking the mechanism and
+confirming the tests fail, not by reading the code.
+
 ## 1.0.2
 
 Five fixes, all found by porting the scaffold into a second real manuscript

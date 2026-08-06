@@ -18,7 +18,7 @@ default:
   @just --list
 
 # Regenerate every asset the manuscript includes. This is the contract.
-assets: tables figures
+assets: tables figures stats
   @echo ""
   @echo "assets regenerated into ../figures/ and ../si/"
   @echo "rebuild the manuscript with: cd .. && just paper"
@@ -46,7 +46,20 @@ figures:
     uv run --quiet "$s"
   done
 
+# Numbers the prose states -> ../si/stats.json, read back as #s("id").
+#
+# ONE script, not a glob: every generator here would write the same file, so a
+# second one would silently clobber the first. Guards declared in gen_stats.py
+# are checked as it runs, which is why this can fail the build.
+stats:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if [ -f scripts/gen_stats.py ]; then
+    echo "-> scripts/gen_stats.py"
+    uv run --quiet scripts/gen_stats.py
+  fi
+
 # Remove generated assets from the manuscript. Rarely wanted: they are tracked,
 # so `git checkout` is usually the better undo.
 clean:
-  rm -f ../figures/*.png ../si/*.typ
+  rm -f ../figures/*.png ../si/*.typ ../si/stats.json

@@ -62,6 +62,11 @@ rather than spelled out: 0.5 #sym.prec 0.9.
 A reference list that loses its numbers must not keep the conjunction that joined
 them (Tables #refn(<tbl:fixture>) and #refn(<tbl:fixture>)).
 
+An explicitly signed number, which is what a generated value formatted `+.2f`
+looks like, is spoken with its sign rather than read as a bare figure: +1.09
+against a baseline. A plus that is not a sign must survive untouched, as in
+`C++11`.
+
 #let fixture-directive = 1
 // A Typst directive and a line comment must never be narrated.
 

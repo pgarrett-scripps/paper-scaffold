@@ -20,6 +20,8 @@ Inline math such as alpha, a subscripted one such as t observed is at most t max
 
 A reference list that loses its numbers must not keep the conjunction that joined them (Tables).
 
+An explicitly signed number, which is what a generated value formatted +.2f looks like, is spoken with its sign rather than read as a bare figure: plus 1.09 against a baseline. A plus that is not a sign must survive untouched, as in C++11.
+
 A display equation is dropped rather than read aloud:
 
 Block code is exempt from the word count and skipped by the narrator:
