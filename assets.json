@@ -10,7 +10,7 @@
         "by": "analysis/scripts/gen_example_figure.py"
       },
       "inputs": {
-        "analysis/scripts/_assets.py": "sha256:5b40df17e1aafc192406e60b865825652b14b5f6e883f4580bdcccbf5699764d",
+        "analysis/scripts/_assets.py": "sha256:71004871109e0ae42d587e80ffc8cf83cb176f1e187387d24b7b13a98a6330ef",
         "analysis/scripts/example_data.csv": "sha256:c19c83771308bceecc3f22425ecea53ee3c37db0af1e4ceeea61e844b212b187",
         "analysis/scripts/gen_example_figure.py": "sha256:1b2fcdf2200dcbb301c5638db731dce50115fdf4c57ad9f73ffc7af96d803f54"
       }
@@ -24,7 +24,7 @@
         "by": "analysis/scripts/gen_example_table.py"
       },
       "inputs": {
-        "analysis/scripts/_assets.py": "sha256:5b40df17e1aafc192406e60b865825652b14b5f6e883f4580bdcccbf5699764d",
+        "analysis/scripts/_assets.py": "sha256:71004871109e0ae42d587e80ffc8cf83cb176f1e187387d24b7b13a98a6330ef",
         "analysis/scripts/example_data.csv": "sha256:c19c83771308bceecc3f22425ecea53ee3c37db0af1e4ceeea61e844b212b187",
         "analysis/scripts/gen_example_table.py": "sha256:4161a6e6e953f53784444bf0c092d24677c782e873fdcaeb4ac102917c4b7f1a"
       }
