@@ -147,8 +147,25 @@ that supplies the caption and label. Every generated file opens with a
 "do not edit by hand" header.
 
 `analysis/scripts/gen_example_table.py` is the template. Copy it per table.
-`just assets` runs every `gen_*_table.py`, so a new table needs no wiring beyond
-matching the filename pattern.
+`just assets` runs every `gen_*_table.py`, so the *discovery* needs no wiring
+beyond matching the filename pattern.
+
+**It does need wiring beyond that, and it is worth knowing before you start.**
+Adding a figure or table is four steps, not one:
+
+1. Copy the example generator, keep the `gen_*_figure.py` / `gen_*_table.py`
+   name, and write into `figures/` or `si/`.
+2. Call `record("fig.yourname", …, kind="figure", inputs=[…])` at the end of it.
+   That declares the id; `inputs` is the data it read.
+3. Reference it in the prose by id, not by filename:
+   `#figure(fig("fig.yourname"), caption: [...]) <fig:yourname>`.
+4. If this is the project's first one, add `fig`/`tbl` to `wordcount.typ`'s eval
+   scope. Missing this leaves `just paper` working and only `just wordcount`
+   failing, which is the least obvious way for it to break.
+
+Step 2 is what buys the per-file staleness checking, and step 3 is what stops the
+manifest rotting into a ledger nobody reads. Neither is free, and the trade is
+deliberate.
 
 The point is that a number in the manuscript should be traceable to the analysis
 that produced it. Re-run the analysis and the manuscript updates.
@@ -204,8 +221,8 @@ compares, and nothing can do that for a number that came off a printout. The
 note is the audit trail instead.
 
 That is also why `stats.json` sits at the manuscript root rather than under
-`si/`, and why it is not part of the `.assets-stamp` hash: a file you are invited
-to edit cannot be guarded by "did anything change".
+`si/`: a file you are invited to edit is not generated output, and cannot be
+guarded by "did anything change".
 
 Rounding is set once per value with `fmt`, next to the analysis, so every mention
 is punctuated identically.
@@ -317,10 +334,15 @@ input means a stale figure reported as current, so that half stays explicit.
 An input that is not present — the normal state of a fresh clone, since
 `analysis/data/` is untracked — is reported as unverified, never as stale.
 
-`.assets-stamp` is kept alongside this, deliberately. The stamp hashes all of
-`analysis/` and so over-approximates: it nags rather than misses. The manifest
-under-approximates, since it only knows what was declared. Dropping the stamp
-would trade a check that fails closed for one that fails open.
+This replaced `.assets-stamp`, a pair of whole-tree hashes that fired on the same
+failures and could only report "analysis/ has changed" without naming the figure
+it ruined — and that also fired on a new file no generator imports, a change
+which by definition altered no output.
+
+What went with it: **an input a generator reads without declaring or importing is
+now invisible.** Nothing checks it. In its place, `record()` prints a note when a
+generator declares no `inputs` at all, so the omission is visible where it is
+made rather than discovered from a wrong figure.
 
 ### `analysis/` lives inside the manuscript, and writes to it directly
 
@@ -345,14 +367,14 @@ recipes say so instead of failing.
 
 `figures/` and `si/` are generated but **tracked**, so a fresh clone compiles
 without re-running an analysis that may take hours. (`paper.pdf` is not tracked —
-see below.) `just check-assets` guards that with a content stamp of the
-analysis source, recorded in `.assets-stamp` when `just assets` runs, so editing
-a generator and forgetting to re-run it is reported rather than shipped.
+see below.) `just check-assets` guards them per file through `assets.json`: each
+entry records a hash of the output and of every input its generator declared, so
+editing a generator and forgetting to re-run it is reported — with the figure and
+the script named.
 
-It stamps rather than comparing commit dates because the generators are
-deterministic on purpose. Re-running them after an edit that does not move the
-output produces no new commit, and a date-based check would then nag with no way
-to satisfy it.
+Hashes rather than commit dates, because the generators are deterministic on
+purpose. Re-running one after an edit that does not move the output produces no
+new commit, and a date-based check would then nag with no way to satisfy it.
 
 ### `just check` is a submission gate
 

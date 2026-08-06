@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """Check assets.json: the figures and tables the manuscript includes by id.
 
-WHAT THIS ADDS OVER .assets-stamp. The stamp is two whole-tree hashes: it fails
-closed, and it says "analysis/ has changed" without saying which figure that
-ruins. This is per entry, so it names the file and the generator, and it can see
-three things the stamp cannot:
+WHAT THIS REPLACED. Two whole-tree hashes in .assets-stamp, which fired on the
+same failures this does and could only report "analysis/ has changed" -- without
+naming which figure that ruins. They also fired on a new file no generator
+imports, a change that by definition altered no output, so the check was
+redundant where it was right and noisy where it was unique.
 
-  - a generated file edited by hand, attributed to the file rather than the set
-  - a generator that no longer exists, leaving an output nothing can rebuild
-  - a DATA input that changed, which the stamp deliberately excludes
-    (analysis/data/ and analysis/results/ are skipped there because they are
-    heavy and usually untracked)
+Per entry instead, which also sees a DATA input that changed -- something the
+stamp structurally could not, since it skipped analysis/data/ and
+analysis/results/ as heavy and usually untracked.
 
-Both are kept. The stamp over-approximates and nags; this under-approximates,
-because it can only check inputs a generator declared. Losing the stamp would
-trade a check that fails closed for one that fails open.
+WHAT WENT WITH THEM, honestly. An input a generator READS without declaring or
+importing is now invisible: this only knows what was declared plus what was
+imported. The stamp caught that when the file happened to sit under analysis/
+outside data/. In its place, _assets.record() warns when a generator declares no
+inputs at all, so the omission is visible where it is made rather than silent.
 
 INPUTS THAT ARE NOT PRESENT are reported as unverified, never as stale. Data
 usually lives outside the repository, so on a fresh clone or in CI there is
@@ -130,6 +131,10 @@ def _unclaimed(values: dict) -> list[Finding]:
     The case this is for: a generator is deleted, its output stays on disk and
     stays referenced, and it silently never updates again. Nothing else notices,
     because every other check reasons from the entries rather than the files.
+
+    An ERROR rather than a warning, since .assets-stamp was removed: that hash
+    covered this at full severity, and it is the one failure here that leaves a
+    figure frozen in the manuscript with nothing able to refresh it.
     """
     claimed = {r.get("path") for r in values.values()}
     out: list[Finding] = []
@@ -142,10 +147,11 @@ def _unclaimed(values: dict) -> list[Finding]:
                 continue
             rel = f.relative_to(ROOT).as_posix()
             if rel not in claimed:
-                out.append(Finding("warn", rel,
+                out.append(Finding("error", rel,
                     "is in a generated directory but no assets.json entry "
-                    "claims it -- a leftover, or written by something that "
-                    "does not call record()"))
+                    "claims it. Either a leftover from a deleted generator, in "
+                    "which case nothing can rebuild it, or written by a script "
+                    "that does not call record()"))
     return out
 
 

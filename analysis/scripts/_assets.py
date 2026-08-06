@@ -27,9 +27,10 @@ binary readers do from C, and would silently record an empty input set for
 exactly the formats that matter. A missed input means a stale figure reported as
 current, so this half stays explicit.
 
-Undeclared data is not an error. `.assets-stamp` still hashes all of analysis/
-and still fails closed, so a generator edited without a re-run is caught whether
-or not it declared anything.
+Undeclared data is not an error, but it IS reported. Nothing else can see it:
+.assets-stamp used to hash all of analysis/ and catch some of these by accident,
+and it is gone, so a generator that declares nothing is the one way a stale
+figure still reports clean.
 """
 from __future__ import annotations
 
@@ -132,6 +133,14 @@ def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
                 f"{id!r} declares input {src}, which does not exist. Paths are "
                 f"relative to the manuscript root, not to analysis/.")
         declared[Path(src).as_posix()] = _sha(p)
+
+    # A generator that declared no data at all is the blind spot this contract
+    # has: its output can go stale against data nothing here knows about, and no
+    # check will say so. Reported at the point the omission is made rather than
+    # left to be discovered from a wrong figure.
+    if not declared:
+        print(f"  note: {id} declares no data inputs, so a change to the data "
+              f"behind it cannot be detected. Pass inputs=[...] if it reads any.")
 
     entry = {
         "path": Path(path).as_posix(),

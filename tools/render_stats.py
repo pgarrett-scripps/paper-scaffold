@@ -65,14 +65,13 @@ def main() -> int:
             print(f"{id}: cannot format {rec.get('value')!r} with "
                   f"{rec.get('fmt', '')!r}: {e}", file=sys.stderr)
             return 1
-        # Only what Typst needs. `s` reads display, `n` reads value, `s-unit`
-        # reads unit; the guards, provenance and description are for the audit
-        # and for check_stats.py, and stay out of the compile's way.
-        out[id] = {
-            "display": shown,
-            "value": rec.get("value"),
-            "unit": rec.get("unit", ""),
-        }
+        # Only what Typst needs: `s` reads display, `n` reads value. The unit,
+        # guards, provenance and description are for the audit and for
+        # check_stats.py, and stay out of the compile's way. `unit` stays in
+        # stats.json as metadata about the value -- unlike the deleted `source`
+        # it describes the number rather than duplicating its provenance -- but
+        # nothing in the document reads it, so it is not rendered.
+        out[id] = {"display": shown, "value": rec.get("value")}
 
     OUT.write_text(json.dumps({"_about": ABOUT, "values": out}, indent=2) + "\n")
     print(f"rendered {len(out)} value(s) -> {OUT.name}")

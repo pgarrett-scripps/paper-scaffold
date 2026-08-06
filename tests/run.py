@@ -419,7 +419,8 @@ def new_paper_cases() -> bool:
             # and `just check` is clean before the analysis has ever run.
             ("figures/ copied", (dest / "figures" / "example_figure.png").is_file()),
             ("si/ copied", (dest / "si" / "example_table.typ").is_file()),
-            ("stamp copied", (dest / ".assets-stamp").is_file()),
+            ("assets.json copied", (dest / "assets.json").is_file()),
+            ("stats.json copied", (dest / "stats.json").is_file()),
             ("analysis/ copied", (dest / "analysis" / "justfile").is_file()),
             ("tools/ copied", (dest / "tools" / "prose_check.py").is_file()),
             # A bare `--exclude=__pycache__` only matched at the top level, so
@@ -768,8 +769,8 @@ def check_stats_cases() -> bool:
     """tools/check_stats.py: the guard on the one generated file you may edit.
 
     stats.json came out of the .assets-stamp hash when hand-entered values became
-    a supported thing to write, so these checks are all that stands between a
-    typed number and the prose. Each case below is a way that file has to be able
+    a supported thing to write -- and that hash is gone entirely now -- so these
+    checks are all that stands between a typed number and the prose. Each case below is a way that file has to be able
     to go wrong.
 
     The re-derive check is NOT exercised here: it shells out to

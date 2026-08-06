@@ -126,7 +126,7 @@ DEST="$(cd "$DEST" && pwd)"
 # virtualenvs and every cache (rebuilt by `just setup`), this scripts/ directory
 # (it makes new papers, and a paper does not make papers), and the built
 # artifacts, which describe the scaffold's demo paper and not yours. figures/,
-# si/ and .assets-stamp DO come along, so the copy compiles and `just check` is
+# si/, assets.json and stats.json DO come along, so the copy compiles and `just check` is
 # clean before the analysis has ever run.
 # ---------------------------------------------------------------------------
 echo ""

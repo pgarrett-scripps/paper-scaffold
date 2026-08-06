@@ -95,10 +95,3 @@
   }
   paper-stats.values.at(id).value
 }
-
-// The unit, if one was declared. Kept separate from the display string so the
-// prose owns spacing and placement.
-#let s-unit(id) = {
-  let e = _entry(id)
-  if e == none { "" } else { e.unit }
-}

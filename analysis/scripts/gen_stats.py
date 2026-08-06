@@ -45,32 +45,27 @@ def main() -> int:
     st.add("effect.treated_over_control", observed["Treated"] - control,
            fmt="+.2f",
            desc="Treated minus Control observed effect",
-           sign="+", between=(0, 10),
-           source="scripts/example_data.csv")
+           sign="+", between=(0, 10))
 
     # A ratio. Bounded well away from zero, which is what catches a denominator
     # that changed meaning.
     st.add("effect.treated_fold", observed["Treated"] / control, fmt=".2f",
            unit="x",
            desc="Treated effect as a fold change over Control",
-           sign="+", between=(0.1, 100),
-           source="scripts/example_data.csv")
+           sign="+", between=(0.1, 100))
 
     # A count, with a thousands separator set once so every mention matches.
     st.add("cohort.total_n", sum(int(r["n"]) for r in rows), fmt=",",
            desc="Total participants across all conditions",
-           sign="+",
-           source="scripts/example_data.csv")
+           sign="+")
 
     st.add("cohort.n_conditions", len(rows), fmt=",",
            desc="Number of conditions compared",
-           sign="+",
-           source="scripts/example_data.csv")
+           sign="+")
 
     # A label. Not a number, so it takes no guard.
     st.add("effect.best_condition", best,
-           desc="Condition with the highest observed effect",
-           source="scripts/example_data.csv")
+           desc="Condition with the highest observed effect")
 
     return st.write()
 

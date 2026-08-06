@@ -141,8 +141,8 @@ record("fig.yourname", str(OUT.relative_to(PAPER)), kind="figure",
 `inputs` is the DATA it read; the script and its imports are recorded
 automatically. Paths are relative to the manuscript root, not to `analysis/`.
 
-Then `just assets && git add figures si assets.json stats.json .assets-stamp`,
-because all of those are tracked.
+Then `just assets && git add figures si assets.json stats.json`, because all
+of those are tracked.
 
 ## Editing the Typst preamble
 

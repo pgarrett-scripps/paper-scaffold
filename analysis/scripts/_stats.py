@@ -33,8 +33,7 @@ USAGE. One script per project writes the whole file:
     st = Stats()
     st.add("recovery.mean", 84.23, fmt=".1f", unit="%",
            desc="Mean recovery across replicates",
-           sign="+", between=(0, 100),
-           source="scripts/example_data.csv")
+           sign="+", between=(0, 100))
     st.write()
 
 The manuscript then reads it as `#s("recovery.mean")`, which resolves at compile
@@ -94,8 +93,7 @@ class Stats:
 
     def add(self, id: str, value, *, fmt: str = "", unit: str = "",
             desc: str = "", sign: str | None = None,
-            between: tuple[float, float] | None = None,
-            source: str = "") -> None:
+            between: tuple[float, float] | None = None) -> None:
         """Declare one number.
 
         `value`   the raw value. A str is allowed for things that are not
@@ -108,7 +106,10 @@ class Stats:
         `between` (lo, hi) inclusive. A plausibility band: catches a unit error
                   or a percentage that lands at 8400.
         `desc`    what the number is, for someone auditing the file later.
-        `source`  where it came from, relative to analysis/.
+
+        There is no `source`: it was a free-text path nothing read and nothing
+        verified, sitting beside `origin.by`, which names the script that wrote
+        the value and IS checked. One provenance field, and it is the true one.
         """
         if id in self._values:
             raise StatError(f"{id!r} declared twice")
@@ -154,7 +155,6 @@ class Stats:
             "unit": unit,
             "desc": desc,
             "expect": expect,
-            "source": source,
             "origin": {"by": _caller_script()},
         }
 

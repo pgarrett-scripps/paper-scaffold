@@ -45,6 +45,78 @@ rather than a copy.
 
 ---
 
+## 3.1.0
+
+Subtraction. Nothing new here -- five things came out that had stopped earning
+their place, most of them made redundant by 3.0.0 rather than wrong to begin
+with. Minor rather than major: no manuscript has to change, though a recipe
+disappeared and a check got weaker.
+
+### `.assets-stamp` is gone
+
+Two whole-tree hashes, and `assets.json` had quietly taken over both jobs.
+Measured before removing it:
+
+| Case | assets.json | .assets-stamp |
+|---|---|---|
+| generated file edited by hand | error, names the file and its generator | error, "figures/ or si/ has changed" |
+| generator edited, not re-run | error, names which figure it ruins | error, "analysis/ has changed" |
+| unclaimed file appears | warn, names it | error |
+| new `analysis/` file nothing imports | silent | error |
+
+Redundant in the first two rows, with a strictly worse message. Unique only in
+the fourth, where it is arguably wrong: a file no generator imports cannot have
+changed any output, so it nagged about a change that changed nothing and was
+cleared by regenerating identical bytes.
+
+**What went with it, stated plainly:** an input a generator READS without
+declaring or importing is now invisible to every check. The stamp caught that
+when the file happened to sit under `analysis/` outside `data/`. Two mitigations,
+neither a full replacement:
+
+- `_unclaimed` in check_assets.py went from warning to **error**, restoring the
+  severity the stamp gave the leftover-output case -- the one failure that leaves
+  a figure frozen with nothing able to refresh it.
+- `record()` now prints a note when a generator declares no `inputs` at all, so
+  the omission is visible where it is made.
+
+**Upgrading:** `git rm .assets-stamp`, delete it from `.gitignore` if it is
+listed, and drop any reference to `just check-assets` meaning the stamp -- that
+name now belongs to the manifest check.
+
+### `check-assets-manifest` is `check-assets`
+
+The stamp's departure freed the name. Two checks called `check-assets` and
+`check-assets-manifest` was a coin flip every time.
+
+### `source`, `s-unit`, and a stale cache
+
+- **`source`** in stats.json was write-only: `_stats.py` wrote it, nothing ever
+  read it, and nothing verified it. It predated `origin.by`, which names the
+  script that wrote a value and IS checked. One provenance field now, the true one.
+- **`s-unit()`** in stats.typ was defined, documented, and called by nothing.
+  Gone, and `render_stats.py` stops emitting `unit` into the rendered file. `unit`
+  stays in stats.json: unlike `source` it describes the value rather than
+  duplicating its provenance, and an auditor reading the file wants it.
+- **A root `__pycache__`** left over from before the 2.0.0 `tools/` move, some of
+  it `cpython-312` bytecode for modules that have not lived there in two releases.
+
+### `verify` runs five stages, not six
+
+`check-stats` and `check-assets` answer the same question -- are the declarations
+still consistent with what produced them -- so they run under one `declarations`
+stage via `just check-declared`. Both remain separate recipes underneath, so
+either can be run alone while working on it.
+
+### The figure/table docs stopped claiming "no wiring"
+
+They still said a new table needs no wiring beyond the filename pattern, which
+has been false since 3.0.0: it also needs a `record(...)` call, an id reference in
+the prose, and -- for the project's first one -- `fig`/`tbl` in `wordcount.typ`'s
+eval scope. That last omission leaves `just paper` working and only
+`just wordcount` failing, which is the least obvious way for it to break. The
+README now lists all four steps and says why the last two are worth their cost.
+
 ## 3.0.0
 
 Everything the analysis produces -- numbers, figures, tables -- is now declared
