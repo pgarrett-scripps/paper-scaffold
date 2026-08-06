@@ -38,3 +38,36 @@ unexpanded-acronym = [
 max-sentence-words = 40   # flags a run-on; STYLE.md aims for 25
 opener-run = 3            # consecutive sentences opening with the same word
 repeat-in-sentence = 3    # times a distinctive word may repeat in one sentence
+# min-figure-dpi = 300         # effective resolution AS PRINTED, not as stored
+# figure-text-width-mm = 160   # what a `width: 100%` figure spans. Measure it with
+#                              #   #layout(size => [#metadata(size.width.inches())])
+#                              # and `typst query`. A wrong value here silently
+#                              # skews every dpi the figure check reports.
+# max-table-columns = 8
+# max-table-rows = 40
+# max-cell-chars = 60
+
+# Re-rate a rule for this project. The shipped severities are a default, not a
+# judgement: whether a rule should stop a build depends on the project and on how
+# close it is to submission. Only "error" and "warn" -- to switch a rule off
+# entirely, put it in `disable` above.
+[severity]
+# long-sentence = "error"   # tighten before submission
+# em-dash = "warn"          # a house style that tolerates them
+
+# Teach the checker this field's vocabulary instead of switching a rule off
+# because its shipped list does not fit. `add` extends, `remove` subtracts.
+#
+# [vocabulary.verbose-phrase]
+# add = { "leverage" = "use" }
+# remove = ["essentially"]     # load-bearing in this field, not filler
+#
+# [vocabulary.british-spelling]
+# add = { "kilometre" = "kilometer" }
+# remove = ["grey"]            # a surname that appears throughout
+#
+# [vocabulary.common-words]
+# add = ["denoise", "filter"]  # too central here to count as a repetition
+#
+# [vocabulary.abbreviations]
+# add = ["PASEF.", "approx."]  # periods that do not end a sentence

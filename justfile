@@ -36,9 +36,85 @@ version:
 # One-time (and after any pyproject change): build the Python environment. uv
 # resolves and locks it, so every machine gets the same versions. The analysis has
 # its own separate environment; `just assets` builds it on demand.
-setup:
+#
+# Runs `doctor` first, because uv sync succeeding proves nothing about whether
+# the manuscript can be built: typst is the tool this directory actually needs
+# and the one uv knows nothing about.
+setup: doctor
   uv sync
   @echo "environment ready. For the audiobooks: just audio-setup"
+
+# The minimum Typst this scaffold compiles under. 0.13 is where `--features html`
+# and `html.frame()` arrived, and `just docx` is built on both -- on an older
+# binary the PDF path works, the Word path fails with an error about an unknown
+# feature, and the connection to the version is not obvious from the message.
+# Developed and tested against 0.14.
+typst_min := "0.13"
+
+# Reports which of the external tools are present and whether they are new
+# enough, rather than leaving a missing one to surface as a "command not found"
+# from inside whichever recipe happened to need it first. Required tools fail
+# this; optional ones are reported and cost only the feature they serve.
+#
+# python3 is in the required list because wordcount.sh shells out to it directly
+# for the JSON formatting, before uv is ever involved.
+# Check that the external tools this directory needs are installed and new enough
+doctor:
+  #!/usr/bin/env bash
+  set -uo pipefail
+  rc=0
+
+  # <label> <command> <required|optional> <what it is for> [version-args...]
+  report() {
+    local label="$1" cmd="$2" need="$3" why="$4"; shift 4
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      if [ "$need" = required ]; then
+        printf '  %-9s MISSING   %s\n' "$label" "$why"; rc=1
+      else
+        printf '  %-9s absent    %s\n' "$label" "$why"
+      fi
+      return
+    fi
+    local v; v=$("$@" 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+    printf '  %-9s %-9s %s\n' "$label" "${v:-ok}" "$why"
+  }
+
+  echo "paper-scaffold doctor"
+  echo ""
+  report typst    typst    required "PDF and Word builds"            typst --version
+  report just     just     required "every recipe in this file"      just --version
+  report uv       uv       required "the Python toolchain"           uv --version
+  report python3  python3  required "wordcount.sh"                   python3 --version
+  report git      git      optional "just check-pdf (skipped without it)" git --version
+  report typstyle typstyle optional "just fmt and just fmt-check"    typstyle --version
+  report curl     curl     optional "just audio-setup only"          curl --version
+
+  # Version floor. Compared on major.minor as a pair of integers, because a
+  # string compare puts 0.9 above 0.14 and would pass a binary that cannot
+  # build the Word export.
+  if command -v typst >/dev/null 2>&1; then
+    have=$(typst --version | grep -oE '[0-9]+\.[0-9]+' | head -1)
+    hmaj=${have%%.*}; hmin=${have##*.}
+    want="{{typst_min}}"; wmaj=${want%%.*}; wmin=${want##*.}
+    if [ "$hmaj" -lt "$wmaj" ] || { [ "$hmaj" -eq "$wmaj" ] && [ "$hmin" -lt "$wmin" ]; }; then
+      echo ""
+      echo "TOO OLD: typst $have, but this scaffold needs {{typst_min}} or newer."
+      echo "  just docx needs --features html and html.frame(), added in 0.13."
+      rc=1
+    fi
+  fi
+
+  echo ""
+  if [ $rc -eq 0 ]; then
+    echo "every required tool is present. Next: just setup, then just paper"
+  else
+    echo "install what is marked MISSING or TOO OLD, then run this again."
+    echo "  typst   https://github.com/typst/typst        (or: cargo install typst-cli)"
+    echo "  just    https://github.com/casey/just         (or: cargo install just)"
+    echo "  uv      https://docs.astral.sh/uv/            (curl -LsSf https://astral.sh/uv/install.sh | sh)"
+    echo "  typstyle                                       cargo install typstyle"
+  fi
+  exit $rc
 
 # Density metrics: numerals, parentheticals, acronyms, nominalizations, passives
 # and hedges per 1,000 words, plus the sections that depart from the paper's own
@@ -71,6 +147,65 @@ all: paper docx
     echo "PDF and Word rebuilt from the current source (no audio/, narration skipped)."
   fi
   just check
+
+# The one command that answers "is this done". Everything under it already
+# existed and was already documented; what did not exist was a single thing to
+# run, so the instructions were a four-step ritual with two conditions in it
+# ("if you changed prose...", "if you changed inline markup..."). Conditional
+# rituals get skipped, and the conditions need a judgement about which files a
+# change touched that is easy to get wrong from inside the edit.
+#
+# It REBUILDS NOTHING, deliberately, so it stays seconds rather than minutes and
+# can be run as often as you like. `check` reports what needs rebuilding and
+# names the recipe. Build first, verify second:
+#
+#     just paper && just verify
+#
+# Every stage runs even after one fails, because finding out about the formatting
+# and the stale PDF in the same pass beats four rounds of fix-and-rerun. Ordered
+# cheapest first anyway, so a fast failure prints early.
+#
+# fmt-check is skipped rather than failed when typstyle is absent: it is the one
+# optional tool in the set, and a manuscript that never formats is not broken.
+# Run every gate: formatting, extractor tests, prose rules, staleness
+verify:
+  #!/usr/bin/env bash
+  set -uo pipefail
+  rc=0
+  # <label> <message-on-success> <command...>. The success message exists because
+  # a passing gate that prints nothing (fmt-check) is indistinguishable from one
+  # that did not run.
+  stage() {
+    local label="$1" ok="$2"; shift 2
+    echo ""
+    echo "=== $label ==="
+    if "$@"; then
+      [ -n "$ok" ] && echo "$ok"
+    else
+      rc=1
+    fi
+  }
+
+  if command -v typstyle >/dev/null 2>&1; then
+    stage "formatting (just fmt-check)" "the hand-written sources are formatted" \
+      just fmt-check
+  else
+    echo ""
+    echo "=== formatting (just fmt-check) ==="
+    echo "note:    typstyle is not installed, skipped. See: just doctor"
+  fi
+
+  stage "extractors (just test)"         "" just test
+  stage "prose rules (just prose-check)" "" just prose-check
+  stage "staleness (just check)"         "" just check
+
+  echo ""
+  if [ $rc -eq 0 ]; then
+    echo "VERIFY OK -- formatting, extractors, prose rules and staleness all pass."
+  else
+    echo "VERIFY FAILED -- see the stages above. Nothing was rebuilt."
+  fi
+  exit $rc
 
 # Covers the three ways a manuscript directory actually goes stale: a tracked
 # paper.pdf committed before a source fix, generated artifacts older than the

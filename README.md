@@ -55,6 +55,7 @@ check adapts rather than failing.
 | `just check` | Report every artifact that has fallen behind its source |
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
 | `just prose-check` | Check the prose, plus figure resolution and table shape, against STYLE.md |
+| `just prose-check --list-rules` | Every rule, its severity, and how to configure it |
 | `just density` | Numerals, parentheticals, acronyms, passives per 1,000 words, and section outliers |
 | `just setup` | Build the Python environment (uv, locked) |
 | `just version` | Which scaffold version this manuscript is built on |

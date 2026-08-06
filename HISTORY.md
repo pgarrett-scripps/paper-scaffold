@@ -41,6 +41,41 @@ rather than a copy.
 
 ---
 
+## 1.4.0
+
+**Severity and vocabulary are the project's call.** Before this, a rule could be
+switched off or have named values exempted, and its thresholds could be moved,
+but two things were fixed in Python: whether a rule was an error or a warning,
+and the word lists it judged against.
+
+Both are project policy, not properties of the checker. Whether an em dash should
+stop a build depends on the house style; whether "essentially" is filler depends
+on the field. A checker you cannot teach gets switched off wholesale, which is
+the outcome every one of these rules exists to avoid.
+
+- **`[severity]`** re-rates any rule, in both directions. `long-sentence` can be
+  an error before submission; `em-dash` can be a warning for a group that
+  tolerates them. Applied in `report()` rather than where each Finding is built,
+  so there is one place to get right and no check needs to know the config
+  exists. `Finding` is frozen, so it rebuilds rather than assigns -- the first
+  version silently did nothing, and the test now covers exactly that.
+- **`[vocabulary.<name>]`** takes `add` and `remove` for `verbose-phrase`,
+  `british-spelling`, `common-words` and `abbreviations`. The shipped lists
+  become a starting point instead of a verdict.
+
+What did NOT move, and why: the `RULES` registry stays in Python. It is not
+configuration, it is a manifest of what the code implements, and a test asserts
+every rule the checker can emit is declared there. Putting it in TOML would not
+let anyone add a rule -- there would be no implementation behind it -- it would
+only split one tightly-coupled pair across two files where they can drift.
+`DEFAULT_LIMITS` stays for the same kind of reason: it is already overridable in
+`[limits]`, so shipping the defaults as TOML too would add a file without adding
+a capability.
+
+Also: `--list-rules` computes its column width from the longest rule name.
+`low-resolution-figure` was one character past the hard-coded guess and pushed
+its own row out of line.
+
 ## 1.3.0
 
 Two checks for the defects that only appear in the proof, when the analysis is

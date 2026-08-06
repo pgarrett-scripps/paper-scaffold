@@ -52,9 +52,14 @@ _ABBR = [
 # look like "et al." and weld the following sentence onto it. Sentences got
 # longer, and words-per-sentence, Flesch-Kincaid and fog all reported the prose
 # as denser than it is.
-_ABBR_RE = re.compile(
-    r"\b(?:%s)" % "|".join(re.escape(a) for a in sorted(_ABBR, key=len, reverse=True))
-)
+def _compile_abbr() -> re.Pattern:
+    return re.compile(
+        r"\b(?:%s)" % "|".join(
+            re.escape(a) for a in sorted(_ABBR, key=len, reverse=True))
+    )
+
+
+_ABBR_RE = _compile_abbr()
 
 # A heading is navigation, not prose. Left alone, the marker survived into the
 # text and glued the title to the sentence after it, inventing long sentences
@@ -64,6 +69,22 @@ _ABBR_RE = re.compile(
 # up. The narrator keeps headings; a reader needs to hear them. A readability
 # score does not. The journal word count counts them separately.
 _HEADING_RE = re.compile(r"(?m)^\s*=+\s+[^\n<]+?(?:\s*<[^>]+>)?\s*$")
+
+
+def add_abbreviations(words) -> None:
+    """Teach the sentence splitter project-specific abbreviations.
+
+    A field has its own periods that do not end a sentence, and a splitter that
+    does not know them reports the two halves as one long sentence and skews
+    every words-per-sentence figure. Called from prose_check with whatever
+    `[vocabulary.abbreviations]` lists.
+    """
+    global _ABBR_RE
+    new = [w for w in words if w not in _ABBR]
+    if not new:
+        return
+    _ABBR.extend(new)
+    _ABBR_RE = _compile_abbr()
 
 
 def protect_periods(text: str) -> str:

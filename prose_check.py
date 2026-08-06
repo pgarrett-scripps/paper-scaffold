@@ -160,6 +160,13 @@ def check(label: str, text: str, spellable: str | None = None,
     out: list[Finding] = []
     sents = sentences(text)
 
+    # The shipped word lists with this project's additions and removals applied.
+    # A field where "essentially" is load-bearing, or whose own vocabulary trips
+    # the British list, needs to teach the checker rather than switch it off.
+    british = cfg.vocabulary("british-spelling", BRITISH)
+    verbose = cfg.vocabulary("verbose-phrase", VERBOSE)
+    common = cfg.vocabulary("common-words", COMMON)
+
     def add(rule, message, subject="", context=""):
         from prose_rules import RULES
         out.append(Finding(rule, RULES[rule][0], message, subject, label, context))
@@ -169,7 +176,7 @@ def check(label: str, text: str, spellable: str | None = None,
         add("em-dash", "em dash", context=_ctx(text, m.start()))
 
     for m in re.finditer(r"\b[A-Za-z]+\b", spellable):
-        fix = BRITISH.get(m.group(0).lower())
+        fix = british.get(m.group(0).lower())
         if fix:
             add("british-spelling", f"{m.group(0)!r} -> {fix}", m.group(0),
                 _ctx(spellable, m.start()))
@@ -189,7 +196,7 @@ def check(label: str, text: str, spellable: str | None = None,
         if n > cfg.limit("max-sentence-words"):
             add("long-sentence", f"{n}-word sentence", context=f'"{s[:90]}..."')
 
-    for phrase, fix in VERBOSE.items():
+    for phrase, fix in verbose.items():
         for m in re.finditer(rf"\b{re.escape(phrase)}\b", text, re.I):
             add("verbose-phrase", f"{phrase!r} -> {fix}", phrase,
                 _ctx(text, m.start()))
@@ -223,7 +230,7 @@ def check(label: str, text: str, spellable: str | None = None,
     for s in sentences(spellable):
         seen: dict[str, int] = {}
         for w in re.findall(r"[A-Za-z][A-Za-z'-]{3,}", s.lower()):
-            if w in COMMON:
+            if w in common:
                 continue
             seen[w] = seen.get(w, 0) + 1
         for w, c in seen.items():
@@ -722,6 +729,9 @@ def main() -> int:
         return list_rules()
 
     cfg = load_config(HERE)
+    # Before any text is split into sentences: the splitter compiles the
+    # abbreviation list once, so a later addition would not take effect.
+    readability.add_abbreviations(sorted(cfg.vocabulary("abbreviations", set())))
     body = readability.slice_body((HERE / "paper.typ").read_text())
     si = (HERE / "si-body.typ").read_text()
     targets = {"main": body, "SI": si}

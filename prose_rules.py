@@ -13,7 +13,7 @@ particular manuscript has earned.
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 try:
@@ -83,12 +83,53 @@ DEFAULT_LIMITS = {
 }
 
 
+# Vocabularies a project may add to or subtract from. The shipped lists are a
+# starting point, not a judgement about your field: "essentially" is filler in
+# most prose and load-bearing in some, and a checker you cannot teach is one you
+# end up disabling wholesale.
+#
+# Each maps a config key to what it holds. `phrases` are replacement pairs
+# ("in order to" -> "to"); `words` are plain lists.
+VOCABULARIES = {
+    "verbose-phrase":   "phrases",   # filler -> what to write instead
+    "british-spelling": "phrases",   # British -> American
+    "common-words":     "words",     # too ordinary to count as a repetition
+    "abbreviations":    "words",     # "et al." -- a period that does not end a sentence
+}
+
+
 @dataclass
 class Config:
     disable: set[str] = field(default_factory=set)
     allow: dict[str, set[str]] = field(default_factory=dict)
     limits: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_LIMITS))
+    severity: dict[str, str] = field(default_factory=dict)
+    vocab: dict[str, dict] = field(default_factory=dict)
     path: Path | None = None
+
+    def severity_of(self, rule: str) -> str:
+        """The severity this project wants, falling back to the shipped default.
+
+        Whether a rule should stop a build is a project's call, not this file's.
+        A group that never uses an em dash may want it as a warning; one about to
+        submit may want every long sentence to be an error.
+        """
+        return self.severity.get(rule, RULES[rule][0])
+
+    def vocabulary(self, name: str, base):
+        """`base` with this project's additions and removals applied."""
+        spec = self.vocab.get(name, {})
+        out = dict(base) if isinstance(base, dict) else set(base)
+        add, remove = spec.get("add"), spec.get("remove", [])
+        if add:
+            out.update(add)
+        for item in remove:
+            key = item.lower()
+            if isinstance(out, dict):
+                out.pop(key, None)
+            else:
+                out.discard(key)
+        return out
 
     def suppresses(self, f: Finding) -> bool:
         if f.rule in self.disable:
@@ -114,13 +155,20 @@ def load_config(root: Path) -> Config:
     if not path.exists():
         return Config()
 
-    with path.open("rb") as fh:
-        raw = tomllib.load(fh)
+    # A malformed file is a typo in a config, not a bug in the checker, so it
+    # gets the same one-line treatment as every other bad entry here. The common
+    # one is a second `[severity]` or `[limits]` block appended to the end.
+    try:
+        with path.open("rb") as fh:
+            raw = tomllib.load(fh)
+    except tomllib.TOMLDecodeError as e:
+        _bad(f"is not valid TOML: {e}")
 
-    unknown_top = set(raw) - {"disable", "allow", "limits"}
+    known_top = {"disable", "allow", "limits", "severity", "vocabulary"}
+    unknown_top = set(raw) - known_top
     if unknown_top:
         _bad(f"unknown section(s) {sorted(unknown_top)}; "
-             f"expected 'disable', 'allow' or 'limits'")
+             f"expected one of {', '.join(sorted(known_top))}")
 
     disable = set(raw.get("disable", []))
     bad = disable - set(RULES)
@@ -150,7 +198,45 @@ def load_config(root: Path) -> Config:
             _bad(f"limit {k!r} must be a positive integer, got {v!r}")
         limits[k] = v
 
-    return Config(disable=disable, allow=allow, limits=limits, path=path)
+    severity = raw.get("severity", {})
+    bad = set(severity) - set(RULES)
+    if bad:
+        _bad(f"unknown rule(s) in [severity]: {sorted(bad)}\n"
+             f"       known rules: {', '.join(sorted(RULES))}")
+    for rule, sev in severity.items():
+        if sev not in ("error", "warn"):
+            _bad(f"[severity].{rule} must be 'error' or 'warn', got {sev!r}. "
+                 f"To switch a rule off entirely, put it in `disable`.")
+
+    vocab_raw = raw.get("vocabulary", {})
+    bad = set(vocab_raw) - set(VOCABULARIES)
+    if bad:
+        _bad(f"unknown vocabular(ies): {sorted(bad)}; "
+             f"expected {', '.join(sorted(VOCABULARIES))}")
+    vocab: dict[str, dict] = {}
+    for name, spec in vocab_raw.items():
+        unknown = set(spec) - {"add", "remove"}
+        if unknown:
+            _bad(f"[vocabulary.{name}] has unknown key(s) {sorted(unknown)}; "
+                 f"expected 'add' or 'remove'")
+        kind = VOCABULARIES[name]
+        add = spec.get("add", {} if kind == "phrases" else [])
+        if kind == "phrases":
+            if not isinstance(add, dict):
+                _bad(f"[vocabulary.{name}].add must be a table of "
+                     f"\"found\" = \"write instead\" pairs, got {add!r}")
+            add = {str(k).lower(): str(v) for k, v in add.items()}
+        else:
+            if not isinstance(add, list):
+                _bad(f"[vocabulary.{name}].add must be a list, got {add!r}")
+            add = {str(v).lower() for v in add}
+        remove = spec.get("remove", [])
+        if not isinstance(remove, list):
+            _bad(f"[vocabulary.{name}].remove must be a list, got {remove!r}")
+        vocab[name] = {"add": add, "remove": [str(v).lower() for v in remove]}
+
+    return Config(disable=disable, allow=allow, limits=limits,
+                  severity=severity, vocab=vocab, path=path)
 
 
 def silencer(f: Finding) -> str:
@@ -164,6 +250,11 @@ def silencer(f: Finding) -> str:
 def report(findings: list[Finding], cfg: Config, *, show_suppressed: bool,
            strict: bool) -> int:
     """Print the findings and return the exit code."""
+    # Severity is applied here rather than where each Finding is built: one place
+    # to get right, and no check has to know the config exists to honour it.
+    # Findings are frozen, so this rebuilds rather than assigns.
+    findings = [replace(f, severity=cfg.severity_of(f.rule)) for f in findings]
+
     kept, hidden = [], []
     for f in findings:
         (hidden if cfg.suppresses(f) else kept).append(f)
@@ -198,12 +289,24 @@ def report(findings: list[Finding], cfg: Config, *, show_suppressed: bool,
 
 
 def list_rules() -> int:
-    print("Rules, and what a suppression matches on:\n")
+    # Width from the longest rule name, not a constant: a new rule that is one
+    # character longer than the guess silently breaks the column.
+    w = max(len(r) for r in RULES)
+    print("Rules. Default severity shown; every one can be re-rated or "
+          "switched off.\n")
     for rule, (sev, subj) in sorted(RULES.items()):
-        tag = "error" if sev == "error" else "warn"
         how = f'[allow].{rule} = ["..."]  ({subj})' if subj else "disable only"
-        print(f"  {rule:<20} {tag:<6} {how}")
-    print(f"\nLimits (in [limits]): "
+        print(f"  {rule:<{w}}  {sev:<5}  {how}")
+
+    print(f"\nEverything below goes in {CONFIG_NAME}, beside STYLE.md.\n")
+    print("  [severity]        re-rate any rule: <rule> = \"error\" | \"warn\"")
+    print("  disable = [...]   switch a rule off entirely")
+    print("  [allow]           keep a rule on, exempt named values")
+    print(f"\n  [limits]          "
           f"{', '.join(f'{k} = {v}' for k, v in DEFAULT_LIMITS.items())}")
-    print(f"\nAll of it goes in {CONFIG_NAME}, beside STYLE.md.")
+    print("\n  [vocabulary.<name>]   add = ..., remove = [...]")
+    for name, kind in sorted(VOCABULARIES.items()):
+        shape = ('add = { "found" = "write instead" }' if kind == "phrases"
+                 else 'add = ["word", ...]')
+        print(f"    {name:<18} {shape}")
     return 0

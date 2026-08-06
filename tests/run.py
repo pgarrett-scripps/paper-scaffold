@@ -575,6 +575,50 @@ def suppression_cases() -> bool:
             print(f"  suppression [{name}]: expected {want}")
             ok = False
 
+    # Severity is a project's call. A rule can be re-rated in both directions,
+    # and an unknown rule or a nonsense severity must fail the config rather than
+    # be ignored -- the same reasoning as a typo'd suppression.
+    sev = pr.Config(severity={"em-dash": "warn", "long-sentence": "error"})
+    for rule, want in [("em-dash", "warn"), ("long-sentence", "error"),
+                       ("doubled-word", "error")]:   # untouched keeps its default
+        if sev.severity_of(rule) != want:
+            print(f"  severity [{rule}]: expected {want}, got {sev.severity_of(rule)}")
+            ok = False
+
+    # report() must APPLY the override, not just store it. Finding is frozen, so
+    # this is the step that silently did nothing at first.
+    import io
+    import contextlib
+    f_err = pr.Finding("em-dash", "error", "em dash")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        code = pr.report([f_err], sev, show_suppressed=False, strict=False)
+    if code != 0 or "ERROR" in buf.getvalue():
+        print("  severity: an error re-rated to warn still gated the build")
+        ok = False
+
+    # Vocabularies take additions and removals.
+    import prose_check as pc2
+    voc = pr.Config(vocab={
+        "verbose-phrase": {"add": {"leverage": "use"}, "remove": ["essentially"]},
+        "common-words": {"add": {"treated"}, "remove": []},
+    })
+    phrases = voc.vocabulary("verbose-phrase", {"essentially": "(cut it)",
+                                                "very": "(cut it)"})
+    words = voc.vocabulary("common-words", {"the", "and"})
+    checks = [
+        ("added phrase", phrases.get("leverage") == "use"),
+        ("removed phrase", "essentially" not in phrases),
+        ("untouched phrase", phrases.get("very") == "(cut it)"),
+        ("added word", "treated" in words),
+        ("untouched word", "the" in words),
+        ("base is not mutated", "leverage" not in pc2.VERBOSE),
+    ]
+    for name, passed in checks:
+        if not passed:
+            print(f"  vocabulary [{name}]: failed")
+            ok = False
+
     # Every rule the checker can emit must be declared, or its findings would
     # crash the reporter and could never be suppressed.
     import prose_check as pc2
