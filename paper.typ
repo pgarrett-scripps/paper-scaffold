@@ -78,9 +78,11 @@ not an example to preserve.
 
 Citation, cross-reference, figure, table, and equation are each shown once, so
 the skeleton compiles and the numbering resolves before anything is written
-@lovelace1843. Delete what you do not need. Coverage of the constructs the
-tooling handles specially does not live here, it lives in `tests/fixture.typ`,
-which `just test` checks and which is never part of the manuscript.
+@lovelace1843. A second one @hopper1952 keeps the reference list plural, and
+keeps every entry in `references.bib` cited: `just prose-check` reports one that
+is not. Delete what you do not need. Coverage of the constructs the tooling
+handles specially does not live here, it lives in `tests/fixture.typ`, which
+`just test` checks and which is never part of the manuscript.
 
 A number the analysis computes is read rather than typed: across #s(
   "cohort.n_conditions",

@@ -6,9 +6,9 @@ paper.docx
 paper.docx.html
 paper.staged.html
 
-# Audio toolchain: engine, voice models, venv, and every generated audio file.
+# Audio toolchain: voice models and every generated audio file. The engine is a
+# uv dependency now (piper-tts), so there is no downloaded binary to ignore.
 # Only the scripts in audio/ are tracked, so a fresh clone runs `just audio-setup`.
-audio/piper/
 audio/models/
 audio/.venv/
 audio/chapters/

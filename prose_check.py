@@ -638,6 +638,119 @@ def check_table_size(root: Path | None = None,
     return out
 
 
+# Entry types where a DOI is expected. A thesis, a manual, or a piece of software
+# often has none, and reporting those is how a useful check becomes a wall of
+# noise nobody reads.
+DOI_EXPECTED = {"article", "inproceedings", "incollection", "inbook"}
+
+# Nothing before this is expected to have one. DOIs were introduced in 2000 and
+# older work was only retrofitted patchily, so demanding one from a foundational
+# 1952 citation reports an absence the author cannot fix. Papers cite their
+# field's origins routinely, which would make this the noisiest rule here.
+DOI_ERA = 2000
+
+
+def _bib_entries(path: Path) -> list[dict]:
+    """Every entry as {key, type, fields...}, or [] if the file cannot be read."""
+    try:
+        import bibtexparser
+    except ImportError:
+        return []
+    try:
+        db = bibtexparser.parse_file(str(path))
+    except Exception:
+        return []
+    out = []
+    for e in db.entries:
+        rec = {f.key.lower(): (f.value or "").strip("{} ") for f in e.fields}
+        rec["_key"] = e.key
+        rec["_type"] = (e.entry_type or "").lower()
+        out.append(rec)
+    return out
+
+
+def _normalize_doi(doi: str) -> str:
+    d = doi.strip().lower()
+    for prefix in ("https://doi.org/", "http://doi.org/", "doi:"):
+        if d.startswith(prefix):
+            d = d[len(prefix):]
+    return d.strip()
+
+
+def check_bibliography(root: Path | None = None,
+                       cfg: Config | None = None) -> list[Finding]:
+    """Checks on references.bib, the last artifact here nothing read.
+
+    Typst already fails on a citation with no entry, so that direction is
+    covered. The reverse is not: an entry nobody cites survives every rebuild,
+    and so does the same paper entered twice under two keys, which is how a
+    manuscript ends up citing one work inconsistently.
+
+    Deliberately NOT a duplicate-title check. Tried against a real bibliography,
+    it flagged a dataset and the preprint describing it, which share a title and
+    are correctly cited as two things. Duplicate DOI is the signal that means
+    what it looks like.
+
+    Everything here is offline. Checking that a DOI resolves, or that a cited
+    paper has been retracted, needs the network and lives in `just bib-audit`.
+    """
+    import datetime
+
+    r = root or HERE
+    bibs = sorted(r.glob("*.bib"))
+    if not bibs:
+        return []
+    entries = [e for b in bibs for e in _bib_entries(b)]
+    if not entries:
+        return []
+
+    cited: set[str] = set()
+    for src in sorted(r.glob("*.typ")):
+        cited |= set(re.findall(r"@([A-Za-z0-9_:-]+)", src.read_text()))
+
+    out: list[Finding] = []
+    where = bibs[0].name
+
+    by_doi: dict[str, list[str]] = {}
+    for e in entries:
+        if e.get("doi"):
+            by_doi.setdefault(_normalize_doi(e["doi"]), []).append(e["_key"])
+    for doi, keys in sorted(by_doi.items()):
+        if len(keys) > 1:
+            out.append(Finding(
+                "duplicate-reference", "error",
+                f"{' and '.join(sorted(keys))} share the DOI {doi}, so the same "
+                f"work is in the bibliography twice and will be cited "
+                f"inconsistently",
+                subject=doi, where=where))
+
+    next_year = datetime.date.today().year + 1
+    for e in sorted(entries, key=lambda x: x["_key"]):
+        key = e["_key"]
+        if key not in cited:
+            out.append(Finding(
+                "uncited-reference", "warn",
+                f"{key} is in the bibliography but never cited, so it is carried "
+                f"into every rebuild and printed by nothing",
+                subject=key, where=where))
+        year = e.get("year", "")
+        digits = re.fullmatch(r"\d{4}", year)
+        modern = bool(digits) and int(year) >= DOI_ERA
+        if e["_type"] in DOI_EXPECTED and not e.get("doi") and modern:
+            out.append(Finding(
+                "missing-doi", "warn",
+                f"{key} is a {year} @{e['_type']} with no DOI; most journals now "
+                f"require one for every reference that has one",
+                subject=key, where=where))
+        if year and (not digits or not 1500 <= int(year) <= next_year):
+            out.append(Finding(
+                "implausible-year", "warn",
+                f"{key} has year {year!r}; expected a four-digit year no later "
+                f"than {next_year}",
+                subject=key, where=where))
+    return out
+
+
 def check_orphaned_assets(root: Path | None = None) -> list[Finding]:
     """Flag a generated table or figure that no source file mentions.
 
@@ -814,6 +927,7 @@ def main() -> int:
     findings += check_orphaned_assets()
     findings += check_figure_resolution(cfg=cfg)
     findings += check_table_size(cfg=cfg)
+    findings += check_bibliography(cfg=cfg)
 
     return report(findings, cfg,
                   show_suppressed="--show-suppressed" in sys.argv,

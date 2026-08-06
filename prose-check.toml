@@ -34,6 +34,11 @@ unexpanded-acronym = [
 # conventions or overview paragraph that forward-references.
 # reference-order = ["fig:si-example"]
 
+# A reference deliberately kept but not cited, or an entry whose DOI genuinely
+# does not exist. Prefer deleting an uncited entry to allowing it.
+# uncited-reference = ["somekey"]
+# missing-doi = ["somekey"]   # a preprint or dataset with no DOI issued
+
 # A figure or table cited only from somewhere the checker does not read.
 # uncited-figure = ["fig:example"]
 

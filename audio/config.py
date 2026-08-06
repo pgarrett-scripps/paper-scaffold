@@ -18,11 +18,15 @@ from pathlib import Path
 # FILL THIS IN
 # =============================================================================
 
-# Piper voice. `just audio-setup` downloads whichever name is set here from the
-# piper-voices repository; browse the options at
+# Piper voice. `just audio-setup` resolves this name against piper's own voice
+# index and downloads it; browse the options at
 # https://huggingface.co/rhasspy/piper-voices
+#
+# The name alone is enough. There used to be a second setting here holding the
+# path under the voices repo ("en/en_US/lessac/medium"), because setup built a
+# download URL by hand -- so the two had to be kept in step, and a mismatch
+# arrived as a 404 that read like a network problem.
 VOICE_NAME = "en_US-lessac-medium"
-VOICE_LANG = "en/en_US/lessac/medium"  # path under piper-voices for the download
 
 YEAR = "2026"
 GENRE = "Audiobook"

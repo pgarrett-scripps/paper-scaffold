@@ -336,6 +336,7 @@ def structural_cases() -> bool:
         print(f"  uncited-figure check: expected (1, 0), got ({uncited}, {cited})")
         ok = False
     ok &= boundary_cases()
+    ok &= bibliography_cases()
     ok &= asset_cases()
     ok &= stats_cases()
     ok &= suppression_cases()
@@ -434,6 +435,89 @@ def new_paper_cases() -> bool:
             if not passed:
                 print(f"  new-paper.sh [{name}]: failed")
                 ok = False
+    return ok
+
+
+def bibliography_cases() -> bool:
+    """references.bib was the last artifact here that nothing read.
+
+    Typst already fails on a citation with no entry, so only the reverse
+    directions need checking. The duplicate case is keyed on DOI, not title:
+    tried against a real bibliography, a title match flagged a dataset and the
+    preprint describing it, which share a title and are correctly cited as two
+    separate things.
+    """
+    import prose_check as pc
+    ok = True
+
+    def bib(*rows):
+        out = ""
+        for t, k, title, year, doi in rows:
+            out += (f"@{t}{{{k},\n  title = {{{title}}},\n  year = {{{year}}},\n"
+                    + (f"  doi = {{{doi}}},\n" if doi else "") + "}\n")
+        return out
+
+    cases = [
+        ("all clean",
+         bib(("article", "a2020", "One", "2020", "10.1/a")), "@a2020", []),
+        ("uncited entry",
+         bib(("article", "a2020", "One", "2020", "10.1/a"),
+             ("article", "b2020", "Two", "2020", "10.1/b")),
+         "@a2020", ["uncited-reference"]),
+        ("same DOI twice",
+         bib(("article", "a2020", "One", "2020", "10.1/a"),
+             ("article", "b2020", "One again", "2020", "10.1/a")),
+         "@a2020 @b2020", ["duplicate-reference"]),
+        # The prefix forms publishers and Crossref both emit have to normalize to
+        # the same DOI, or the duplicate goes unseen.
+        ("DOI prefixes normalize",
+         bib(("article", "a2020", "One", "2020", "https://doi.org/10.1/A"),
+             ("article", "b2020", "One again", "2020", "doi:10.1/a")),
+         "@a2020 @b2020", ["duplicate-reference"]),
+        ("modern article with no DOI",
+         bib(("article", "a2020", "One", "2020", "")), "@a2020", ["missing-doi"]),
+        # A foundational citation predates DOIs entirely. Demanding one reports an
+        # absence nobody can fix, on exactly the references papers cite most.
+        ("pre-2000 article with no DOI",
+         bib(("article", "a1952", "Old", "1952", "")), "@a1952", []),
+        # A thesis or a piece of software often has no DOI, and that is normal.
+        ("thesis with no DOI",
+         bib(("phdthesis", "t2020", "Thesis", "2020", "")), "@t2020", []),
+        ("implausible year",
+         bib(("article", "a2020", "One", "2222", "10.1/a")),
+         "@a2020", ["implausible-year"]),
+    ]
+    for name, bibtext, cites, want in cases:
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "references.bib").write_text(bibtext)
+            (root / "paper.typ").write_text(f"Text {cites}.\n")
+            got = sorted({f.rule for f in pc.check_bibliography(root)})
+            if got != sorted(want):
+                print(f"  bibliography [{name}]: expected {sorted(want)}, got {got}")
+                ok = False
+
+    # No .bib at all is a valid project shape, not a finding.
+    with tempfile.TemporaryDirectory() as d:
+        (Path(d) / "paper.typ").write_text("No citations here.\n")
+        if pc.check_bibliography(Path(d)):
+            print("  bibliography: reported findings for a project with no .bib")
+            ok = False
+
+    # The retraction audit is online and cannot be unit-tested here, but its
+    # classification is pure. This is the bug that shipped looking correct:
+    # `update-to` lives on the NOTICE and points at what it retracts, while
+    # `updated-by` lives on the PAPER. Reading the wrong one found nothing on a
+    # paper retracted in 2010.
+    sys.path.insert(0, str(ROOT))
+    import bib_audit as ba
+    if ba.UPDATED_BY != "updated-by":
+        print(f"  bib-audit reads {ba.UPDATED_BY!r}; the paper-side field is "
+              f"'updated-by' and the other direction detects nothing")
+        ok = False
+    if "retraction" not in ba.WITHDRAWN:
+        print("  bib-audit does not treat a retraction as withdrawn")
+        ok = False
     return ok
 
 

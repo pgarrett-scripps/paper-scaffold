@@ -59,6 +59,10 @@ RULES: dict[str, tuple[str, str]] = {
     "orphaned-asset":     ("warn",  "the file name"),
     "low-resolution-figure": ("warn", "the file name"),
     "oversized-table":    ("warn",  "the file name"),
+    "duplicate-reference": ("error", "the shared DOI"),
+    "uncited-reference":  ("warn",  "the entry key"),
+    "missing-doi":        ("warn",  "the entry key"),
+    "implausible-year":   ("warn",  "the entry key"),
 }
 
 DEFAULT_LIMITS = {

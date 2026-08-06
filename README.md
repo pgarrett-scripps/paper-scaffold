@@ -75,10 +75,11 @@ check adapts rather than failing.
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
 | `just prose-check` | Check the prose, plus figure resolution and table shape, against STYLE.md |
 | `just prose-check --list-rules` | Every rule, its severity, and how to configure it |
+| `just bib-audit` | Check every DOI against Crossref for retractions and dead links (network) |
 | `just density` | Numerals, parentheticals, acronyms, passives per 1,000 words, and section outliers |
 | `just setup` | Build the Python environment (uv, locked) |
 | `just version` | Which scaffold version this manuscript is built on |
-| `just audio-setup` | One-time: fetch Piper, the voice model, and the ffmpeg venv |
+| `just audio-setup` | One-time: install the audio deps and download the voice model |
 | `just audiobook` | Chaptered `.m4b` of the main text |
 | `just all` | PDF + Word + both audiobooks, then `just check` |
 
@@ -361,8 +362,17 @@ One inherent trait: stripped cross-references leave sentences like "resolves to
 and the bare-number kind" in the narration. Write around it in prose you care
 about hearing, or accept it.
 
-The engine, voice model, venv, and every audio file are gitignored, so a fresh
-clone needs `just audio-setup` once (~60 MB download).
+The engine is `piper-tts`, a uv dependency in the `audio` group, exactly like
+pandoc and ffmpeg elsewhere in this directory: nothing is installed system-wide
+and there is no binary to download by hand. **This runs on Linux, both Intel and
+Apple Silicon Macs, and Windows.** It previously fetched a piper release tarball
+by curl, pinned to a build that shipped x86_64 Linux only, which made the
+audiobooks the one part of the scaffold that could not run on a Mac.
+
+The voice model (~60 MB) and every generated audio file are gitignored, so a
+fresh clone needs `just audio-setup` once. Change `VOICE_NAME` in
+`audio/config.py` and re-run it to switch voices; the name is resolved against
+piper's own index, so nothing else has to be kept in step with it.
 
 ## Requirements
 
@@ -372,7 +382,8 @@ whether the ones you have are new enough.
 - `typst` **0.14 or newer**, `just`, `uv`, `python3`
 - `typstyle` for `just fmt` and `just fmt-check` (`cargo install typstyle`)
 - `git` for `just check-pdf`, which skips itself outside a repository
-- `curl` and a network connection for `just audio-setup` only
+- a network connection for `just audio-setup` (the voice model) and the first
+  PDF build (the `arkheion` template)
 
 The Typst floor is 0.14, and it is not where you would guess. `--features html`
 and `html.frame()`, which `just docx` is built on, both arrived in 0.13 — but on

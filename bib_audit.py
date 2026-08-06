@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""Check every DOI in the bibliography against Crossref: does it resolve, and has
+the work been retracted?
+
+WHY THIS IS SEPARATE FROM prose_check.py. It needs the network. A check that can
+fail because an API was slow does not belong in a gate people are supposed to
+trust, so this is its own recipe, run deliberately before submission rather than
+on every save. `just verify` never calls it.
+
+WHAT IT CATCHES. Citing a retracted paper is the expensive kind of mistake: it
+survives review, it is found after publication, and it is entirely avoidable. A
+paper can also be retracted years after you cite it, so the answer has a shelf
+life and the check is worth re-running late.
+
+Crossref is free, needs no key, and asks only that you identify yourself in the
+User-Agent so they can contact you about a misbehaving script.
+
+Usage:
+    python3 bib_audit.py                # audit references.bib
+    python3 bib_audit.py --timeout 30   # slower link
+"""
+from __future__ import annotations
+
+import json
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+API = "https://api.crossref.org/works/"
+
+# Crossref asks for a contact address so they can reach whoever is hammering
+# them. config.typ has one; fall back to the project URL rather than inventing an
+# address that does not exist.
+UA = "paper-scaffold bib-audit (https://github.com/pgarrett-scripps/paper-scaffold)"
+
+# Crossref relates a paper and the notices about it in BOTH directions, and the
+# direction matters. `update-to` lives on the NOTICE and points at what it
+# retracts; `updated-by` lives on the PAPER and points at the notices. Reading
+# `update-to` here found nothing on the Wakefield MMR paper, which has been
+# retracted since 2010 -- the check looked like it worked and detected nothing.
+# Crossref populates this partly from Retraction Watch.
+UPDATED_BY = "updated-by"
+WITHDRAWN = {"retraction", "withdrawal", "removal"}
+CONCERNING = {"expression_of_concern", "expression-of-concern", "correction",
+              "corrigendum", "erratum"}
+
+# A second, independent signal: several publishers prefix the title once a paper
+# is withdrawn. Not reliable on its own, and not every publisher does it, but it
+# catches a record whose relations are missing or not yet propagated.
+TITLE_MARKERS = ("retracted:", "retracted article:", "withdrawn:")
+
+
+def _entries():
+    sys.path.insert(0, str(HERE))
+    import prose_check
+    bibs = sorted(HERE.glob("*.bib"))
+    if not bibs:
+        print("no .bib file here, nothing to audit")
+        return []
+    out = []
+    for b in bibs:
+        out += prose_check._bib_entries(b)
+    return out
+
+
+def _fetch(doi: str, timeout: float):
+    """Crossref metadata for a DOI, or ('missing'|'error', detail)."""
+    url = API + urllib.parse.quote(doi, safe="")
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as fh:
+            return "ok", json.load(fh).get("message", {})
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return "missing", "Crossref has no record of this DOI"
+        return "error", f"HTTP {e.code}"
+    except Exception as e:                      # timeout, DNS, TLS, offline
+        return "error", str(e)[:60]
+
+
+def audit(timeout: float = 15.0) -> int:
+    entries = _entries()
+    if not entries:
+        return 0
+
+    withdrawn, concerns, missing, errors = [], [], [], []
+    checked = 0
+
+    for e in entries:
+        doi = (e.get("doi") or "").strip()
+        if not doi:
+            continue                            # prose_check reports these offline
+        sys.path.insert(0, str(HERE))
+        import prose_check
+        doi = prose_check._normalize_doi(doi)
+        state, msg = _fetch(doi, timeout)
+        checked += 1
+        key = e["_key"]
+        if state == "missing":
+            missing.append((key, doi, msg))
+        elif state == "error":
+            errors.append((key, doi, msg))
+        else:
+            kinds = {(u.get("type") or "").lower()
+                     for u in (msg.get(UPDATED_BY) or [])}
+            title = ((msg.get("title") or [""])[0] or "").strip().lower()
+            if kinds & WITHDRAWN or title.startswith(TITLE_MARKERS):
+                why = ", ".join(sorted(kinds & WITHDRAWN)) or "title says so"
+                withdrawn.append((key, doi, why))
+            elif kinds & CONCERNING:
+                concerns.append((key, doi, ", ".join(sorted(kinds & CONCERNING))))
+        time.sleep(0.05)                        # be a good citizen
+
+    print(f"checked {checked} DOI(s) against Crossref\n")
+    rc = 0
+    if withdrawn:
+        rc = 1
+        print("RETRACTED -- do not cite without saying why:")
+        for key, doi, kind in withdrawn:
+            print(f"  {key}  {doi}  ({kind})")
+    if concerns:
+        print("\nflagged by a later notice, worth reading before you cite it:")
+        for key, doi, kind in concerns:
+            print(f"  {key}  {doi}  ({kind})")
+    if missing:
+        rc = 1
+        print("\nDOI does not resolve -- a typo, or a DOI that was never issued:")
+        for key, doi, msg in missing:
+            print(f"  {key}  {doi}")
+    if errors:
+        # NOT a failure. Being offline is not a bibliography defect, and treating
+        # it as one is how a network check starts getting skipped.
+        print("\ncould not be checked (network, not a defect):")
+        for key, doi, msg in errors:
+            print(f"  {key}  {doi}  {msg}")
+
+    if not (withdrawn or concerns or missing or errors):
+        print("every DOI resolves, none retracted")
+    return rc
+
+
+def main() -> int:
+    timeout = 15.0
+    if "--timeout" in sys.argv:
+        timeout = float(sys.argv[sys.argv.index("--timeout") + 1])
+    return audit(timeout)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

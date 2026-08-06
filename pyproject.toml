@@ -3,7 +3,7 @@ name = "paper"
 # The paper-scaffold version this manuscript is built on. Travels with the
 # scaffold when it is copied, so a project can always say where it came from.
 # See HISTORY.md for what bumps major, minor, and patch.
-version = "1.5.0"
+version = "1.6.0"
 description = "Python toolchain for building the manuscript"
 requires-python = ">=3.10"
 
@@ -17,12 +17,18 @@ dependencies = [
   "pillow",           # crops those rasters to their ink
   "textstat",         # sharper syllable counts for the readability report
   "codespell",        # the misspelling dictionary the spelling check reads
+  "bibtexparser>=2.0.0b2",  # bibliography checks. v2 is a beta and its API is
+                      # incompatible with v1, so the floor is pinned deliberately.
 ]
 
 # Only needed to build the audiobooks. `just audio-setup` installs it.
 # Kept out of the default set so a clone that never touches audio stays light.
 [dependency-groups]
 audio = [
+  "piper-tts>=1.6",   # offline TTS. >=1.6 for the abi3 wheels: Linux, both
+                      # Macs and Windows, and every Python from 3.9 up. Earlier
+                      # releases were per-version wheels with no arm64 Mac build,
+                      # which is why this used to be a curl'd Linux binary.
   "imageio-ffmpeg",   # self-contained ffmpeg binary, no system install
   "pillow",
   "matplotlib",       # cover art

@@ -92,7 +92,7 @@ doctor:
   report python3  python3  required "wordcount.sh"                   python3 --version
   report git      git      optional "just check-pdf (skipped without it)" git --version
   report typstyle typstyle optional "just fmt and just fmt-check"    typstyle --version
-  report curl     curl     optional "just audio-setup only"          curl --version
+  report curl     curl     optional "not required; handy for diagnosis" curl --version
 
   # Version floor. Compared on major.minor as a pair of integers, because a
   # string compare puts 0.9 above 0.14 and would pass a binary that cannot
@@ -104,7 +104,8 @@ doctor:
     if [ "$hmaj" -lt "$wmaj" ] || { [ "$hmaj" -eq "$wmaj" ] && [ "$hmin" -lt "$wmin" ]; }; then
       echo ""
       echo "TOO OLD: typst $have, but this scaffold needs {{typst_min}} or newer."
-      echo "  just docx needs --features html and html.frame(), added in 0.13."
+      echo "  Below {{typst_min}}, \`just docx\` still exits 0 and silently drops every"
+      echo "  figure from the Word export. See typst_min in the justfile."
       rc=1
     fi
   fi
@@ -421,6 +422,20 @@ watch:
 prose-check:
   @uv run --quiet python prose_check.py
 
+# Every DOI in the bibliography, checked against Crossref: does it resolve, and
+# has the work been retracted?
+#
+# NOT part of `just verify`, deliberately. It needs the network, and a gate that
+# can fail because an API was slow is a gate people learn to skip. Run it before
+# submission, and again late: a paper can be retracted years after you cite it,
+# so the answer has a shelf life.
+#
+# Being offline is reported, not failed. That is a fact about your connection,
+# not a defect in the bibliography.
+# Check every DOI against Crossref for retractions and dead links (needs network)
+bib-audit:
+  @uv run --quiet python bib_audit.py
+
 # Assert the prose extractors still handle every construct, and still do so after
 # a reflow. Runs against tests/fixture.typ, which is NOT part of the manuscript --
 # placeholder prose in paper.typ gets deleted the moment real writing starts, so
@@ -496,27 +511,38 @@ assets:
 # audio/extract_prose.py rewrites the Typst source into speakable text (citations,
 # math, #sym.* tokens and figure/table blocks removed), then Piper synthesizes it
 # and ffmpeg muxes chapters and cover art. Only the scripts in audio/ are tracked
-# -- the engine, the voice model, the ffmpeg venv, and every generated audio file
-# are gitignored -- so a fresh clone needs `just audio-setup` once. Voice, titles,
-# and pronunciations all come from audio/config.py.
+# -- the voice model, and every generated audio file, are gitignored -- so a fresh
+# clone needs `just audio-setup` once. Voice, titles, and pronunciations all come
+# from audio/config.py.
+#
+# Piper is a uv dependency (`piper-tts`, the audio group), like pandoc and ffmpeg
+# before it. It used to be a binary tarball fetched by curl, pinned to a release
+# that shipped x86_64 Linux only, so the audiobooks were the one part of this
+# directory that could not run on a Mac. The wheels are abi3 and cover Linux,
+# both Macs and Windows.
 # ---------------------------------------------------------------------------
 
-# Piper 1.2.0, x86_64 Linux (the tarball unpacks to audio/piper/).
-piper_url := "https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_amd64.tar.gz"
-
-# One-time: fetch the Piper engine and voice model, and build the ffmpeg venv.
+# One-time: install the audio dependencies and download the voice model (~60 MB).
 audio-setup:
   #!/usr/bin/env bash
   set -euo pipefail
+  uv sync --quiet --group audio
   cd audio
-  test -x piper/piper || curl -sSL "{{piper_url}}" | tar -xz
-  mkdir -p models
-  # The voice name and its path under piper-voices both live in config.py.
-  read -r name lang < <(python3 -c "import config; print(config.VOICE_NAME, config.VOICE_LANG)")
-  base="https://huggingface.co/rhasspy/piper-voices/resolve/main/${lang}/${name}.onnx"
-  test -f "models/${name}.onnx"      || curl -sSL -o "models/${name}.onnx" "$base"
-  test -f "models/${name}.onnx.json" || curl -sSL -o "models/${name}.onnx.json" "${base}.json"
-  cd .. && uv sync --quiet --group audio
+  uv run --quiet --group audio python - <<'PY'
+  from pathlib import Path
+  import config
+  from piper.download_voices import download_voice
+  d = Path("models")
+  d.mkdir(exist_ok=True)
+  # Resolved by NAME against piper's own voice index. The old path
+  # ("en/en_US/lessac/medium") was a hand-built URL into a HuggingFace repo, so a
+  # renamed voice gave a 404 that looked like a network failure.
+  if (d / f"{config.VOICE_NAME}.onnx").is_file():
+      print(f"  voice {config.VOICE_NAME} already present")
+  else:
+      print(f"  downloading {config.VOICE_NAME} ...")
+      download_voice(config.VOICE_NAME, d)
+  PY
   echo "audio toolchain ready -- build with: just audiobook"
 
 # Chaptered audiobook of the main text -> audio/paper.m4b (one chapter per section).
@@ -530,14 +556,17 @@ audiobook-si: _audio-check
 # Both chaptered audiobooks (main text, then SI).
 audiobook-all: audiobook audiobook-si
 
-# Fail early with a fix-it hint when the untracked toolchain is missing.
+# Fail early with a fix-it hint when the untracked toolchain is missing. Only the
+# voice model is checked now: the engine is a uv dependency, so `uv run` installs
+# it and there is nothing to look for on disk. The model is the part that is
+# gitignored, 60 MB, and absent on a fresh clone.
 _audio-check:
   #!/usr/bin/env bash
   set -euo pipefail
   cd audio
   name=$(python3 -c "import config; print(config.VOICE_NAME)")
-  if [ ! -x piper/piper ] || [ ! -f "models/${name}.onnx" ]; then
-    echo "audio toolchain missing -- run: just audio-setup"
+  if [ ! -f "models/${name}.onnx" ]; then
+    echo "no voice model for ${name} -- run: just audio-setup"
     exit 1
   fi
 

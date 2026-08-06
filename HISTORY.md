@@ -41,6 +41,46 @@ rather than a copy.
 
 ---
 
+## 1.6.0
+
+**The bibliography is checked.** It was the last artifact in the directory that
+nothing read. Typst already fails on a citation with no entry, so only the
+reverse directions were open, and all of them survive every rebuild silently.
+
+Offline, in `just prose-check`:
+
+- **`duplicate-reference`** (error) -- two keys, one DOI. The same work entered
+  twice is how a manuscript ends up citing one paper inconsistently.
+- **`uncited-reference`**, **`missing-doi`**, **`implausible-year`** (warnings).
+
+Two decisions came from running it against a real 52-entry bibliography:
+
+*Not duplicate title.* A title match flagged `pxd070049` and
+`vanpuyvelde2026genbeta` -- a PRIDE dataset and the preprint describing it, which
+share a title and are correctly cited as two things. Duplicate DOI is the signal
+that means what it looks like.
+
+*`missing-doi` only from 2000 onward.* DOIs were introduced then and older work
+was retrofitted patchily, so demanding one from a foundational 1952 citation
+reports an absence nobody can fix, on exactly the references papers cite most.
+Both of this scaffold's own example entries are pre-DOI, and the rule flagged
+both before the era check went in.
+
+**`just bib-audit`** (new recipe) checks every DOI against Crossref: does it
+resolve, and has the work been retracted? Online, so it is deliberately NOT in
+`just verify` -- a gate that can fail because an API was slow is one people learn
+to skip. Being offline is reported, not failed.
+
+The retraction check shipped wrong the first time and looked right. Crossref
+relates a paper and its notices in both directions: `update-to` lives on the
+NOTICE and points at what it retracts, `updated-by` lives on the PAPER. Reading
+`update-to` returned nothing for the Wakefield MMR paper, retracted since 2010.
+Caught only by testing against a known-retracted DOI rather than reading the API
+docs and believing them. A test now pins the field name.
+
+Against the 52-entry bibliography this was developed on: 50 DOIs checked, none
+retracted, none unresolvable.
+
 ## 1.5.0
 
 **`misspelling`, from codespell's dictionary.** Runs on the same code-removed

@@ -10,7 +10,6 @@ with Piper, then muxes them into one .m4b with embedded chapter markers (titles
 
 Titles, descriptions, voice, and pronunciations all come from config.py.
 """
-import os
 import re
 import subprocess
 import sys
@@ -24,7 +23,6 @@ from extract_prose import (
 
 HERE = Path(__file__).resolve().parent
 VOICE = HERE / "models" / f"{config.VOICE_NAME}.onnx"
-PIPER = HERE / "piper" / "piper"
 
 # --- which document to narrate: `main` (default) or `si` ---------------------
 DOC = "si" if (len(sys.argv) > 1 and sys.argv[1] == "si") else "main"
@@ -97,15 +95,21 @@ def main():
     report_unmapped()
     CHAPDIR.mkdir(exist_ok=True)
 
-    env = {**os.environ, "LD_LIBRARY_PATH": str(HERE / "piper")}
+    # Piper is a library call, not a subprocess. It used to be a binary fetched
+    # by curl, which is why this once needed an LD_LIBRARY_PATH and a process per
+    # chapter. The ONNX model is loaded ONCE here rather than per chapter, which
+    # is the whole saving: it was being re-read from disk for every section.
+    if not VOICE.is_file():
+        raise SystemExit(f"error: no voice at {VOICE}\n  fix: just audio-setup")
+    from piper import PiperVoice
+    voice = PiperVoice.load(VOICE)
 
     # 1. synthesize each chapter to its own WAV, record durations
     wavs, starts, cur = [], [], 0.0
     for i, (title, text) in enumerate(chapters):
         wav = CHAPDIR / f"{i:02d}.wav"
-        subprocess.run([str(PIPER), "--model", str(VOICE), "--output_file", str(wav)],
-                       input=text.encode(), env=env, check=True,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        with wave.open(str(wav), "wb") as wf:
+            voice.synthesize_wav(text, wf)
         dur = wav_seconds(wav)
         starts.append(cur)
         cur += dur
