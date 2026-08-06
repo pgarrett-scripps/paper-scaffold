@@ -7,24 +7,41 @@ table but not in the paragraph beside it. A staleness checker can only notice
 drift after the fact. Sourcing the sentence from the same data as the table makes
 the two unable to disagree.
 
+WHO OWNS WHICH FIELD. The split follows what each field is:
+
+    value     a fact about the data. The script owns it, and updates it (with
+              its checksum and origin) on every run. Nobody else can honestly
+              write it.
+    fmt, unit, desc
+              presentation and documentation -- manuscript concerns. YOURS,
+              edited in stats.json. Deciding "two decimals with a sign" is an
+              editorial choice, not an analysis result.
+    expect    what the PROSE assumes ("fell", "roughly 80-90%"). That assumption
+              lives next to the sentence, so it is yours too, in stats.json.
+
+The arguments to `add()` beyond the value are SEEDS: they populate a new entry
+so the file is never born empty, and are ignored once the entry exists (with a
+note when they differ from the file, so a stale script argument is visible
+rather than silently dead).
+
 WHAT A GUARD IS FOR. A generated number can still make a sentence read wrong.
 "counts fell by #s(...)%" is correct only while the value is negative; the day a
 re-run turns it positive, the paper says "fell by -3.1%" and nothing complains.
-`sign` and `between` are assertions about what the analysis is allowed to
-produce. They fail HERE, when the number changes, naming the sentence's
-assumption -- not in review.
+`expect` is an assertion about what the analysis is allowed to produce. It fails
+HERE, when the number changes, naming the sentence's assumption -- not in
+review. The fresh value is checked against the guard AS IT STANDS IN THE FILE,
+because that is the one you maintain.
 
 WHO OWNS AN ENTRY. Every value records `origin.by`: either the script that wrote
 it, or the literal "hand". A script replaces only its own entries when it runs, so
-a number you type in by hand is never clobbered by `just assets`. That is the
-difference between a file the analysis owns and a file you own that the analysis
-contributes to, and it is the reason this is at the manuscript root rather than
-under si/.
+a number you type in by hand is never clobbered by `just assets`. `origin.at` is
+when the value last CHANGED -- a re-run that reproduces the same number does not
+touch it, so the date means something.
 
 A hand entry must carry `origin.note` saying where the number came from -- a
 protocol, a vendor spec, a reference. `tools/check_stats.py` enforces that, and
-re-runs the guards below against whatever is in the file, so a typed number is
-guarded exactly as tightly as a derived one.
+re-runs the guards against whatever is in the file, so a typed number is guarded
+exactly as tightly as a derived one.
 
 USAGE. One script per project writes the whole file:
 
@@ -48,19 +65,25 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 from _provenance import PAPER, caller_script, code_inputs, declared_inputs
 
 # At the manuscript root, not under si/, because this is no longer purely
-# generated output: `origin.by = "hand"` entries are written by a person and are
-# a supported way to use the file. si/ means "written by the analysis, never edit"
-# everywhere else, and a file you are invited to edit does not belong there.
+# generated output: `origin.by = "hand"` entries, and the fmt/unit/desc/expect
+# of every entry, are written by a person. si/ means "written by the analysis,
+# never edit" everywhere else, and a file you are invited to edit does not
+# belong there.
 OUT = PAPER / "stats.json"
 
-ABOUT = ("Numbers the manuscript states in prose, read as #s(\"<id>\"). Entries "
-         "with origin.by pointing at a script are rewritten by that script; "
-         "entries with origin.by = \"hand\" are yours and are never overwritten.")
+ABOUT = ("Numbers the manuscript states in prose, read as #s(\"<id>\"). Scripts "
+         "own each entry's value; fmt, unit, desc and expect are the author's "
+         "to edit here. Entries with origin.by = \"hand\" are entirely yours.")
+
+# Fields the author owns once an entry exists. The script's arguments seed them
+# on first write and are ignored afterwards.
+AUTHOR_FIELDS = ("fmt", "unit", "desc", "expect")
 
 
 class StatError(Exception):
@@ -72,20 +95,29 @@ def _caller_script() -> str:
     return caller_script()
 
 
-def _checksum(value, fmt: str) -> str:
-    """A short digest of what this entry asserts.
+def _now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _checksum(value) -> str:
+    """A short digest of the value, the one field only the generator may write.
 
     Catches a generated value edited by hand in stats.json. Re-deriving would
     catch it too and more convincingly, but re-deriving means re-running the
     analysis, which is exactly what `just verify` must not do. A hand-edit will
     not know to update this, so it is caught for free on every check.
 
+    v2 covers the VALUE alone. v1 also covered fmt, from when fmt was
+    script-owned; editing fmt in the file is supported now, so it must not
+    look like tampering. tools/check_stats.py still verifies v1 checksums, so
+    an existing manuscript upgrades without a wall of errors.
+
     Protection against accident, not against a determined edit -- someone who
     updates both is indistinguishable from the generator, and no scheme that
     keeps the record next to the value can do better.
     """
-    payload = json.dumps([value, fmt], sort_keys=True, separators=(",", ":"))
-    return "v1:" + hashlib.sha256(payload.encode()).hexdigest()[:16]
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return "v2:" + hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
 class Stats:
@@ -93,26 +125,30 @@ class Stats:
 
     def __init__(self) -> None:
         self._values: dict[str, dict] = {}
+        self._passed: dict[str, set] = {}     # which seed fields were explicit
 
-    def add(self, id: str, value, *, fmt: str = "", unit: str = "",
-            desc: str = "", sign: str | None = None,
+    def add(self, id: str, value, *, fmt: str | None = None,
+            unit: str | None = None, desc: str | None = None,
+            sign: str | None = None,
             between: tuple[float, float] | None = None) -> None:
         """Declare one number.
 
         `value`   the raw value. A str is allowed for things that are not
                   numbers (a name, a flag); guards are then rejected rather than
                   silently skipped.
+
+        Everything else SEEDS a new entry and is owned by stats.json once the
+        entry exists -- edit the file, not this call, to change them:
+
         `fmt`     Python format spec for the DISPLAY string: ".1f", ",.0f", "+.2f".
-                  Rounding lives here, next to the analysis, rather than being
-                  reimplemented in Typst.
         `sign`    "+", "-", or "nonzero". What the prose assumes about direction.
         `between` (lo, hi) inclusive. A plausibility band: catches a unit error
                   or a percentage that lands at 8400.
         `desc`    what the number is, for someone auditing the file later.
 
-        There is no `source`: it was a free-text path nothing read and nothing
-        verified, sitting beside `origin.by`, which names the script that wrote
-        the value and IS checked. One provenance field, and it is the true one.
+        Guards are enforced in `write()`, against the file's `expect` for an
+        existing entry and against these seeds for a new one -- the file's guard
+        is the one the author maintains, so it is the one that judges the value.
         """
         if id in self._values:
             raise StatError(f"{id!r} declared twice")
@@ -125,9 +161,9 @@ class Stats:
                 f"{id!r} has a guard but its value {value!r} is not numeric. "
                 f"Drop the guard, or pass the number rather than a pre-formatted "
                 f"string.")
-
-        if numeric:
-            self._check(id, float(value), sign, between)
+        if sign is not None and sign not in ("+", "-", "nonzero"):
+            raise StatError(
+                f"{id!r}: sign must be '+', '-' or 'nonzero', got {sign!r}")
 
         expect: dict = {}
         if sign is not None:
@@ -135,15 +171,10 @@ class Stats:
         if between is not None:
             expect["min"], expect["max"] = between
 
-        # No rendered string is stored. `fmt` is the instruction; the string is
-        # produced at build time by tools/render_stats.py, which is the only
-        # formatter in the pipeline. Storing both meant a derived field sitting
-        # in a source file, able to drift from the value beside it and needing
-        # its own check to notice.
-        #
-        # The result is discarded on purpose: this call exists only so a bad
-        # spec raises HERE, next to the analysis that chose it, rather than at
-        # render time with no idea which script is responsible.
+        # The seed fmt must at least apply to the value it arrives with. This
+        # raises HERE, next to the analysis that chose it, rather than at render
+        # time with no idea which script is responsible. The file's fmt is
+        # checked again in write(), because the author may have changed either.
         if fmt:
             try:
                 format(value, fmt)
@@ -152,50 +183,69 @@ class Stats:
                     f"{id!r}: cannot format {value!r} with fmt {fmt!r}: {e}"
                 ) from None
 
+        self._passed[id] = {f for f, v in
+                            (("fmt", fmt), ("unit", unit), ("desc", desc))
+                            if v is not None}
+        if sign is not None or between is not None:
+            self._passed[id].add("expect")
         self._values[id] = {
             "value": value,
-            "fmt": fmt,
-            "checksum": _checksum(value, fmt),
-            "unit": unit,
-            "desc": desc,
+            "fmt": fmt or "",
+            "unit": unit or "",
+            "desc": desc or "",
             "expect": expect,
-            "origin": {"by": _caller_script()},
         }
 
     @staticmethod
-    def _check(id: str, v: float, sign: str | None,
-               between: tuple[float, float] | None) -> None:
+    def _enforce(id: str, value, expect: dict) -> None:
+        """The fresh value against the guard that governs it.
+
+        `expect` may come from the file, where the author can write a one-sided
+        bound (`min` without `max`), so each bound is checked independently.
+        """
+        if not expect:
+            return
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise StatError(
+                f"{id!r} has a guard in stats.json but the analysis now "
+                f"produces {value!r}, which is not numeric. Remove the guard "
+                f"from the file, or fix the analysis.")
+        v = float(value)
+        sign = expect.get("sign")
         if sign is not None:
             ok = {"+": v > 0, "-": v < 0, "nonzero": v != 0}
             if sign not in ok:
                 raise StatError(
-                    f"{id!r}: sign must be '+', '-' or 'nonzero', got {sign!r}")
+                    f"{id!r}: expect.sign in stats.json must be '+', '-' or "
+                    f"'nonzero', got {sign!r}")
             if not ok[sign]:
                 raise StatError(
                     f"{id!r} is {v}, which violates sign '{sign}'.\n"
                     f"  The prose is written assuming this number is "
                     f"{ {'+': 'positive', '-': 'negative', 'nonzero': 'nonzero'}[sign] }. "
                     f"Either the analysis changed meaning, or the sentence that "
-                    f"reads it needs rewording.")
-        if between is not None:
-            lo, hi = between
-            if not lo <= v <= hi:
-                raise StatError(
-                    f"{id!r} is {v}, outside the expected range [{lo}, {hi}].\n"
-                    f"  Usually a unit error or a changed denominator. Widen the "
-                    f"band if the new value is genuinely right.")
+                    f"reads it needs rewording -- the guard lives in stats.json.")
+        lo, hi = expect.get("min"), expect.get("max")
+        if (lo is not None and v < lo) or (hi is not None and v > hi):
+            band = f"[{lo if lo is not None else '-inf'}, {hi if hi is not None else 'inf'}]"
+            raise StatError(
+                f"{id!r} is {v}, outside the expected range {band}.\n"
+                f"  Usually a unit error or a changed denominator. Widen the "
+                f"band in stats.json if the new value is genuinely right.")
 
     def write(self, out: Path | None = None, *, inputs: list[str] = ()) -> int:
         """Merge these values into stats.json and report what is unguarded.
 
-        MERGES rather than overwrites. Entries whose `origin.by` names this same
-        script are replaced (including ones this run no longer declares, which is
-        how a deleted `st.add` removes a value). Everything else is kept
-        untouched -- `origin.by = "hand"` entries above all, which is what makes
-        the file safe to edit.
+        MERGES rather than overwrites, twice over. Entries whose `origin.by`
+        names another script or "hand" are kept untouched. Entries this script
+        owns get their VALUE (and checksum, and origin) replaced, while their
+        fmt/unit/desc/expect are preserved as the author left them -- the seeds
+        from add() apply only when the entry does not exist yet. An id this run
+        no longer declares is removed, which is how a deleted `st.add` retires a
+        value.
 
-        The old behaviour was to write the whole file from scratch, so anything
-        added by hand survived until the next `just assets` and then vanished.
+        Top-level blocks this script does not own (`pinned` above all) are
+        carried through unchanged.
         """
         # PAPER_STATS_OUT redirects the write, which is how tools/check_stats.py
         # re-derives the generated values into a scratch file and diffs them
@@ -215,24 +265,31 @@ class Stats:
         p.parent.mkdir(parents=True, exist_ok=True)
         mine = _caller_script()
 
-        kept: dict[str, dict] = {}
+        existing_doc: dict = {}
         if p.is_file():
             try:
-                existing = json.loads(p.read_text()).get("values", {})
+                existing_doc = json.loads(p.read_text())
             except json.JSONDecodeError as e:
                 raise StatError(
                     f"{p.name} is not valid JSON ({e}), so this script cannot "
                     f"merge into it without losing whatever is there. Fix or "
                     f"delete the file.") from None
-            for id, rec in existing.items():
-                by = rec.get("origin", {}).get("by")
-                if by == mine:
-                    continue          # ours; this run rewrites it
-                if by is None and id in self._values:
-                    # Written before entries recorded an owner. Claimed by the
-                    # script that declares it now, which is what makes upgrading
-                    # an existing stats.json a no-op rather than a conflict.
-                    continue
+        existing = existing_doc.get("values", {})
+        if not isinstance(existing, dict):
+            existing = {}
+
+        kept: dict[str, dict] = {}
+        prior: dict[str, dict] = {}
+        for id, rec in existing.items():
+            by = rec.get("origin", {}).get("by")
+            if by == mine:
+                prior[id] = rec
+            elif by is None and id in self._values:
+                # Written before entries recorded an owner. Claimed by the
+                # script that declares it now, which is what makes upgrading
+                # an existing stats.json a no-op rather than a conflict.
+                prior[id] = rec
+            else:
                 kept[id] = rec
 
         clash = sorted(set(kept) & set(self._values))
@@ -242,17 +299,52 @@ class Stats:
                 f"{kept[clash[0]].get('origin', {}).get('by', '?')}, and this "
                 f"script declares it too. One id, one owner: rename one of them.")
 
-        merged = {**kept, **self._values}
+        overridden: list[tuple[str, str]] = []
+        final: dict[str, dict] = {}
+        for id, seed in self._values.items():
+            old = prior.get(id)
+            if old is None:
+                entry = dict(seed)
+                at = _now()
+            else:
+                entry = {"value": seed["value"]}
+                for f in AUTHOR_FIELDS:
+                    entry[f] = old.get(f, seed[f])
+                # A seed the script still passes, that the file has moved away
+                # from: dead code in the generator, collected for one note below.
+                overridden += [(id, f) for f in self._passed.get(id, ())
+                               if seed[f] != entry[f]]
+                # `at` is when the value last CHANGED, not when the script last
+                # ran -- a re-run that reproduces the number leaves it alone, so
+                # the timestamps in the file carry information.
+                unchanged = old.get("value") == seed["value"]
+                at = (old.get("origin", {}).get("at") or _now()) if unchanged \
+                    else _now()
+
+            # Enforced against the guard that governs this entry NOW -- the
+            # file's for an existing one, the seed's for a new one.
+            self._enforce(id, entry["value"], entry.get("expect") or {})
+            if entry.get("fmt"):
+                try:
+                    format(entry["value"], entry["fmt"])
+                except (TypeError, ValueError) as e:
+                    raise StatError(
+                        f"{id!r}: value {entry['value']!r} cannot be formatted "
+                        f"with fmt {entry['fmt']!r} (from stats.json): {e}. "
+                        f"Fix the fmt there, or the analysis.") from None
+
+            entry["checksum"] = _checksum(entry["value"])
+            entry["origin"] = {"by": mine, "at": at}
+            final[id] = entry
+
+        merged = {**kept, **final}
 
         # Recorded once per generator, not per entry: one script writes the whole
         # file by contract, and 1000 values do not need 1000 copies of the same
         # input map.
-        sources = {}
-        if p.is_file():
-            try:
-                sources = json.loads(p.read_text()).get("sources", {}) or {}
-            except json.JSONDecodeError:
-                sources = {}
+        sources = existing_doc.get("sources", {}) or {}
+        if not isinstance(sources, dict):
+            sources = {}
         sources = {k: v for k, v in sources.items() if k != mine}
         if self._values:
             sources[mine] = {**code_inputs(), **declared_inputs(inputs)}
@@ -261,19 +353,36 @@ class Stats:
                       f"the data behind these numbers cannot be detected. "
                       f"Pass write(inputs=[...]) if it reads any.")
 
+        # Everything else in the file -- `pinned`, and whatever a future version
+        # adds -- is the author's, and passes through untouched.
+        extra = {k: v for k, v in existing_doc.items()
+                 if k not in ("_about", "sources", "values")}
+
         p.write_text(json.dumps(
             {"_about": ABOUT,
+             **extra,
              "sources": dict(sorted(sources.items())),
              "values": dict(sorted(merged.items()))},
             indent=2, sort_keys=False) + "\n")
         hand = sum(1 for v in merged.values()
                    if v.get("origin", {}).get("by") == "hand")
 
+        if overridden:
+            ids = sorted({id for id, _ in overridden})
+            fields = sorted({f for _, f in overridden})
+            print(f"  note: {', '.join(fields)} passed to add() differ from "
+                  f"stats.json for {', '.join(ids[:4])}"
+                  f"{f' and {len(ids) - 4} more' if len(ids) > 4 else ''} and "
+                  f"were IGNORED -- those fields are owned by stats.json once "
+                  f"an entry exists. Edit them there, or drop the arguments.")
+
         # An unguarded number is not an error -- plenty of values have no
         # meaningful sign or range. It is reported so the set stays visible
         # rather than quietly becoming the default.
-        bare = [k for k, v in self._values.items()
-                if not v["expect"] and isinstance(v["value"], (int, float))]
+        bare = [id for id, v in final.items()
+                if not v.get("expect")
+                and isinstance(v["value"], (int, float))
+                and not isinstance(v["value"], bool)]
         # Not relative_to(PAPER): under PAPER_STATS_OUT the target is a scratch
         # file outside the manuscript, and relative_to raises on that.
         try:

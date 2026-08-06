@@ -288,6 +288,14 @@ check-stats:
 check-stats-deep:
   @uv run --quiet python tools/check_stats.py --deep
 
+# Files the author declares worth watching, beyond what any generator knows it
+# read: a raw export, a protocol document, an upstream config. Declared by hand
+# in stats.json under `pinned` (path: null), hashed by this, and watched by
+# `just check-stats` from then on. Re-run it to accept a deliberate change.
+# Record hashes for the files listed under `pinned` in stats.json
+pin:
+  @uv run --quiet python tools/pin.py
+
 # assets.json is the same contract for figures and tables: declared by the script
 # that writes them, referenced from the prose by id. Because the compile resolves
 # those ids, the manifest cannot rot into a file nobody reads -- which is what
@@ -387,16 +395,6 @@ watch: render-stats
 prose-check:
   @uv run --quiet python tools/prose_check.py
 
-# Every DOI in the bibliography, checked against Crossref: does it resolve, and
-# has the work been retracted?
-#
-# NOT part of `just verify`, deliberately. It needs the network, and a gate that
-# can fail because an API was slow is a gate people learn to skip. Run it before
-# submission, and again late: a paper can be retracted years after you cite it,
-# so the answer has a shelf life.
-#
-# Being offline is reported, not failed. That is a fact about your connection,
-# not a defect in the bibliography.
 # Pictures OF the manuscript, for revising it -- not pictures in it. Sentence
 # length, words per section, most-used words, a word cloud, and the age of the
 # bibliography.
@@ -411,6 +409,16 @@ prose-check:
 viz:
   @uv run --quiet python tools/viz.py
 
+# Every DOI in the bibliography, checked against Crossref: does it resolve, and
+# has the work been retracted?
+#
+# NOT part of `just verify`, deliberately. It needs the network, and a gate that
+# can fail because an API was slow is a gate people learn to skip. Run it before
+# submission, and again late: a paper can be retracted years after you cite it,
+# so the answer has a shelf life.
+#
+# Being offline is reported, not failed. That is a fact about your connection,
+# not a defect in the bibliography.
 # Check every DOI against Crossref for retractions and dead links (needs network)
 bib-audit:
   @uv run --quiet python tools/bib_audit.py
@@ -600,9 +608,17 @@ check-build:
 # generated assets they pull in. stats.typ and wordcount.typ are included here and
 # were missing from the git-based check they replace, so editing either one used
 # to leave the PDF looking current.
+#
+# The three tools that SHAPE the output are in the list too: render_stats.py and
+# typst_prose.py decide what every number looks like, typst2docx.py builds the
+# Word file. A change to any of them changes what a build produces, which is the
+# definition of stale this stamp exists to catch. The rest of tools/ only
+# measures or checks, so it stays out.
 _stamp-manuscript:
   @find paper.typ config.typ si-body.typ stats.typ stats.json assets.typ \
-      assets.json wordcount.typ references.bib si figures -type f -not -name '*.pyc' \
+      assets.json wordcount.typ references.bib si figures \
+      tools/render_stats.py tools/typst_prose.py tools/typst2docx.py \
+      -type f -not -name '*.pyc' \
       -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum | sha256sum | cut -d" " -f1
 
 # Record that <name> was just built from the current sources. Rewrites only its

@@ -80,10 +80,13 @@ def _guard(id: str, rec: dict) -> list[Finding]:
             out.append(Finding("error", id,
                 f"is {v}, but the prose assumes it is {word}. Either the value "
                 f"is wrong or the sentence reading it needs rewording."))
+    # Each bound on its own: expect is author-edited, and a one-sided band
+    # (`min` with no `max`) is a legitimate thing to write there.
     lo, hi = expect.get("min"), expect.get("max")
-    if lo is not None and hi is not None and not lo <= v <= hi:
+    if (lo is not None and v < lo) or (hi is not None and v > hi):
+        band = f"[{lo if lo is not None else '-inf'}, {hi if hi is not None else 'inf'}]"
         out.append(Finding("error", id,
-            f"is {v}, outside its declared range [{lo}, {hi}] -- usually a unit "
+            f"is {v}, outside its declared range {band} -- usually a unit "
             f"error or a changed denominator"))
     return out
 
@@ -115,7 +118,13 @@ def _checksum(values: dict) -> list[Finding]:
 
     Re-deriving catches this too, and more convincingly -- but re-deriving means
     re-running the analysis, which the default path must not do. The generator
-    writes a digest of `value` + `fmt`; a hand-edit does not know to update it.
+    writes a digest of the value; a hand-edit does not know to update it.
+
+    Two versions. v2 covers the VALUE alone: fmt (with unit, desc and expect) is
+    the author's to edit in the file, so changing it must not read as tampering.
+    v1, written before that split, also covered fmt -- still verified so an
+    existing manuscript upgrades without a wall of errors, and rewritten to v2 by
+    the next `just assets`.
 
     Hand-entered values are skipped: nothing generated their checksum, and there
     is nothing to compare against. Their guarantee is the guard and the note.
@@ -128,15 +137,64 @@ def _checksum(values: dict) -> list[Finding]:
         want = rec.get("checksum")
         if not want:
             continue          # written before checksums; `just assets` adds one
-        payload = json.dumps([rec.get("value"), rec.get("fmt", "")],
-                             sort_keys=True, separators=(",", ":"))
-        have = "v1:" + hashlib.sha256(payload.encode()).hexdigest()[:16]
+        if want.startswith("v1:"):
+            payload = json.dumps([rec.get("value"), rec.get("fmt", "")],
+                                 sort_keys=True, separators=(",", ":"))
+        elif want.startswith("v2:"):
+            payload = json.dumps(rec.get("value"),
+                                 sort_keys=True, separators=(",", ":"))
+        else:
+            out.append(Finding("error", id,
+                f"has checksum {want!r}, which no version of this scaffold "
+                f"wrote -- run `just assets` to re-record it"))
+            continue
+        version = want[:3]
+        have = version + hashlib.sha256(payload.encode()).hexdigest()[:16]
         if have != want:
+            hint = (" (v1 also covered fmt, so this can be a legitimate fmt "
+                    "edit made before `just assets` re-recorded it)"
+                    if version == "v1:" else "")
             out.append(Finding("error", id,
                 f"value {rec.get('value')!r} does not match the checksum its "
-                f"generator recorded, so it was edited by hand. Change the "
-                f"analysis and re-run `just assets`, or take the value over with "
-                f'origin.by = "hand" and a note.'))
+                f"generator recorded, so it was edited by hand{hint}. Change "
+                f"the analysis and re-run `just assets`, or take the value over "
+                f'with origin.by = "hand" and a note.'))
+    return out
+
+
+def _pinned(doc: dict) -> list[Finding]:
+    """Author-pinned files: paths the author declared worth watching, by hand.
+
+    Nothing discovers these programmatically -- that is the point. A generator's
+    inputs are recorded by the generator; `pinned` is for everything else the
+    manuscript's numbers quietly depend on (a raw export, a protocol document, a
+    config), declared in stats.json and hashed by `just pin`.
+
+    A pin with no recorded hash is an error: the declaration says the file
+    matters, and until `just pin` runs nothing can say whether it moved. A
+    pinned file that is absent is a note, like an absent source -- data usually
+    lives outside the repository, and a fresh clone cannot act on it.
+    """
+    import hashlib
+    out: list[Finding] = []
+    for src, want in sorted((doc.get("pinned") or {}).items()):
+        p = ROOT / src
+        if not want:
+            out.append(Finding("error", src,
+                "is listed in `pinned` but has no recorded hash -- run: just pin"))
+            continue
+        if not p.is_file():
+            out.append(Finding("note", src,
+                "is pinned but not present, so it could not be verified"))
+            continue
+        h = hashlib.sha256()
+        with p.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        if "sha256:" + h.hexdigest() != want:
+            out.append(Finding("error", src,
+                "has changed since it was pinned. Check the numbers that "
+                "depend on it, then re-record it: just pin"))
     return out
 
 
@@ -266,6 +324,7 @@ def main() -> int:
         found += _guard(id, rec)
     found += _checksum(values)
     found += _sources(doc)
+    found += _pinned(doc)
     # Opt-in, because it re-runs the analysis. See the module docstring.
     if "--deep" in sys.argv:
         found += _rederive(values)
@@ -278,7 +337,9 @@ def main() -> int:
     for f in found:
         print(f)
     deep = " (re-derived)" if "--deep" in sys.argv else ""
+    pins = len(doc.get("pinned") or {})
     print(f"  {len(values)} declared value(s), {hand} hand-entered{deep}"
+          + (f", {pins} pinned file(s)" if pins else "")
           + (f", {len(errors)} error(s)" if errors else ", no errors"))
     return 1 if errors else 0
 

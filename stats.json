@@ -1,8 +1,8 @@
 {
-  "_about": "Numbers the manuscript states in prose, read as #s(\"<id>\"). Entries with origin.by pointing at a script are rewritten by that script; entries with origin.by = \"hand\" are yours and are never overwritten.",
+  "_about": "Numbers the manuscript states in prose, read as #s(\"<id>\"). Scripts own each entry's value; fmt, unit, desc and expect are the author's to edit here. Entries with origin.by = \"hand\" are entirely yours.",
   "sources": {
     "analysis/scripts/gen_stats.py": {
-      "analysis/scripts/gen_stats.py": "sha256:2427564e0dcb27bb2a11a7499a9caa6e02660f601d086bf9dabc64a3ce3509ff",
+      "analysis/scripts/gen_stats.py": "sha256:556323f33fde4e3fbc67c36ed12de83e931de126b6efb2f6d5817329cef527e7",
       "analysis/scripts/example_data.csv": "sha256:c19c83771308bceecc3f22425ecea53ee3c37db0af1e4ceeea61e844b212b187"
     }
   },
@@ -10,44 +10,46 @@
     "cohort.n_conditions": {
       "value": 3,
       "fmt": ",",
-      "checksum": "v1:113e3581f3a835a4",
       "unit": "",
       "desc": "Number of conditions compared",
       "expect": {
         "sign": "+"
       },
+      "checksum": "v2:4e07408562bedb8b",
       "origin": {
-        "by": "analysis/scripts/gen_stats.py"
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-08-06T21:58:45Z"
       }
     },
     "cohort.total_n": {
       "value": 35,
       "fmt": ",",
-      "checksum": "v1:c276b59bf2191046",
       "unit": "",
       "desc": "Total participants across all conditions",
       "expect": {
         "sign": "+"
       },
+      "checksum": "v2:9f14025af0065b30",
       "origin": {
-        "by": "analysis/scripts/gen_stats.py"
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-08-06T21:58:45Z"
       }
     },
     "effect.best_condition": {
       "value": "Treated",
       "fmt": "",
-      "checksum": "v1:29810d8e074bbb3c",
       "unit": "",
       "desc": "Condition with the highest observed effect",
       "expect": {},
+      "checksum": "v2:64ed304f3773f93d",
       "origin": {
-        "by": "analysis/scripts/gen_stats.py"
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-08-06T21:58:45Z"
       }
     },
     "effect.treated_fold": {
       "value": 2.068627450980392,
       "fmt": ".2f",
-      "checksum": "v1:54f50f3f1b0df883",
       "unit": "x",
       "desc": "Treated effect as a fold change over Control",
       "expect": {
@@ -55,14 +57,15 @@
         "min": 0.1,
         "max": 100
       },
+      "checksum": "v2:8e4ac6cfdcc1f48c",
       "origin": {
-        "by": "analysis/scripts/gen_stats.py"
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-08-06T21:58:45Z"
       }
     },
     "effect.treated_over_control": {
       "value": 1.0899999999999999,
       "fmt": "+.2f",
-      "checksum": "v1:db6ae27ce0b2dfeb",
       "unit": "",
       "desc": "Treated minus Control observed effect",
       "expect": {
@@ -70,8 +73,10 @@
         "min": 0,
         "max": 10
       },
+      "checksum": "v2:f6dbc595fc2e93a4",
       "origin": {
-        "by": "analysis/scripts/gen_stats.py"
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-08-06T21:58:45Z"
       }
     }
   }

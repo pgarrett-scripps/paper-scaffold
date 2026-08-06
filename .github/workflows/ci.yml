@@ -103,15 +103,39 @@ jobs:
       # rather than the .docx because a count of embedded images cannot tell a
       # figure from a rasterized equation: on typst 0.13 the export drops the
       # figure and keeps both equations, so the .docx still contains images and
-      # still looks fine. One <img> per image() call is the property that
+      # still looks fine. One <img> per rendered figure is the property that
       # actually distinguishes them.
+      #
+      # Figures are counted as fig("...") call sites (plus any direct image()
+      # calls), with // comments stripped first. The first version counted
+      # image() in the sources, which went to zero the day figures moved behind
+      # the assets manifest -- a check that compares against zero passes forever.
+      # The count therefore also FAILS the step when it finds no figures at all,
+      # so it cannot silently die the same way twice.
       - name: Every figure survives the HTML export
         run: |
           typst compile --features html --input docx=true -f html \
             paper.typ "$RUNNER_TEMP/check.html" 2>/dev/null
-          calls=$(cat paper.typ si-body.typ si/*.typ 2>/dev/null | grep -o 'image("' | wc -l)
+          calls=$(uv run --quiet python - <<'PY'
+          import re
+          from pathlib import Path
+          src = ""
+          for p in ["paper.typ", "si-body.typ", "config.typ",
+                    *sorted(map(str, Path("si").glob("*.typ")))]:
+              src += "\n" + re.sub(r"//[^\n]*", "", Path(p).read_text())
+          print(len(re.findall(r'\bfig\(\s*"', src))
+                + len(re.findall(r'\bimage\(\s*"', src)))
+          PY
+          )
           imgs=$(grep -o '<img' "$RUNNER_TEMP/check.html" | wc -l)
-          echo "  image() calls in source: $calls, <img> in export: $imgs"
+          echo "  figure references in source: $calls, <img> in export: $imgs"
+          if [ "$calls" -eq 0 ]; then
+            echo "FAIL: found no figure references in the sources. Either the"
+            echo "  scaffold really has no figures, or this count no longer"
+            echo "  matches how figures are written -- both mean this check is"
+            echo "  not checking anything."
+            exit 1
+          fi
           if [ "$imgs" -lt "$calls" ]; then
             echo "FAIL: the HTML export dropped $((calls - imgs)) figure(s)."
             echo "  The Word export would be produced anyway, look finished, and"

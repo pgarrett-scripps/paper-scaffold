@@ -340,6 +340,7 @@ def structural_cases() -> bool:
     ok &= asset_cases()
     ok &= stats_cases()
     ok &= check_stats_cases()
+    ok &= stats_ownership_cases()
     ok &= check_assets_cases()
     ok &= suppression_cases()
     ok &= new_paper_cases()
@@ -709,8 +710,10 @@ def stats_cases() -> bool:
             print("  derivable-number: reported findings with no stats.json")
             ok = False
 
-    # 5. guards. Each must fail at declaration, which is the whole point: the
-    #    build breaks when the analysis changes, not when a reader notices.
+    # 5. guards. Shape errors (a guard on a label, a misspelt sign) fail at
+    #    add(), next to the line that wrote them. VALUE violations fail at
+    #    write(), because the guard that judges a value is the one in the file
+    #    -- the author's -- and the file is only known then.
     sys.path.insert(0, str(ROOT / "analysis" / "scripts"))
     try:
         from _stats import StatError, Stats
@@ -718,15 +721,29 @@ def stats_cases() -> bool:
         print("  stats guards: analysis/scripts/_stats.py not importable")
         return False
 
-    guards = [
-        ("sign flip", 1.09, dict(sign="-")),
-        ("out of range", 1.09, dict(between=(0, 1))),
+    for name, value, kw in [
         ("guard on a non-number", "Treated", dict(sign="+")),
         ("nonsense sign", 1.0, dict(sign="up")),
-    ]
-    for name, value, kw in guards:
+    ]:
         try:
             Stats().add("x.y", value, **kw)
+            print(f"  stats guard [{name}]: accepted a seed it should reject")
+            ok = False
+        except StatError:
+            pass
+
+    import io
+    from contextlib import redirect_stdout
+    for name, value, kw in [
+        ("sign flip", 1.09, dict(sign="-")),
+        ("out of range", 1.09, dict(between=(0, 1))),
+    ]:
+        st = Stats()
+        st.add("x.y", value, **kw)
+        try:
+            with tempfile.TemporaryDirectory() as d, \
+                    redirect_stdout(io.StringIO()):
+                st.write(out=Path(d) / "s.json")
             print(f"  stats guard [{name}]: accepted a value it should reject")
             ok = False
         except StatError:
@@ -807,6 +824,12 @@ def check_stats_cases() -> bool:
         ("sign guard satisfied",   {"expect": {"sign": "+"}}, 0),
         ("range guard violated",
          {"value": 8400.0, "expect": {"min": 0, "max": 100}}, 1),
+        # expect is author-edited, so a one-sided band is a legitimate thing to
+        # find in the file -- it must be enforced, not silently skipped, which
+        # is what a `min and max` condition used to do.
+        ("one-sided min violated", {"value": -1.0, "expect": {"min": 0}}, 1),
+        ("one-sided min satisfied", {"expect": {"min": 0}}, 0),
+        ("one-sided max violated", {"value": 500.0, "expect": {"max": 100}}, 1),
         # A label carries no guard and must not be treated as a broken number.
         ("non-numeric with no guard",
          {"value": "Treated", "fmt": "", "expect": {}}, 0),
@@ -824,14 +847,23 @@ def check_stats_cases() -> bool:
 
     # The checksum is what makes re-derivation affordable to skip. It has to
     # catch a hand-edited generated value using only what is in the file, since
-    # the default path must not re-run the analysis.
+    # the default path must not re-run the analysis. v2 covers the value ALONE:
+    # fmt is the author's to edit now, so changing it must not read as tampering.
+    # v1, from before that split, covered fmt too and is still verified so an
+    # existing manuscript upgrades without a wall of errors.
+    import hashlib
     import _stats
-    good = {"value": 35, "fmt": ",", "checksum": _stats._checksum(35, ","),
+    v1 = "v1:" + hashlib.sha256(json.dumps(
+        [35, ","], sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:16]
+    good = {"value": 35, "fmt": ",", "checksum": _stats._checksum(35),
             "origin": {"by": "analysis/scripts/gen_stats.py"}}
     checks = [
         ("intact", good, 0),
         ("value edited", {**good, "value": 999}, 1),
-        ("fmt edited", {**good, "fmt": ".2f"}, 1),
+        ("fmt edited, which the author owns", {**good, "fmt": ".2f"}, 0),
+        ("v1 intact", {**good, "checksum": v1}, 0),
+        ("v1 value edited", {**good, "checksum": v1, "value": 999}, 1),
+        ("unknown checksum version", {**good, "checksum": "v9:beef"}, 1),
         # Written before checksums existed: reported by nothing, so an upgrade
         # is not a wall of errors. `just assets` adds one.
         ("no checksum recorded", {k: v for k, v in good.items() if k != "checksum"}, 0),
@@ -846,6 +878,38 @@ def check_stats_cases() -> bool:
             print(f"  check-stats checksum [{name}]: expected {want}, got {got}")
             ok = False
 
+    # Pinned files: declared by the author, hashed by `just pin`, watched from
+    # then on. A pin with no hash is an error (the declaration says the file
+    # matters and nothing is watching it yet); an absent file is a note, since a
+    # fresh clone usually lacks the data.
+    bib = ROOT / "references.bib"
+    right = "sha256:" + hashlib.sha256(bib.read_bytes()).hexdigest()
+    pin_cases = [
+        ("unpinned", {"references.bib": None}, 1),
+        ("pinned and intact", {"references.bib": right}, 0),
+        ("pinned and changed", {"references.bib": "sha256:" + "0" * 64}, 1),
+        ("pinned but absent", {"no/such/file.csv": "sha256:" + "0" * 64}, 0),
+        ("no pinned block at all", None, 0),
+    ]
+    for name, pinned, want in pin_cases:
+        doc = {"values": {}} if pinned is None else {"values": {}, "pinned": pinned}
+        got = len([f for f in cs._pinned(doc) if f.level == "error"])
+        if got != want:
+            print(f"  check-stats pinned [{name}]: expected {want}, got {got}")
+            ok = False
+
+    # And the tool that records them: fills a null, refuses a missing file.
+    import pin as pin_tool
+    doc = {"pinned": {"references.bib": None}}
+    _, rc = pin_tool.pin(doc, ROOT)
+    if rc != 0 or doc["pinned"]["references.bib"] != right:
+        print("  pin: did not record the hash of a present file")
+        ok = False
+    _, rc = pin_tool.pin({"pinned": {"no/such/file.csv": None}}, ROOT)
+    if rc == 0:
+        print("  pin: exited 0 while failing to pin a missing file")
+        ok = False
+
     # Unused ids are reported against the real manuscript sources, so this only
     # asserts the shape: an id nothing could possibly call must be reported.
     with tempfile.TemporaryDirectory() as d:
@@ -855,6 +919,157 @@ def check_stats_cases() -> bool:
         if not any(f.level == "warn" for f in found):
             print("  check-stats: an unread id was not reported")
             ok = False
+
+    return ok
+
+
+def stats_ownership_cases() -> bool:
+    """The ownership split in stats.json: the script owns each entry's VALUE,
+    the author owns fmt/unit/desc/expect once the entry exists.
+
+    Each case is a way the split could quietly fail: a seed clobbering an author
+    edit, an author guard not judging the fresh value, a stale script argument
+    dying silently instead of with a note, a timestamp that means "the script
+    ran" rather than "the value changed", or a pinned block lost in the rewrite.
+    """
+    import io
+    import json
+    from contextlib import redirect_stdout
+    sys.path.insert(0, str(ROOT / "analysis" / "scripts"))
+    import _stats
+    from _stats import StatError, Stats
+    ok = True
+
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "stats.json"
+
+        def run(st):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                st.write(out=p)
+            return buf.getvalue()
+
+        # 1. seeds populate a NEW entry in full.
+        st = Stats()
+        st.add("m.x", 1.5, fmt=".2f", unit="kg", desc="mass",
+               sign="+", between=(0, 10))
+        run(st)
+        doc = json.loads(p.read_text())
+        e = doc["values"]["m.x"]
+        if e["fmt"] != ".2f" or e["unit"] != "kg" or \
+                e["expect"] != {"sign": "+", "min": 0, "max": 10}:
+            print(f"  ownership: seeds did not populate a new entry -- {e}")
+            ok = False
+        if not e.get("origin", {}).get("at"):
+            print("  ownership: a new entry got no origin.at")
+            ok = False
+        if not str(e.get("checksum", "")).startswith("v2:"):
+            print(f"  ownership: expected a v2 checksum, got {e.get('checksum')!r}")
+            ok = False
+        first_at = e["origin"]["at"]
+
+        # 2. author edits survive a re-run, and the stale seeds are called out.
+        e["fmt"], e["unit"], e["expect"] = ".1f", "g", {"min": 0}
+        p.write_text(json.dumps(doc))
+        st = Stats()
+        st.add("m.x", 1.5, fmt=".2f", sign="+")     # stale seeds, same value
+        out = run(st)
+        e2 = json.loads(p.read_text())["values"]["m.x"]
+        if (e2["fmt"], e2["unit"], e2["expect"]) != (".1f", "g", {"min": 0}):
+            print(f"  ownership: author edits were clobbered by seeds -- {e2}")
+            ok = False
+        if "IGNORED" not in out:
+            print("  ownership: stale seeds were dropped with no note")
+            ok = False
+        if e2["origin"]["at"] != first_at:
+            print("  ownership: origin.at moved although the value did not")
+            ok = False
+
+        # 3. steady state: no seeds, no note; a changed value updates value,
+        #    checksum and origin.at while the author fields stay put.
+        st = Stats()
+        st.add("m.x", 2.5)
+        out = run(st)
+        e3 = json.loads(p.read_text())["values"]["m.x"]
+        if "IGNORED" in out:
+            print("  ownership: a seed note fired with no seeds passed")
+            ok = False
+        if e3["value"] != 2.5 or e3["checksum"] != _stats._checksum(2.5):
+            print(f"  ownership: value/checksum not updated -- {e3}")
+            ok = False
+        if e3["fmt"] != ".1f":
+            print("  ownership: author fmt lost on a value change")
+            ok = False
+
+        # 4. the FILE's guard judges the fresh value. The author narrowed it to
+        #    min 0; the analysis producing a negative must fail the write.
+        st = Stats()
+        st.add("m.x", -1.0)
+        try:
+            run(st)
+            print("  ownership: the file's guard did not judge the new value")
+            ok = False
+        except StatError:
+            pass
+        if json.loads(p.read_text())["values"]["m.x"]["value"] != 2.5:
+            print("  ownership: a failed write still modified the file")
+            ok = False
+
+        # 5. the file's fmt must apply to the new value, and fail loudly when
+        #    the analysis changes type under it.
+        doc = json.loads(p.read_text())
+        doc["values"]["m.x"]["expect"] = {}
+        p.write_text(json.dumps(doc))
+        st = Stats()
+        st.add("m.x", "a label now")
+        try:
+            run(st)
+            print("  ownership: a numeric fmt silently accepted a string value")
+            ok = False
+        except StatError:
+            pass
+
+        # 6. blocks the script does not own pass through the rewrite untouched.
+        doc = json.loads(p.read_text())
+        doc["pinned"] = {"some/file.csv": "sha256:abc"}
+        p.write_text(json.dumps(doc))
+        st = Stats()
+        st.add("m.x", 2.5)
+        run(st)
+        if json.loads(p.read_text()).get("pinned") != {"some/file.csv": "sha256:abc"}:
+            print("  ownership: the pinned block was lost in a generator rewrite")
+            ok = False
+
+    # 7. assets: origin.at means "the output changed", not "the script ran".
+    import _assets
+    saved = _assets.OUT
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            _assets.OUT = Path(d) / "assets.json"
+            kw = dict(kind="figure", inputs=[], desc="d")
+            with redirect_stdout(io.StringIO()):
+                _assets.record("fig.t", "figures/example_figure.png", **kw)
+            doc = json.loads(_assets.OUT.read_text())
+            old = "2000-01-01T00:00:00Z"
+            doc["values"]["fig.t"]["origin"]["at"] = old
+            _assets.OUT.write_text(json.dumps(doc))
+            with redirect_stdout(io.StringIO()):
+                _assets.record("fig.t", "figures/example_figure.png", **kw)
+            at = json.loads(_assets.OUT.read_text())["values"]["fig.t"]["origin"]["at"]
+            if at != old:
+                print("  asset origin.at: moved although the output did not change")
+                ok = False
+            doc = json.loads(_assets.OUT.read_text())
+            doc["values"]["fig.t"]["hash"] = "sha256:" + "0" * 64
+            _assets.OUT.write_text(json.dumps(doc))
+            with redirect_stdout(io.StringIO()):
+                _assets.record("fig.t", "figures/example_figure.png", **kw)
+            at = json.loads(_assets.OUT.read_text())["values"]["fig.t"]["origin"]["at"]
+            if at == old:
+                print("  asset origin.at: kept a stale date across an output change")
+                ok = False
+    finally:
+        _assets.OUT = saved
 
     return ok
 

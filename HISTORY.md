@@ -45,6 +45,73 @@ rather than a copy.
 
 ---
 
+## 3.3.0
+
+stats.json's entries were owned whole by whichever script wrote them, which put
+editorial decisions in the wrong file: changing how a number is typeset, or what
+the prose assumes about it, meant editing the analysis. The ownership is now
+split by field, following what each field is.
+
+### The script owns the value; the author owns everything else
+
+In a generated entry, the script writes `value`, its `checksum`, and `origin`.
+`fmt`, `unit`, `desc` and `expect` are the author's, edited in stats.json, and
+survive `just assets` -- the arguments to `st.add(...)` beyond the value are
+seeds that populate a NEW entry and are ignored afterwards. A seed that differs
+from the file is ignored WITH A NOTE, so a stale script argument is visible
+rather than silently fighting the file.
+
+Two consequences worth naming:
+
+- The fresh value is judged against the guard as it stands in the file -- the
+  one the author maintains -- not against whatever the script passed. A guard
+  violation still fails `just assets`, now naming stats.json as where the
+  assumption lives. One-sided bounds (`min` with no `max`) are supported,
+  including in `check_stats`, whose range check previously required both bounds
+  and silently skipped a one-sided one.
+- The checksum narrowed to the value alone ("v2"). v1 also covered fmt, from
+  when fmt was script-owned; editing fmt must not read as tampering now. v1
+  checksums are still verified, so an existing manuscript upgrades cleanly and
+  the next `just assets` rewrites them.
+
+This also dissolves a hole rather than patching it: hand-editing `expect` on a
+generated entry used to be undetectable drift that the next regeneration
+silently reverted. It is now the supported way to state an assumption.
+
+### Pinned files: watching what no script reads
+
+The provenance recorded automatically stops at what a generator imported or
+declared. For files that matter without any script reading them -- a raw
+export, a protocol document -- the author declares a `pinned` block in
+stats.json (`"path": null`) and runs `just pin` to record the hash. From then
+on `just check-stats` reports a change, and accepting one is deliberate: re-run
+`just pin`. Generators carry the block through untouched.
+
+### `origin.at`: when it last changed, not when the script last ran
+
+Every stats entry and every asset records `origin.at`. A regeneration that
+reproduces the same value or byte-identical output keeps the old date, so the
+timestamp carries information instead of churning on every `just assets`.
+
+### Fixed
+
+- **The CI "every figure survives the Word export" check was dead.** It counted
+  `image(` calls in the sources, which went to zero when figures moved behind
+  the assets manifest -- so it compared against zero and passed forever. It now
+  counts `fig("` references (plus direct `image(` calls) with comments
+  stripped, and fails outright when it finds none, so it cannot silently die
+  the same way twice.
+- `.build-stamp` now covers the three tools that shape the output
+  (render_stats.py, typst_prose.py, typst2docx.py): editing them changes what a
+  build produces, and used to leave paper.pdf looking current.
+- Stale references: gen_stats.py and analysis/justfile still said stats.json
+  lived under si/; CLAUDE.md and README named a `check-assets-manifest` recipe
+  that is actually `check-assets`; .gitignore listed an intermediate that no
+  longer exists; the justfile's viz and bib-audit doc comments had been
+  interleaved by an edit.
+
+---
+
 ## 3.2.0
 
 `just verify` re-ran the analysis. That was a bug in 3.0.0 and it hid behind the

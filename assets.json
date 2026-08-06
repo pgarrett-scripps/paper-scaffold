@@ -7,7 +7,8 @@
       "desc": "Observed ratio by condition, with confidence intervals",
       "hash": "sha256:b100e70d41e947791bd5906e575d2792b06fbe87b4fa4448d216beb38dbb253a",
       "origin": {
-        "by": "analysis/scripts/gen_example_figure.py"
+        "by": "analysis/scripts/gen_example_figure.py",
+        "at": "2026-08-06T21:58:45Z"
       },
       "inputs": {
         "analysis/scripts/example_data.csv": "sha256:c19c83771308bceecc3f22425ecea53ee3c37db0af1e4ceeea61e844b212b187",
@@ -20,7 +21,8 @@
       "desc": "Per-condition observed and expected values",
       "hash": "sha256:5ac4cd22caedbe2afd8e1c62d8d2c073e0196b27c171ffd85b1654e69a3b5f96",
       "origin": {
-        "by": "analysis/scripts/gen_example_table.py"
+        "by": "analysis/scripts/gen_example_table.py",
+        "at": "2026-08-06T21:58:45Z"
       },
       "inputs": {
         "analysis/scripts/example_data.csv": "sha256:c19c83771308bceecc3f22425ecea53ee3c37db0af1e4ceeea61e844b212b187",

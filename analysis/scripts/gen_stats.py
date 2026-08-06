@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write si/stats.json: every number the manuscript states in prose.
+"""Write stats.json at the manuscript root: every number the prose states.
 
 THIS IS THE TEMPLATE FOR THE stats CONTRACT. Replace the example values with
 your own. The rules that make it worth following:
@@ -11,9 +11,12 @@ your own. The rules that make it worth following:
      script. A number that only exists in the manuscript is a number nobody can
      reproduce.
   3. Guard anything the prose makes an assumption about. If a sentence says
-     "higher", the value is guarded `sign="+"`, so the day it turns negative this
-     script fails instead of the paper contradicting itself.
-  4. Rounding is set here with `fmt`, next to the analysis, not in Typst.
+     "higher", the value is guarded `sign="+"`, so the day it turns negative the
+     build fails instead of the paper contradicting itself.
+  4. This script owns each entry's VALUE. fmt, unit, desc and the guards are
+     SEEDS: they fill in a new entry, and from then on they live in stats.json,
+     where the author edits them. A seed that differs from the file is ignored
+     with a note, so a stale argument here cannot silently fight the file.
 
 Unlike the table and figure generators there is ONE of these per project: it
 writes a single file, so splitting it across scripts would mean each clobbering

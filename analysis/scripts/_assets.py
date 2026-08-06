@@ -15,7 +15,10 @@ WHAT AN ENTRY RECORDS.
     path     where the file is, relative to the manuscript root
     kind     "figure" or "table" -- what the manuscript will wrap it in
     hash     sha256 of the output, so a hand-edit to a generated file is caught
-    origin   { "by": the script that wrote it }
+    origin   { "by": the script that wrote it,
+               "at": when the output last CHANGED. A regeneration that produces
+                     byte-identical output keeps the old date, so the timestamp
+                     says when the figure last actually moved. }
     inputs   { path: sha256 } for everything it was built from
 
 INPUTS ARE PART DECLARED, PART AUTOMATIC. The generator script and every module
@@ -43,6 +46,7 @@ answer beats an implicit one that looks total.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from _provenance import PAPER, caller_script, code_inputs, declared_inputs, sha
@@ -117,11 +121,21 @@ def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
             raise AssetError(
                 f"assets.json is not valid JSON ({e}); fix or delete it") from None
 
-    owner = doc["values"].get(id, {}).get("origin", {}).get("by")
+    old = doc["values"].get(id, {})
+    owner = old.get("origin", {}).get("by")
     if owner and owner != entry["origin"]["by"]:
         raise AssetError(
             f"{id!r} is already declared by {owner}, and {entry['origin']['by']} "
             f"declares it too. One id, one owner: rename one of them.")
+
+    # `at` is when the OUTPUT last changed, not when the script last ran. A
+    # regeneration that produces byte-identical output (seeded RNG, no embedded
+    # timestamps) keeps the old date, so the field carries information.
+    if old.get("hash") == entry["hash"] and old.get("origin", {}).get("at"):
+        entry["origin"]["at"] = old["origin"]["at"]
+    else:
+        entry["origin"]["at"] = datetime.now(timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ")
 
     doc["_about"] = ABOUT
     doc["values"][id] = entry

@@ -46,7 +46,7 @@ figures:
     uv run --quiet "$s"
   done
 
-# Numbers the prose states -> ../si/stats.json, read back as #s("id").
+# Numbers the prose states -> ../stats.json, read back as #s("id").
 #
 # ONE script, not a glob: every generator here would write the same file, so a
 # second one would silently clobber the first. Guards declared in gen_stats.py

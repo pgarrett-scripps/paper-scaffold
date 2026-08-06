@@ -75,6 +75,7 @@ have to drop their import. The exact edits are under
 | `just readability` | Flesch-Kincaid / reading ease / fog without rebuilding |
 | `just assets` | Regenerate every generated figure, table and prose number (delegates to `analysis/`) |
 | `just check` | Report every artifact that has fallen behind its source |
+| `just pin` | Record hashes for the files listed under `pinned` in `stats.json` |
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
 | `just prose-check` | Check the prose, plus figure resolution and table shape, against STYLE.md |
 | `just prose-check --list-rules` | Every rule, its severity, and how to configure it |
@@ -189,10 +190,12 @@ Three things make it hold:
 - **An unknown id fails the build.** `#s(...)` panics at compile time, so a
   number that stops existing is loud rather than blank. `tools/readability.py` and the
   narrator resolve the same call, because they read the source, not the PDF.
-- **Guards run when the file is generated.** A value can be declared `sign="-"`
-  or `between=(0, 100)`. If a sentence says "fell" and a re-run turns the value
-  positive, `just assets` fails and names the assumption, instead of the paper
-  shipping "fell by -3.1%". A plausibility band catches the unit error.
+- **Guards run when the file is generated.** Each entry's `expect` block can
+  assert a sign or a plausibility band. If a sentence says "fell" and a re-run
+  turns the value positive, `just assets` fails and names the assumption,
+  instead of the paper shipping "fell by -3.1%". A band catches the unit error.
+  The fresh value is judged against the guard *as it stands in `stats.json`* —
+  the author's — not against whatever the script happened to pass.
 - **`just prose-check` flags a typed numeral** that matches a declared value, so
   the rule is enforced rather than merely intended.
 - **`just check-stats` re-checks the committed file, without running anything.**
@@ -209,13 +212,33 @@ Three things make it hold:
 
 ### stats.json is yours, not just the analysis's
 
-Every entry records `origin.by`: the script that generated it, or `"hand"`. A
-generator rewrites only its own entries, so a number you add by hand survives
-`just assets` instead of being silently overwritten by it.
+The split is by field, and it follows what each field *is*. The script owns the
+`value` — a fact about the data, which nobody else can honestly write — plus
+the `checksum` that catches a hand-edit to it and the `origin` that says who
+wrote it and when it last changed. Everything else in an entry is the author's,
+edited in `stats.json` directly:
+
+- `fmt` and `unit` — how the number is shown. An editorial choice, not an
+  analysis result.
+- `desc` — what the number is, for whoever audits the file later.
+- `expect` — what the *prose* assumes ("fell", "roughly 80–90%"). That
+  assumption lives next to the sentence, so the author maintains it. A
+  one-sided bound (`min` with no `max`) is fine.
+
+The arguments to `st.add(...)` beyond the value are seeds: they fill in a new
+entry so the file is never born empty, and are ignored once the entry exists —
+with a note when they differ from the file, so a stale script argument is
+visible rather than silently dead.
+
+Every entry also records `origin.by`: the script that generated it, or
+`"hand"`. A generator rewrites only its own entries, so a number you add by
+hand survives `just assets` instead of being silently overwritten by it.
+`origin.at` is when the value last *changed* — a re-run that reproduces the
+same number leaves it alone, so the date means something.
 
 ```json
 "cohort.sites": {
-  "value": 4, "display": "4",
+  "value": 4, "fmt": "",
   "expect": {"sign": "+"},
   "origin": {"by": "hand", "note": "study protocol v3, Table 1"}
 }
@@ -223,7 +246,7 @@ generator rewrites only its own entries, so a number you add by hand survives
 
 A hand entry must carry `origin.note` saying where the number came from, and it
 is guarded exactly as tightly as a derived one. What it cannot get is
-re-derivation: `check-stats` recomputes generated values from the data and
+re-derivation: `check-stats-deep` recomputes generated values from the data and
 compares, and nothing can do that for a number that came off a printout. The
 note is the audit trail instead.
 
@@ -231,8 +254,24 @@ That is also why `stats.json` sits at the manuscript root rather than under
 `si/`: a file you are invited to edit is not generated output, and cannot be
 guarded by "did anything change".
 
-Rounding is set once per value with `fmt`, next to the analysis, so every mention
-is punctuated identically.
+### Pinned files: watching what no script reads
+
+Provenance the pipeline records automatically stops at what a generator
+imported or declared. Plenty of files matter without any script reading them —
+a raw instrument export, a protocol document, an upstream config. Declare those
+by hand in `stats.json`:
+
+```json
+"pinned": {
+  "analysis/data/raw_export_2026-06.csv": null
+}
+```
+
+`just pin` records the sha256, and from then on `just check-stats` (so `just
+verify`) reports when the file changes. The fix it names is deliberate: check
+the numbers that depend on it, then `just pin` again to accept the new state.
+Generators carry the block through untouched — declaring what is worth watching
+is the author's call, made in the file.
 
 **`stats.json` stores no rendered string.** It holds the `value` and the `fmt`;
 `tools/render_stats.py` turns them into `stats-rendered.json`, which is what
@@ -305,7 +344,8 @@ declare what it wrote, into `assets.json`:
   "path": "figures/example_figure.png",
   "kind": "figure",
   "hash": "sha256:b100e70d…",
-  "origin": {"by": "analysis/scripts/gen_example_figure.py"},
+  "origin": {"by": "analysis/scripts/gen_example_figure.py",
+             "at": "2026-08-06T18:20:00Z"},
   "inputs": {
     "analysis/scripts/gen_example_figure.py": "sha256:1b2fcdf2…",
     "analysis/scripts/example_data.csv":      "sha256:c19c8377…"
@@ -326,9 +366,12 @@ same way an undeclared `#s("id")` does — it cannot quietly stop being true.
 `just prose-check` reports naming a declared asset directly as an error, which is
 what keeps the bypass closed.
 
-`just check-assets-manifest` then checks per entry: the output still hashes to
+`just check-assets` then checks per entry: the output still hashes to
 what was recorded (so a hand-edit to a generated file is caught and *attributed*),
-the generator still exists, and the declared inputs are unchanged.
+the generator still exists, and the declared inputs are unchanged. `origin.at`
+is when the output last *changed*: a regeneration that produces byte-identical
+output (seeded RNG, no embedded timestamps) keeps the old date, so the
+timestamp carries information.
 
 Inputs are part automatic, part declared. The generator and every module it
 imports from `analysis/` are recorded by walking `sys.modules`, which is exact
