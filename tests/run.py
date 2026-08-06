@@ -660,10 +660,10 @@ def stats_cases() -> bool:
     with tempfile.TemporaryDirectory() as d:
         p = Path(d) / "stats.json"
         p.write_text(json.dumps({"values": {
-            "a.pct":   {"display": "84.2", "value": 84.23},
-            "a.count": {"display": "1,204", "value": 1204},
-            "a.small": {"display": "3", "value": 3},
-            "a.label": {"display": "Treated", "value": "Treated"},
+            "a.pct":   {"value": 84.23, "fmt": ".1f"},
+            "a.count": {"value": 1204, "fmt": ","},
+            "a.small": {"value": 3, "fmt": ""},
+            "a.label": {"value": "Treated", "fmt": ""},
         }}))
 
         # 1. resolution: substitutes the display string, survives a reflow inside
@@ -731,12 +731,30 @@ def stats_cases() -> bool:
         except StatError:
             pass
 
-    # A value that satisfies its guard is accepted, and rounding is applied.
+    # A value that satisfies its guard is accepted, and its fmt is recorded.
+    #
+    # The rendered string is NOT stored -- stats.json holds the value and the
+    # format spec, and tools/render_stats.py turns them into what Typst reads. So
+    # what this asserts is that the spec survives, and that rendering it through
+    # the one shared formatter gives the rounded form.
     st = Stats()
     st.add("x.y", 84.23, fmt=".1f", sign="+", between=(0, 100))
-    if st._values["x.y"]["display"] != "84.2":
-        print(f"  stats guard: fmt not applied -- {st._values['x.y']['display']!r}")
+    rec = st._values["x.y"]
+    if "display" in rec:
+        print("  stats guard: a rendered string was stored; it is derived at build time")
         ok = False
+    if tp.display_of(rec) != "84.2":
+        print(f"  stats guard: fmt not applied -- {tp.display_of(rec)!r}")
+        ok = False
+
+    # A format spec that cannot apply to the value must fail at declaration,
+    # where the script that chose it is named, rather than at render time.
+    try:
+        Stats().add("x.bad", "not a number", fmt=".2f")
+        print("  stats guard: an impossible fmt was accepted")
+        ok = False
+    except StatError:
+        pass
     try:
         st.add("x.y", 1)
         print("  stats guard: a duplicate id was accepted")
@@ -764,7 +782,7 @@ def check_stats_cases() -> bool:
     ok = True
 
     def entry(**kw):
-        e = {"value": 1.0, "display": "1.00", "fmt": ".2f", "unit": "",
+        e = {"value": 1.0, "fmt": ".2f", "unit": "",
              "desc": "d", "expect": {}, "source": "",
              "origin": {"by": "hand", "note": "protocol"}}
         e.update(kw)
@@ -784,40 +802,19 @@ def check_stats_cases() -> bool:
         # A guard that no longer holds. This is the case the whole mechanism
         # exists for: the prose says "increase", the value went negative.
         ("sign guard violated",
-         {"value": -1.0, "display": "-1.00", "expect": {"sign": "+"}}, 1),
+         {"value": -1.0, "expect": {"sign": "+"}}, 1),
         ("sign guard satisfied",   {"expect": {"sign": "+"}}, 0),
         ("range guard violated",
-         {"value": 8400.0, "display": "8400.00",
-          "expect": {"min": 0, "max": 100}}, 1),
+         {"value": 8400.0, "expect": {"min": 0, "max": 100}}, 1),
         # A label carries no guard and must not be treated as a broken number.
         ("non-numeric with no guard",
-         {"value": "Treated", "display": "Treated", "fmt": "",
-          "expect": {}}, 0),
-        # display and value disagreeing is the edit that changes what a reader
-        # sees without changing what #n() computes with.
-        ("display does not match value", {"display": "9.99"}, 1),
-        # `display` is optional, and omitted whenever formatting changes nothing.
-        # Legitimate for an int or a string, where Typst and Python render the
-        # same. NOT legitimate for a float: Typst's str() rounds and Python's does
-        # not, so a float without a stored display is rendered by a rule this
-        # project does not control.
-        ("omitted for an int",
-         {"value": 3, "fmt": "", "display": "__drop__"}, 0),
-        ("omitted for a string",
-         {"value": "Treated", "fmt": "", "display": "__drop__"}, 0),
-        ("omitted for a float",
-         {"value": 2.07, "fmt": "", "display": "__drop__"}, 1),
-        # An int whose fmt DOES change it still has to carry the display.
-        ("omitted but fmt changes the value",
-         {"value": 1204, "fmt": ",", "display": "__drop__"}, 1),
+         {"value": "Treated", "fmt": "", "expect": {}}, 0),
     ]
     for name, over, want in cases:
         rec = entry(**over)
         if over.get("origin", "keep") is None:
             rec["origin"] = None
-        if rec.get("display") == "__drop__":
-            del rec["display"]
-        found = cs._origin("x.y", rec) + cs._display("x.y", rec) + cs._guard("x.y", rec)
+        found = cs._origin("x.y", rec) + cs._guard("x.y", rec)
         got = sum(1 for f in found if f.level == "error")
         if got != want:
             print(f"  check-stats [{name}]: expected {want} error(s), got {got}"

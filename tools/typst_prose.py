@@ -106,6 +106,24 @@ FOOTNOTE = r"#footnote\s*\["
 ASSET = r'#?(?:fig|tbl)\(\s*"[^"]*"[^()]*\)'
 
 
+def display_of(rec: dict) -> str:
+    """The string a reader sees, from a stats.json entry's `value` and `fmt`.
+
+    THE ONLY FORMATTER IN THE PIPELINE. stats.json stores no rendered string:
+    tools/render_stats.py calls this to build the file Typst reads, and the
+    extractors call it to resolve `#s("id")` while reading the source. One
+    implementation, so the PDF, the word count and the narration cannot disagree
+    about what a number looks like.
+
+    It is Python's formatter rather than Typst's on purpose. Typst has no
+    format-spec at all, and its str() rounds floats where Python's does not, so
+    doing this in the document would mean reimplementing the spec in a language
+    that cannot express it.
+    """
+    v, fmt = rec.get("value"), rec.get("fmt", "")
+    return format(v, fmt) if fmt else str(v)
+
+
 def strip_links(text: str) -> str:
     """Replace every `#link(...)` with its shown text, or nothing if it has none.
 
@@ -177,11 +195,11 @@ def resolve_stats(text: str, path: Path | None = None) -> str:
                     f"error: {p.name} has no value '{id}'; declare it in "
                     f"analysis/scripts/gen_stats.py, or fix the id in the prose")
             rec = values[id]
-            # `display` is omitted when it would just be str(value) -- see
-            # _omittable() in analysis/scripts/_stats.py. Same fallback here, so
-            # the word count and the narration see what the PDF shows.
-            if field == "display" and "display" not in rec:
-                return str(rec.get("value", ""))
+            # stats.json stores no rendered string; it is computed here by the
+            # same function that builds the file Typst reads, so the extractors
+            # and the PDF cannot disagree.
+            if field == "display":
+                return display_of(rec)
             return str(rec.get(field, ""))
         return sub
 

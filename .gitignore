@@ -10,6 +10,12 @@
 paper.pdf
 paper-draft.pdf
 .build-stamp
+
+# Rendered from stats.json by tools/render_stats.py: the display strings Typst
+# reads. Derived, not source -- stats.json holds the value and the format spec,
+# and this is what Python's formatter makes of them. Every recipe that compiles
+# regenerates it, so it is never stale and never worth committing.
+stats-rendered.json
 # just viz diagnostics: regenerated on demand, never part of the manuscript
 viz/
 paper.docx

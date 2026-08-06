@@ -40,7 +40,6 @@
     },
     "effect.treated_fold": {
       "value": 2.068627450980392,
-      "display": "2.07",
       "fmt": ".2f",
       "unit": "x",
       "desc": "Treated effect as a fold change over Control",
@@ -56,7 +55,6 @@
     },
     "effect.treated_over_control": {
       "value": 1.0899999999999999,
-      "display": "+1.09",
       "fmt": "+.2f",
       "unit": "",
       "desc": "Treated minus Control observed effect",

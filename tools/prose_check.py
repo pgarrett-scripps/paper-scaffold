@@ -877,7 +877,13 @@ def check_derivable_numbers(sources: dict[str, str],
 
     wanted = {}
     for id, rec in values.items():
-        d = str(rec.get("display", "")).strip()
+        # Rendered here rather than read from the file: stats.json stores the
+        # value and the format spec, and the display string is produced at build
+        # time by the same function tools/render_stats.py uses.
+        try:
+            d = typst_prose.display_of(rec).strip()
+        except (TypeError, ValueError):
+            continue
         if not re.fullmatch(r"[+-]?[\d,]*\.?\d+", d):
             continue                      # not a number: a label, a flag
         bare = d.lstrip("+-")

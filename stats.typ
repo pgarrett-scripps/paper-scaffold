@@ -24,7 +24,15 @@
 // Delete this file, stats.json and gen_stats.py if the project has no numbers
 // worth generating. Nothing else depends on them.
 
-#let paper-stats = json("stats.json")
+// The RENDERED file, not stats.json. Typst has no format-spec and its str()
+// rounds floats where Python's does not, so the strings a reader sees are built
+// by tools/render_stats.py -- the only formatter in the pipeline -- and this
+// reads the result. `just paper`, `just docx`, `just draft` and `just wordcount`
+// all regenerate it first, so it cannot be stale.
+//
+// It is a build artifact and gitignored. If Typst reports it missing, the
+// compile was run by hand rather than through a recipe: run `just render-stats`.
+#let paper-stats = json("stats-rendered.json")
 
 // DRAFT MODE (`just draft`, i.e. --input draft=true). An unknown id renders a
 // loud placeholder instead of stopping the compile.
@@ -51,7 +59,7 @@
 
 #let _entry(id) = {
   if type(paper-stats) != dictionary or "values" not in paper-stats {
-    panic("stats.json has no `values` table; regenerate it with `just assets`")
+    panic("stats-rendered.json has no `values` table; run: just render-stats")
   }
   if id not in paper-stats.values {
     _missing(id)
@@ -62,21 +70,14 @@
 
 // The display string: already rounded, by the rule set next to the analysis.
 //
-// `display` is OPTIONAL, and absent whenever formatting changes nothing -- an
-// integer 3 needs no stored "3". str() is the fallback, and is only ever reached
-// for ints and strings, which Typst and Python render identically. A float
-// always carries its display, because Typst's str() rounds and Python's does
-// not, so the two would disagree about the value a reader sees.
 // In draft mode an unknown id becomes a placeholder that is hard to overlook and
 // trivial to grep for.
 #let s(id) = {
   let e = _entry(id)
   if e == none {
     box(fill: yellow, inset: (x: 2pt), text(fill: red, weight: "bold", "?" + id + "?"))
-  } else if "display" in e {
-    e.display
   } else {
-    str(e.value)
+    e.display
   }
 }
 

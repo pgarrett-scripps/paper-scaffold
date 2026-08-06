@@ -208,16 +208,23 @@ That is also why `stats.json` sits at the manuscript root rather than under
 to edit cannot be guarded by "did anything change".
 
 Rounding is set once per value with `fmt`, next to the analysis, so every mention
-is punctuated identically. The rendered string is stored as `display` only when
-the formatting actually changes something: an integer `3` needs no stored `"3"`,
-and `stats.typ` falls back to `str(value)`.
+is punctuated identically.
 
-Floats always keep their `display`, and that is not an oversight. Typst's `str()`
-rounds where Python's does not — `1.0899999999999999` renders as `1.09` there and
-in full here — so a float without a stored display would be rendered by a rule
-this project does not own. `just check-stats` verifies both directions: a stored
-display that no longer matches its value, and an omitted one that should not have
-been.
+**`stats.json` stores no rendered string.** It holds the `value` and the `fmt`;
+`tools/render_stats.py` turns them into `stats-rendered.json`, which is what
+`stats.typ` reads. Every recipe that compiles regenerates it first, and it is
+gitignored, so it can never be stale and never disagrees with its source.
+
+That step exists because Typst has no format spec — no thousands separator, no
+`+.2f` — and its `str()` rounds floats where Python's does not
+(`1.0899999999999999` is `1.09` there, the full expansion here). Doing the
+formatting in the document would mean reimplementing Python's spec in a language
+that cannot express it, and storing the result beside the value would put a
+derived field in a source file, free to drift.
+
+One formatter, `typst_prose.display_of`, is used by the renderer *and* by the
+word count and the narrator, so the PDF and the extractors cannot disagree about
+what a number looks like.
 
 While ids are still in flux, `just draft` renders an unresolved one as a loud
 `?id?` placeholder instead of stopping the compile, and writes `paper-draft.pdf`

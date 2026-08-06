@@ -75,41 +75,6 @@ def _guard(id: str, rec: dict) -> list[Finding]:
     return out
 
 
-def _display(id: str, rec: dict) -> list[Finding]:
-    """The display string must still be a faithful rendering of the value.
-
-    Catches the edit that changes what a reader sees without changing what the
-    arithmetic in `#n("id")` uses -- the two would then silently disagree.
-    """
-    fmt, v = rec.get("fmt", ""), rec.get("value")
-    try:
-        want = format(v, fmt) if fmt else str(v)
-    except (TypeError, ValueError) as e:
-        return [Finding("error", id, f"cannot format {v!r} with {fmt!r}: {e}")]
-
-    if "display" not in rec:
-        # Legitimately absent only when str(value) reproduces it AND the reader
-        # can be trusted to compute that: ints and strings render the same in
-        # Typst and Python. Typst's str() rounds floats, so a float with no
-        # stored display would be rendered by a rule this project does not own.
-        if isinstance(v, bool) or not isinstance(v, (int, str)):
-            return [Finding("error", id,
-                f"has no display string, and {type(v).__name__} values cannot "
-                f"fall back to str(value) -- Typst's str() rounds floats and "
-                f"Python's does not. Re-run: just assets")]
-        if want != str(v):
-            return [Finding("error", id,
-                f"has no display string, but fmt {fmt!r} would render {v!r} as "
-                f"{want!r} rather than {str(v)!r}. Re-run: just assets")]
-        return []
-
-    shown = rec["display"]
-    if want != shown:
-        return [Finding("error", id,
-            f"display is {shown!r} but value {v!r} formatted {fmt!r} is {want!r}")]
-    return []
-
-
 def _origin(id: str, rec: dict) -> list[Finding]:
     """Every entry must say where it came from, and mean it."""
     o = rec.get("origin")
@@ -223,7 +188,6 @@ def main() -> int:
     found: list[Finding] = []
     for id, rec in sorted(values.items()):
         found += _origin(id, rec)
-        found += _display(id, rec)
         found += _guard(id, rec)
     found += _rederive(values)
     found += _unused(values)

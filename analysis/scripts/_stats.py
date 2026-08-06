@@ -86,24 +86,6 @@ def _caller_script() -> str:
     return Path(p).resolve().relative_to(PAPER).as_posix()
 
 
-def _omittable(value, shown: str) -> bool:
-    """Can `display` be left out and re-derived by the reader as str(value)?
-
-    Only for ints and strings, and only when the formatted string is already what
-    str() gives. Both Python and Typst render those identically, so the stored
-    copy would carry no information.
-
-    Deliberately NOT for floats. Typst's str() rounds and Python's does not, so
-    the two disagree on exactly the values a paper cares about, and omitting the
-    display would hand the rendering decision to whichever one reads it.
-    """
-    if isinstance(value, bool):
-        return False
-    if isinstance(value, int) or isinstance(value, str):
-        return shown == str(value)
-    return False
-
-
 class Stats:
     """Collects declared values, checks their guards, merges into stats.json."""
 
@@ -149,21 +131,25 @@ class Stats:
         if between is not None:
             expect["min"], expect["max"] = between
 
-        shown = format(value, fmt) if fmt else str(value)
+        # No rendered string is stored. `fmt` is the instruction; the string is
+        # produced at build time by tools/render_stats.py, which is the only
+        # formatter in the pipeline. Storing both meant a derived field sitting
+        # in a source file, able to drift from the value beside it and needing
+        # its own check to notice.
+        #
+        # The result is discarded on purpose: this call exists only so a bad
+        # spec raises HERE, next to the analysis that chose it, rather than at
+        # render time with no idea which script is responsible.
+        if fmt:
+            try:
+                format(value, fmt)
+            except (TypeError, ValueError) as e:
+                raise StatError(
+                    f"{id!r}: cannot format {value!r} with fmt {fmt!r}: {e}"
+                ) from None
 
         self._values[id] = {
             "value": value,
-            # Only stored when formatting actually changes something. "3" for the
-            # value 3 is noise: stats.typ falls back to str(value), and Typst
-            # renders an int or a string identically to Python.
-            #
-            # Floats always keep it, even when the two look the same here. Typst's
-            # str() ROUNDS -- str(1.0899999999999999) is "1.09" there and the full
-            # expansion in Python -- so a float without a stored display would be
-            # rendered by a rule this file does not control.
-            **({} if _omittable(value, shown) else {"display": shown}),
-            # Recorded so check_stats.py can re-derive the display string from the
-            # value and catch an edit to one that no longer matches the other.
             "fmt": fmt,
             "unit": unit,
             "desc": desc,
