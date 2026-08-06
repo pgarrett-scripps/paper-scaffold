@@ -76,6 +76,7 @@ check adapts rather than failing.
 | `just prose-check` | Check the prose, plus figure resolution and table shape, against STYLE.md |
 | `just prose-check --list-rules` | Every rule, its severity, and how to configure it |
 | `just bib-audit` | Check every DOI against Crossref for retractions and dead links (network) |
+| `just viz` | Diagnostics about the draft -> `viz/`: sentence length, word use, citation ages |
 | `just density` | Numerals, parentheticals, acronyms, passives per 1,000 words, and section outliers |
 | `just setup` | Build the Python environment (uv, locked) |
 | `just version` | Which scaffold version this manuscript is built on |
@@ -160,8 +161,18 @@ so a placeholder can never reach the real PDF. `n("id")` fails even there: no
 placeholder can stand in for a number inside an expression without making the
 arithmetic that reads it silently wrong.
 
-Delete `stats.typ`, `si/stats.json` and `gen_stats.py` if a project states no
-computed numbers. Nothing else depends on them.
+Available in the SI as well as the main text. `si-body.typ` imports the helpers
+itself rather than inheriting them, because Typst's `include` gives the included
+file its own scope: without that import an `#s("id")` in the SI fails with
+`unknown variable: s` even though `paper.typ` imports it one line above the
+include. The SI is the data-heavy half, so it is where generated numbers belong
+most.
+
+To drop the mechanism from a project that states no computed numbers, delete
+`stats.typ`, `si/stats.json` and `gen_stats.py`, **and the
+`#import "stats.typ": n, s` line from all three files that carry it**:
+`paper.typ`, `si-body.typ` and `wordcount.typ`. Each import is commented to say
+so. Nothing beyond those three refers to it.
 
 ### `analysis/` lives inside the manuscript, and writes to it directly
 

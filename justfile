@@ -432,6 +432,20 @@ prose-check:
 #
 # Being offline is reported, not failed. That is a fact about your connection,
 # not a defect in the bibliography.
+# Pictures OF the manuscript, for revising it -- not pictures in it. Sentence
+# length, words per section, most-used words, a word cloud, and the age of the
+# bibliography.
+#
+# Writes to viz/, NOT figures/. figures/ holds the manuscript's own figures and
+# is checked for orphans, so a diagnostic written there would be reported as a
+# generated asset nothing cites. viz/ is gitignored and disposable.
+#
+# Not part of any gate: nothing here can fail, it only shows you the shape of
+# what you have written.
+# Diagnostics about the draft -> viz/ (sentence length, word use, citation ages)
+viz:
+  @uv run --quiet python viz.py
+
 # Check every DOI against Crossref for retractions and dead links (needs network)
 bib-audit:
   @uv run --quiet python bib_audit.py

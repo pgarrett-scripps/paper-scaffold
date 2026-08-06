@@ -17,6 +17,8 @@ dependencies = [
   "pillow",           # crops those rasters to their ink
   "textstat",         # sharper syllable counts for the readability report
   "codespell",        # the misspelling dictionary the spelling check reads
+  "matplotlib",       # just viz: the manuscript diagnostics in viz/
+  "wordcloud",        # just viz: the word cloud, which is for fun
   "bibtexparser>=2.0.0b2",  # bibliography checks. v2 is a beta and its API is
                       # incompatible with v1, so the floor is pinned deliberately.
 ]
