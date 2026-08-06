@@ -79,7 +79,7 @@ have to drop their import. The exact edits are under
 | `just prose-check` | Check the prose, plus figure resolution and table shape, against STYLE.md |
 | `just prose-check --list-rules` | Every rule, its severity, and how to configure it |
 | `just bib-audit` | Check every DOI against Crossref for retractions and dead links (network) |
-| `just viz` | Diagnostics about the draft -> `viz/`: sentence length, word use, citation ages |
+| `just viz` | Diagnostics about the draft -> `viz/`: nine plots plus `report.json` for tools |
 | `just density` | Numerals, parentheticals, acronyms, passives per 1,000 words, and section outliers |
 | `just setup` | Build the Python environment (uv, locked) |
 | `just version` | Which scaffold version this manuscript is built on |

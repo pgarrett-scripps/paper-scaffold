@@ -66,6 +66,15 @@ Do not silence a prose-check finding by editing `prose_check.py`. Add it to
 run `just prose-check --show-suppressed` occasionally to see what has
 accumulated.
 
+## Numbers about the draft
+
+`just viz` writes `viz/report.json` alongside its plots. Read it rather than
+re-deriving anything from the source: it already holds the section metrics, the
+longest sentences with their text, which floats are cited once or not at all,
+and the bibliography's age and self-citation share. Deriving those separately
+gets a different answer, because this pipeline strips citations, math, code and
+captions before measuring anything and an ad-hoc count does not.
+
 Two more worth running by hand, not part of the gate: `just density` shows which
 section is densest relative to the rest of the paper, and `just doctor` reports
 whether the external toolchain is present and new enough.
