@@ -133,6 +133,7 @@ echo ""
 echo "copying scaffold -> $DEST"
 tar -C "$SCAFFOLD" -cf - \
     --exclude='./.git' \
+    --exclude='./.github' \
     --exclude='./scripts' \
     --exclude='./.venv' \
     --exclude='./analysis/.venv' \
@@ -289,11 +290,23 @@ fi
 
 if [ "$DO_GIT" = 1 ]; then
   if command -v git >/dev/null 2>&1; then
+    # A machine with no configured identity (a fresh laptop, a CI runner) makes
+    # `git commit` fail with "please tell me who you are". Falling back to a
+    # placeholder keeps the FIRST commit from being the thing that stops someone
+    # -- and the first commit must exist, because `just check-pdf` reports an
+    # uncommitted paper.pdf as a failure. A real identity is still preferred
+    # wherever one is set.
+    ident=()
+    if [ -z "$(git config user.email || true)" ]; then
+      ident=(-c "user.name=paper-scaffold" -c "user.email=paper-scaffold@localhost")
+      echo "note: git has no configured identity; using a placeholder for the"
+      echo "      first commit. Set user.name/user.email and amend it if you care."
+    fi
     (cd "$DEST"
      git init -q
      git add -A
-     git -c user.useConfigOnly=false commit -q -m "New manuscript from paper-scaffold $(
-       grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)" || true)
+     git "${ident[@]}" commit -q -m "New manuscript from paper-scaffold $(
+       grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)")
     echo "initialized a git repository and made the first commit"
   else
     echo "note: git not found, skipped git init"

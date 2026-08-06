@@ -369,15 +369,18 @@ clone needs `just audio-setup` once (~60 MB download).
 Run `just doctor` and it will tell you which of these you are missing, and
 whether the ones you have are new enough.
 
-- `typst` **0.13 or newer**, `just`, `uv`, `python3`
+- `typst` **0.14 or newer**, `just`, `uv`, `python3`
 - `typstyle` for `just fmt` and `just fmt-check` (`cargo install typstyle`)
 - `git` for `just check-pdf`, which skips itself outside a repository
 - `curl` and a network connection for `just audio-setup` only
 
-The Typst floor is 0.13 because `just docx` is built on `--features html` and
-`html.frame()`, which arrived there. On an older binary the PDF path still works
-and only the Word export fails, with an error that does not obviously point at
-the version. Developed and tested against 0.14.
+The Typst floor is 0.14, and it is not where you would guess. `--features html`
+and `html.frame()`, which `just docx` is built on, both arrived in 0.13 — but on
+0.13 the Word export runs, exits 0, and silently contains **no figures**: that
+version's HTML export emits no `<img>` for an `image()` call, while tables and
+rasterized math survive. The result is a .docx that looks finished and has lost
+every plot. 0.14 emits them. All three of 0.13.1, 0.14.2 and 0.15.1 were run
+through `just docx` to establish this, and CI holds the floor with a matrix.
 
 `just setup` builds the Python environment from `pyproject.toml` and commits the
 resolution to `uv.lock`, so every machine gets the same versions. There are two

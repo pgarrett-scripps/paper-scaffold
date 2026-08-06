@@ -1,0 +1,176 @@
+# Runs the gate that `just verify` runs locally, plus the two things a local run
+# cannot check: that a FRESH CLONE works, and that the Typst version floor in the
+# justfile is real.
+#
+# Every bug in this repository's history was found by hand-porting the scaffold
+# into another manuscript. That is a good way to find bugs and a slow one, and it
+# only happens when someone starts a paper.
+#
+# Tools are installed by curl from pinned release binaries rather than through
+# marketplace actions: it is three lines each, it pins exactly what runs, and it
+# keeps the supply chain to GitHub releases and astral.sh, which the manuscript
+# toolchain already depends on.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  JUST_VERSION: 1.58.0
+  TYPSTYLE_VERSION: 0.15.1
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor from `typst_min` in the justfile, and the newest release.
+        # Both, because the two failures are different: an old Typst loses
+        # figures from the Word export (see the justfile comment), and a new one
+        # changes HTML export in ways typst2docx.py has to keep up with.
+        typst: ["0.14.2", "0.15.1"]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # check-pdf compares COMMIT DATES, so it needs real history. At the
+          # default depth of 1 it cannot see whether a source commit came after
+          # the one that built paper.pdf, and reports clean either way.
+          fetch-depth: 0
+
+      - name: Install typst ${{ matrix.typst }}
+        run: |
+          curl -sSL "https://github.com/typst/typst/releases/download/v${{ matrix.typst }}/typst-x86_64-unknown-linux-musl.tar.xz" \
+            | tar -xJ --strip-components=1 -C /usr/local/bin --wildcards '*/typst'
+
+      - name: Install just
+        run: |
+          curl -sSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar -xz -C /usr/local/bin just
+
+      - name: Install typstyle
+        run: |
+          curl -sSL -o /usr/local/bin/typstyle \
+            "https://github.com/typstyle-rs/typstyle/releases/download/v${TYPSTYLE_VERSION}/typstyle-x86_64-unknown-linux-gnu"
+          chmod +x /usr/local/bin/typstyle
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Also the first assertion: doctor must agree the toolchain is usable, and
+      # must reject a typst below the floor. Both directions matter, since a
+      # version check that never fails is not a check.
+      - name: just doctor
+        run: just doctor
+
+      - name: Reject a typst below the floor
+        run: |
+          if just --set typst_min 99.0 doctor; then
+            echo "doctor accepted a typst below its own floor"
+            exit 1
+          fi
+          echo "doctor rejects an old typst, as it should"
+
+      - run: just setup
+
+      # Build before verifying, exactly as CLAUDE.md tells a human to. paper.docx
+      # is gitignored, so `just check` sees a missing one on a fresh clone and
+      # correctly asks for a rebuild.
+      - run: just paper
+      - run: just docx
+
+      # The Word export is the part that fails silently rather than loudly, so
+      # exiting 0 is not enough of an assertion.
+      #
+      # Every figure must survive. This is measured on the HTML intermediate
+      # rather than the .docx because a count of embedded images cannot tell a
+      # figure from a rasterized equation: on typst 0.13 the export drops the
+      # figure and keeps both equations, so the .docx still contains images and
+      # still looks fine. One <img> per image() call is the property that
+      # actually distinguishes them.
+      - name: Every figure survives the HTML export
+        run: |
+          typst compile --features html --input docx=true -f html \
+            paper.typ "$RUNNER_TEMP/check.html" 2>/dev/null
+          calls=$(cat paper.typ si-body.typ si/*.typ 2>/dev/null | grep -o 'image("' | wc -l)
+          imgs=$(grep -o '<img' "$RUNNER_TEMP/check.html" | wc -l)
+          echo "  image() calls in source: $calls, <img> in export: $imgs"
+          if [ "$imgs" -lt "$calls" ]; then
+            echo "FAIL: the HTML export dropped $((calls - imgs)) figure(s)."
+            echo "  The Word export would be produced anyway, look finished, and"
+            echo "  be missing plots. This is what typst 0.13 does; see typst_min."
+            exit 1
+          fi
+
+      - name: The Word export contains the manuscript
+        run: |
+          uv run --quiet python - <<'PY'
+          import sys, zipfile
+          z = zipfile.ZipFile("paper.docx")
+          doc = z.read("word/document.xml").decode("utf8", "replace")
+          media = [n for n in z.namelist() if n.startswith("word/media/")]
+          checks = {
+              "abstract survived the template bypass": "working skeleton" in doc,
+              "section headings survived": "Introduction" in doc and "Methods" in doc,
+              "equations were rasterized back in": len(media) > 0,
+              "the SI came along": "Supporting Information" in doc,
+          }
+          for name, ok in checks.items():
+              print(("  ok   " if ok else "  FAIL ") + name)
+          print(f"  ({len(media)} embedded image(s))")
+          sys.exit(0 if all(checks.values()) else 1)
+          PY
+
+      - run: just verify
+
+  # A clone is not how anyone starts a paper -- scripts/new-paper.sh is. It runs
+  # in `just test` too, but only with --no-build; this is the one place the
+  # generated manuscript is actually compiled, which is what a new user does
+  # within their first minute.
+  new-paper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install typst
+        run: |
+          curl -sSL "https://github.com/typst/typst/releases/download/v0.15.1/typst-x86_64-unknown-linux-musl.tar.xz" \
+            | tar -xJ --strip-components=1 -C /usr/local/bin --wildcards '*/typst'
+
+      - name: Install just
+        run: |
+          curl -sSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar -xz -C /usr/local/bin just
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Generate a manuscript and build it
+        run: |
+          ./scripts/new-paper.sh --yes \
+            --title 'A Generated Manuscript' \
+            --author 'Ada Lovelace' \
+            --email 'ada@example.edu' \
+            --affiliation 'Department of Analytical Engines, Example University' \
+            "$RUNNER_TEMP/generated"
+
+      # The generated directory must pass the scaffold's own staleness gate
+      # immediately. It is the check most likely to be wrong in a fresh copy,
+      # since it reasons about commit dates and a stamp that were both written
+      # seconds ago by the script rather than by a person.
+      - name: The generated manuscript is already clean
+        working-directory: ${{ runner.temp }}/generated
+        run: |
+          test -f paper.pdf || { echo "no paper.pdf was built"; exit 1; }
+          just check
+          just version

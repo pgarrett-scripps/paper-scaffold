@@ -44,12 +44,17 @@ setup: doctor
   uv sync
   @echo "environment ready. For the audiobooks: just audio-setup"
 
-# The minimum Typst this scaffold compiles under. 0.13 is where `--features html`
-# and `html.frame()` arrived, and `just docx` is built on both -- on an older
-# binary the PDF path works, the Word path fails with an error about an unknown
-# feature, and the connection to the version is not obvious from the message.
-# Developed and tested against 0.14.
-typst_min := "0.13"
+# The minimum Typst this scaffold compiles under.
+#
+# 0.13 is where `--features html` and `html.frame()` arrived, so it is the
+# obvious floor and it is the WRONG one. On 0.13 the Word export runs, exits 0,
+# and silently contains no figures: its HTML export emits no <img> for an
+# `image()` call, while tables and the rasterized math both survive. You get a
+# .docx that looks finished and has lost every plot. 0.14 emits them.
+#
+# Measured, not assumed -- 0.13.1, 0.14.2 and 0.15.1 were each run through
+# `just docx` and the output compared. CI holds the floor with a version matrix.
+typst_min := "0.14"
 
 # Reports which of the external tools are present and whether they are new
 # enough, rather than leaving a missing one to surface as a "command not found"
@@ -260,7 +265,19 @@ check:
 # nags forever with no way to satisfy it. A stamp clears the moment `just assets`
 # runs, whether or not the bytes moved. It also needs no git, so it works in an
 # exported tree.
-# Fail if the generated figures/tables predate the analysis code that makes them
+# TWO stamps, because there are two ways these files can stop matching the
+# analysis and only one of them used to be caught.
+#
+#   source  the analysis code. Differs when a generator was edited and not re-run.
+#   output  figures/ and si/ themselves. Differs when something edited the
+#           GENERATED file instead of the generator.
+#
+# The second is the rule CLAUDE.md states most loudly -- never hand-edit si/*.typ
+# or figures/ -- and until now nothing enforced it. The failure is quiet and
+# total: the edit renders correctly, every staleness check reports current, and
+# the next `just assets` silently overwrites it. An "AUTO-GENERATED" header is a
+# request; this is a check.
+# Fail if the generated figures/tables predate, or diverge from, the analysis
 check-assets:
   #!/usr/bin/env bash
   set -uo pipefail
@@ -268,18 +285,38 @@ check-assets:
     echo "note:    no analysis/ directory, skipped the generated-asset check"
     exit 0
   fi
-  want=$(just _assets-stamp)
-  have=$(cat .assets-stamp 2>/dev/null || echo "")
-  if [ -z "$have" ]; then
+  if [ ! -s .assets-stamp ]; then
     echo "MISSING: .assets-stamp -- run: just assets"
     exit 1
   fi
-  if [ "$want" != "$have" ]; then
-    echo "STALE: analysis/ has changed since figures/ and si/ were last generated"
-    echo "  fix: just assets && git add figures si .assets-stamp"
+
+  field() { grep -m1 "^$1 " .assets-stamp 2>/dev/null | cut -d" " -f2; }
+  have_src=$(field source)
+  have_out=$(field output)
+
+  # A stamp written before this check existed is a single bare hash with no
+  # field names. Treated as unreadable rather than guessed at, since guessing
+  # wrong reports a hand-edit that did not happen.
+  if [ -z "$have_src" ] || [ -z "$have_out" ]; then
+    echo "STALE: .assets-stamp predates the output check -- run: just assets"
     exit 1
   fi
-  echo "figures/ and si/ are current with analysis/"
+
+  rc=0
+  if [ "$(just _stamp-source)" != "$have_src" ]; then
+    echo "STALE: analysis/ has changed since figures/ and si/ were last generated"
+    echo "  fix: just assets && git add figures si .assets-stamp"
+    rc=1
+  fi
+  if [ "$(just _stamp-output)" != "$have_out" ]; then
+    echo "MODIFIED: figures/ or si/ has changed without the analysis being re-run."
+    echo "  Those files are generated. A hand-edit to one survives until the next"
+    echo "  \`just assets\` and then vanishes. Change the generator that writes it."
+    echo "  fix: just assets && git add figures si .assets-stamp"
+    rc=1
+  fi
+  [ $rc -eq 0 ] && echo "figures/ and si/ are current with analysis/"
+  exit $rc
 
 # Hash of the analysis source: every tracked-ish file under analysis/, excluding
 # the heavy inputs and intermediates that do not determine the output.
@@ -287,11 +324,23 @@ check-assets:
 # single script named `gen one.py` made sha256sum miss both halves. Its errors go
 # to stderr and the pipeline still exits 0 through cut, so the stamp stayed stable
 # while being computed from the wrong input, which is worse than failing.
-_assets-stamp:
+_stamp-source:
   @find analysis -type f \
       -not -path 'analysis/data/*' -not -path 'analysis/results/*' \
       -not -path 'analysis/.venv/*' -not -name '*.pyc' -not -name 'uv.lock' \
       -print0 | sort -z | xargs -0 -r sha256sum | sha256sum | cut -d" " -f1
+
+# Hash of what the analysis produced. si/stats.json is included: it is generated
+# by gen_stats.py exactly like the tables, and hand-editing a value there would
+# otherwise change every number in the prose with nothing to notice.
+_stamp-output:
+  @find figures si -type f -not -name '*.pyc' \
+      -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum | sha256sum | cut -d" " -f1
+
+# Both stamps, in the two-line form check-assets reads.
+_assets-stamp:
+  @echo "source $(just _stamp-source)"
+  @echo "output $(just _stamp-output)"
 
 # The SI is included from si-body.typ as an appendix, so this single PDF holds the
 # whole manuscript; there is no separate supplementary.pdf. si-body.typ is
