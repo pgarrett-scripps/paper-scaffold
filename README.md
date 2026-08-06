@@ -340,9 +340,16 @@ it ruined — and that also fired on a new file no generator imports, a change
 which by definition altered no output.
 
 What went with it: **an input a generator reads without declaring or importing is
-now invisible.** Nothing checks it. In its place, `record()` prints a note when a
-generator declares no `inputs` at all, so the omission is visible where it is
-made rather than discovered from a wrong figure.
+now invisible.** Nothing checks it — and nothing meaningfully did before. The
+stamp excluded `analysis/data/`, so whether it caught an undeclared read depended
+on where the file sat, not on whether it mattered.
+
+There is no automatic answer that is actually right: an audit hook cannot see
+C-level reads, a directory hash misses anything outside it and fires on changes
+that altered nothing. So the scaffold no longer pretends to have one. **Which
+files are worth tracking is the author's call**, declared in `inputs=[...]`, and
+`record()` prints a note when a generator declares none — the omission is visible
+where it is made rather than discovered from a wrong figure.
 
 ### `analysis/` lives inside the manuscript, and writes to it directly
 

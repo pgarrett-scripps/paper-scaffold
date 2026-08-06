@@ -71,8 +71,18 @@ cleared by regenerating identical bytes.
 
 **What went with it, stated plainly:** an input a generator READS without
 declaring or importing is now invisible to every check. The stamp caught that
-when the file happened to sit under `analysis/` outside `data/`. Two mitigations,
-neither a full replacement:
+when the file happened to sit under `analysis/` outside `data/` -- which is to
+say, its coverage was a function of file location rather than of whether the file
+mattered, since `data/` is where data lives.
+
+That is the real argument for the removal, and it is stronger than "redundant".
+No mechanism can enumerate a generator's inputs and be right: an audit hook
+misses C-level reads, a directory hash misses everything outside it and fires on
+changes that altered nothing. The scaffold now declines to pretend otherwise and
+puts the decision where the knowledge is -- the author says which files matter.
+An explicit partial answer beats an implicit one that looks total.
+
+Two mitigations, neither a full replacement:
 
 - `_unclaimed` in check_assets.py went from warning to **error**, restoring the
   severity the stamp gave the leftover-output case -- the one failure that leaves

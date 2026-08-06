@@ -27,10 +27,18 @@ binary readers do from C, and would silently record an empty input set for
 exactly the formats that matter. A missed input means a stale figure reported as
 current, so this half stays explicit.
 
-Undeclared data is not an error, but it IS reported. Nothing else can see it:
-.assets-stamp used to hash all of analysis/ and catch some of these by accident,
-and it is gone, so a generator that declares nothing is the one way a stale
-figure still reports clean.
+Undeclared data is not an error, but it IS reported. Nothing else can see it, and
+nothing ever really could. The .assets-stamp hash that used to sit alongside this
+caught some undeclared reads by accident, but it excluded analysis/data/ -- which
+is where data lives -- so its coverage depended on where a file happened to sit
+rather than on whether it mattered.
+
+There is no way to enumerate a generator's inputs automatically and be right: an
+audit hook misses C-level reads, a directory hash misses files outside it and
+fires on files that changed nothing. So this does not pretend to. WHICH FILES ARE
+WORTH TRACKING IS THE AUTHOR'S CALL, made explicitly in `inputs=[...]`, and the
+note below makes the empty case visible rather than silent. An explicit partial
+answer beats an implicit one that looks total.
 """
 from __future__ import annotations
 
