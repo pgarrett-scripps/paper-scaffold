@@ -29,7 +29,8 @@ OUT = Path(__file__).resolve().parent / "paper_prose.txt"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from typst_prose import (  # noqa: E402
     CITE,
-    LINK,
+    FOOTNOTE,
+    strip_links,
     REFN,
     markup as _markup,
     resolve_stats,
@@ -94,6 +95,8 @@ def clean(text):
 
     # 1. remove whole figure blocks (captions are not prose)
     text = strip_balanced(text, "#figure(")
+    # A bare #table( in running prose, not wrapped in a #figure.
+    text = strip_balanced(text, "#table(")
 
     # 1a. generated numbers -> their value. Resolved, never stripped: a stripped
     #     call loses the figure from the spoken sentence, an unstripped one has
@@ -137,7 +140,7 @@ def clean(text):
     text = re.sub(CITE, "", text)                       # remaining @citekeys / @refs
 
     # 6. links: #link("url")[shown text] -> shown text
-    text = re.sub(LINK, r"\1", text)
+    text = strip_links(text)
 
     # 7. inline code -> the bare word, with spaces kept. Stripping the backticks
     #    alone glues the term to the preceding word, which the voice then runs
@@ -152,6 +155,9 @@ def clean(text):
 
     # 8b. generic inline content wrappers: #text(size: 9pt)[x], #emph[x],
     #     #block(..)[x] -> keep x, drop the marker and its content brackets
+    # Before the gap-free rule below: a footnote attaches to the word it
+    # annotates, so without a gap the note welds onto it.
+    text = re.sub(FOOTNOTE, " [", text)
     text = re.sub(r"#[a-z][a-z0-9.]*(?:\([^()]*\))?\s*\[", "[", text)
     text = text.replace("[", "").replace("]", "")
 

@@ -62,7 +62,46 @@ REFN = r"#refn?\(\s*<[^>]*>\s*,?\s*\)"
 
 # `#link("url")[shown text]` -> group 1 is the shown text. The url argument may
 # sit on its own line after a reflow.
-LINK = r'#link\(\s*"[^"]*"\s*,?\s*\)\s*\[([^\]]*)\]'
+#
+# The `[...]` is OPTIONAL, and that is the whole point. `#link("https://x")` with
+# no body is valid Typst -- it renders the URL as its own visible text -- and it
+# is what an author writes in a data-availability or code-availability
+# statement, which is the one place a manuscript reliably has bare URLs. A
+# pattern that demanded the bracket matched none of them, so the entire call
+# survived into the word count and the narrator read the URL aloud, character by
+# character. Exactly the `#ref(` failure, in the section every paper now has.
+LINK = r'#link\(\s*"[^"]*"\s*,?\s*\)(?:\s*\[([^\]]*)\])?'
+
+
+# A footnote call. Needs its own rule ahead of the generic `#name[` -> `[`
+# stripper, which is deliberately gap-free so that `H#sub[2]O` stays "H2O" and an
+# emphasis butted against a word does not gain a space it never had.
+#
+# A footnote is the opposite case: it attaches directly to the word it annotates
+# ("the value was high#footnote[Measured in triplicate.]"), so the gap-free rule
+# welded the note onto that word. The word count then saw "highMeasured" as one
+# token and the narrator pronounced it as one.
+#
+# The note's text is KEPT, which is the behaviour this has always had. Whether a
+# footnote should count toward a journal limit, or be read aloud at all, is a
+# policy question and a separate one from this.
+FOOTNOTE = r"#footnote\s*\["
+
+
+def strip_links(text: str) -> str:
+    """Replace every `#link(...)` with its shown text, or nothing if it has none.
+
+    A bare link is dropped rather than replaced by its URL: a URL is not words a
+    journal counts, and it is certainly not a sentence anyone wants read out. The
+    same reasoning already governs the `[shown text]` form, whose URL is
+    discarded.
+
+    A function rather than `re.sub(LINK, r"\\1", ...)` at each call site, because
+    the optional group is None for a bare link and a `\\1` backreference raises on
+    it. Shared for the reason everything else here is: the two extractors have
+    already been fixed separately, three times.
+    """
+    return re.sub(LINK, lambda m: m.group(1) or "", text)
 
 # A bare citation key or cross-reference: @smith2020, @fig:x, @sec:methods.
 #

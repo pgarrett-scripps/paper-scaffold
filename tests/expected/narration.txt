@@ -14,6 +14,14 @@ Things that look like markup but are not must survive untouched: the glob smooth
 
 A link to the Typst website keeps its shown text and drops its URL.
 
+A link with NO shown text, is the form a data availability statement is written in, and it renders as the bare URL. It has to go the same way: a pattern that required the bracketed text matched none of these, so the whole call reached the word count and the narrator read the URL out loud. The reflowed form must go too.
+
+A table written straight into the prose, rather than wrapped in a figure, is excluded from the word count like any other table:
+
+and the text continues after it.
+
+A footnote attaches to the word it annotates, with no space between them Which is exactly the problem: stripped without a gap, the note welds onto that word and the pair counts and narrates as one., and must not be welded to it.
+
 = Math and code
 
 Inline math such as alpha, a subscripted one such as t observed is at most t max, and a quoted-subscript one such as |"median"_"orig" - "median"_"arm"| are verbalized by the narrator and dropped by the readability report. Symbol tokens minus 3, approximately 5, and 10 plus or minus 2 become words, and an arrow reads as a word too: 0.43 to 0.49. A token with no mapping is dropped rather than spelled out: 0.5 0.9.

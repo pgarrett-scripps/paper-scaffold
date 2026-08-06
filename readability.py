@@ -25,7 +25,8 @@ from pathlib import Path
 
 from typst_prose import (
     CITE,
-    LINK,
+    FOOTNOTE,
+    strip_links,
     REFN,
     markup as _markup,
     resolve_stats,
@@ -115,6 +116,9 @@ def clean(text: str, gap: str = " ") -> str:
     text = re.sub(r"```.*?```", gap, text, flags=re.S)
     text = _strip_balanced(text, "#raw(", gap)
     text = _strip_balanced(text, "#figure(", gap)
+    # A table written straight into the prose rather than wrapped in a
+    # #figure. Legal, and excluded from a journal word count the same way.
+    text = _strip_balanced(text, "#table(", gap)
     # generated numbers -> their value. Resolved, never stripped: this text is
     # what gets counted and scored, and a reader sees the number, not the call.
     text = resolve_stats(text)
@@ -128,7 +132,7 @@ def clean(text: str, gap: str = " ") -> str:
     text = re.sub(r"\(@[^)]*\)", gap, text)         # (@fig:example) parentheticals
     text = re.sub(CITE, gap, text)                  # remaining @citekeys / @refs
     # links: #link("url")[shown] -> shown
-    text = re.sub(LINK, r"\1", text)
+    text = strip_links(text)
     # Inline code is unwrapped to a bare word, because a journal counts it as one.
     # Under a sentinel gap the caller is instead looking for adjacent duplicate
     # words, and an unwrapped `--proteome-k K` reads as a doubled "k K" the author
@@ -142,6 +146,9 @@ def clean(text: str, gap: str = " ") -> str:
         text = re.sub(_markup("*"), r"\1", text)
         text = re.sub(_markup("_"), r"\1", text)
     # generic inline wrappers #text(..)[x], #emph[x] -> x
+    # Before the gap-free rule below: a footnote attaches to the word it
+    # annotates, so without a gap the note welds onto it.
+    text = re.sub(FOOTNOTE, " [", text)
     text = re.sub(r"#[a-z][a-z0-9.]*(?:\([^()]*\))?\s*\[", "[", text)
     text = text.replace("[", " ").replace("]", " ")
     text = re.sub(r"<[A-Za-z0-9:_-]+>", gap, text)  # stray labels

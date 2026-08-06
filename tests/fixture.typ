@@ -50,6 +50,24 @@ the word before it.
 A link to #link("https://typst.app")[the Typst website] keeps its shown text and
 drops its URL.
 
+A link with NO shown text, #link("https://typst.app"), is the form a data
+availability statement is written in, and it renders as the bare URL. It has to
+go the same way: a pattern that required the bracketed text matched none of
+these, so the whole call reached the word count and the narrator read the URL out
+loud. The reflowed form #link(
+  "https://typst.app",
+) must go too.
+
+A table written straight into the prose, rather than wrapped in a figure, is
+excluded from the word count like any other table:
+#table(columns: 2, [Condition], [Value], [alpha], [1.0])
+and the text continues after it.
+
+A footnote attaches to the word it annotates, with no space between
+them#footnote[Which is exactly the problem: stripped without a gap, the note
+welds onto that word and the pair counts and narrates as one.], and must not be
+welded to it.
+
 = Math and code
 
 Inline math such as $alpha$, a subscripted one such as $t_"obs" <= t_"max"$, and a
