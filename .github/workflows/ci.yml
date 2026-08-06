@@ -45,21 +45,30 @@ jobs:
           # the one that built paper.pdf, and reports clean either way.
           fetch-depth: 0
 
+      # Tools go in a user-owned directory rather than /usr/local/bin, which is
+      # not reliably writable across the runner images (and differs again on an
+      # arm64 macOS runner). BIN is exported for the install steps below.
+      - name: Prepare a bin directory
+        run: |
+          echo "BIN=$HOME/.local/bin" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
       - name: Install typst ${{ matrix.typst }}
         run: |
           curl -sSL "https://github.com/typst/typst/releases/download/v${{ matrix.typst }}/typst-x86_64-unknown-linux-musl.tar.xz" \
-            | tar -xJ --strip-components=1 -C /usr/local/bin --wildcards '*/typst'
+            | tar -xJ --strip-components=1 -C "$BIN" --wildcards '*/typst'
 
       - name: Install just
         run: |
           curl -sSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
-            | tar -xz -C /usr/local/bin just
+            | tar -xz -C "$BIN" just
 
       - name: Install typstyle
         run: |
-          curl -sSL -o /usr/local/bin/typstyle \
+          curl -sSL -o "$BIN/typstyle" \
             "https://github.com/typstyle-rs/typstyle/releases/download/v${TYPSTYLE_VERSION}/typstyle-x86_64-unknown-linux-gnu"
-          chmod +x /usr/local/bin/typstyle
+          chmod +x "$BIN/typstyle"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -141,15 +150,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Tools go in a user-owned directory rather than /usr/local/bin, which is
+      # not reliably writable across the runner images (and differs again on an
+      # arm64 macOS runner). BIN is exported for the install steps below.
+      - name: Prepare a bin directory
+        run: |
+          echo "BIN=$HOME/.local/bin" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
       - name: Install typst
         run: |
           curl -sSL "https://github.com/typst/typst/releases/download/v0.15.1/typst-x86_64-unknown-linux-musl.tar.xz" \
-            | tar -xJ --strip-components=1 -C /usr/local/bin --wildcards '*/typst'
+            | tar -xJ --strip-components=1 -C "$BIN" --wildcards '*/typst'
 
       - name: Install just
         run: |
           curl -sSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
-            | tar -xz -C /usr/local/bin just
+            | tar -xz -C "$BIN" just
 
       - uses: astral-sh/setup-uv@v5
         with:
@@ -174,3 +192,70 @@ jobs:
           test -f paper.pdf || { echo "no paper.pdf was built"; exit 1; }
           just check
           just version
+
+  # The audiobook toolchain, on the platform it could not run on until piper
+  # became a uv dependency. macos-latest is arm64, which is exactly the case the
+  # old curl'd tarball had no build for -- so this job is the claim in the
+  # README ("Linux, both Macs, and Windows") rather than a restatement of it.
+  #
+  # Deliberately does not build an .m4b: that needs ffmpeg and several minutes of
+  # synthesis. What is being tested is that the engine installs and speaks.
+  audio:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tools go in a user-owned directory rather than /usr/local/bin, which is
+      # not reliably writable across the runner images (and differs again on an
+      # arm64 macOS runner). BIN is exported for the install steps below.
+      - name: Prepare a bin directory
+        run: |
+          echo "BIN=$HOME/.local/bin" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install just
+        run: |
+          curl -sSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-$( [ "$RUNNER_OS" = macOS ] && echo aarch64-apple-darwin || echo x86_64-unknown-linux-musl ).tar.gz" \
+            | tar -xz -C "$BIN" just
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: just audio-setup
+
+      # Synthesis has to be asserted on the samples, not on the exit code. Piper
+      # writes a well-formed WAV either way, and a silent one is what a broken
+      # phonemizer or a half-downloaded model produces.
+      - name: Piper actually speaks
+        run: |
+          uv run --quiet --group audio python - <<'PY'
+          import array, sys, wave
+          from pathlib import Path
+          sys.path.insert(0, "audio")
+          import config
+          from piper import PiperVoice
+
+          voice = PiperVoice.load(Path("audio/models") / f"{config.VOICE_NAME}.onnx")
+          out = Path("probe.wav")
+          with wave.open(str(out), "wb") as wf:
+              voice.synthesize_wav("The treated group scored one point one over control.", wf)
+
+          with wave.open(str(out)) as w:
+              rate, frames = w.getframerate(), w.getnframes()
+              a = array.array("h")
+              a.frombytes(w.readframes(frames))
+          secs = frames / rate
+          rms = (sum(int(x) * int(x) for x in a) / len(a)) ** 0.5
+          print(f"  {rate} Hz, {secs:.1f}s, rms={rms:.0f}")
+          if secs < 1.0:
+              sys.exit(f"FAIL: {secs:.1f}s of audio for a full sentence")
+          if rms < 100:
+              sys.exit(f"FAIL: rms {rms:.0f} -- this is silence")
+          print("  piper speaks")
+          PY
