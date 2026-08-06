@@ -35,7 +35,8 @@ import readability
 import typst_prose
 from prose_rules import Config, Finding, list_rules, load_config, report
 
-HERE = Path(__file__).resolve().parent
+# The manuscript root, one level up: this file lives in tools/.
+ROOT = Path(__file__).resolve().parent.parent
 
 # --- ERRORS: no legitimate exception --------------------------------------
 
@@ -474,7 +475,7 @@ def check_figure_resolution(root: Path | None = None,
 
     Vector formats are skipped: they have no resolution to be below.
     """
-    r = root or HERE
+    r = root or ROOT
     c = cfg or Config()
     min_dpi = c.limit("min-figure-dpi")
     width_mm = c.limit("figure-text-width-mm")
@@ -584,7 +585,7 @@ def check_table_size(root: Path | None = None,
     `[#emph[Treated]]` counts as the seven characters a reader sees rather than
     the eighteen the source spends.
     """
-    r = root or HERE
+    r = root or ROOT
     c = cfg or Config()
     max_cols = c.limit("max-table-columns")
     max_rows = c.limit("max-table-rows")
@@ -696,7 +697,7 @@ def check_bibliography(root: Path | None = None,
     """
     import datetime
 
-    r = root or HERE
+    r = root or ROOT
     bibs = sorted(r.glob("*.bib"))
     if not bibs:
         return []
@@ -767,7 +768,7 @@ def check_orphaned_assets(root: Path | None = None) -> list[Finding]:
     still counts as using it. A false negative here is much cheaper than telling
     someone to delete a file the manuscript needs.
     """
-    r = root or HERE
+    r = root or ROOT
     sources = " ".join(p.read_text() for p in sorted(r.glob("*.typ")))
 
     out: list[Finding] = []
@@ -909,12 +910,12 @@ def main() -> int:
     if "--list-rules" in sys.argv:
         return list_rules()
 
-    cfg = load_config(HERE)
+    cfg = load_config(ROOT)
     # Before any text is split into sentences: the splitter compiles the
     # abbreviation list once, so a later addition would not take effect.
     readability.add_abbreviations(sorted(cfg.vocabulary("abbreviations", set())))
-    body = readability.slice_body((HERE / "paper.typ").read_text())
-    si = (HERE / "si-body.typ").read_text()
+    body = readability.slice_body((ROOT / "paper.typ").read_text())
+    si = (ROOT / "si-body.typ").read_text()
     targets = {"main": body, "SI": si}
 
     findings: list[Finding] = []

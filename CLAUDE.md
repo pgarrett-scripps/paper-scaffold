@@ -48,7 +48,7 @@ What `verify` runs, and what each one is for:
 - **`just test`** -- the prose extractors still handle every construct, before
   and after a reflow. This is the one that matters when you touch inline markup,
   math, links, or cross-references: those are recognized by regexes in
-  `typst_prose.py` that a reflow can break silently, which has happened three
+  `tools/typst_prose.py` that a reflow can break silently, which has happened three
   times (see that file for the cases).
 - **`just prose-check`** -- fails on em dashes, British spellings, doubled words,
   and uncited figures; reports long sentences, verbosity, repetition, and
@@ -61,7 +61,7 @@ What `verify` runs, and what each one is for:
 figure copy to compare against any more. See HISTORY.md's "Decisions reversed"
 before adding either back.
 
-Do not silence a prose-check finding by editing `prose_check.py`. Add it to
+Do not silence a prose-check finding by editing `tools/prose_check.py`. Add it to
 `prose-check.toml` with a comment saying why, so the exception is reviewable, and
 run `just prose-check --show-suppressed` occasionally to see what has
 accumulated.
@@ -120,6 +120,16 @@ One environment per concern, both managed by uv. The manuscript toolchain is
 with `uv run`, never a bare `python3` that picks up whatever is on PATH, and never
 `uv run --with X` inline: add the dependency to the right pyproject so the lock
 stays honest.
+
+**Every tool lives in `tools/`, not the root.** The root is for what a person
+edits and what a build produces. A new checker or metric goes in `tools/` and
+gets a `just` recipe; adding one to the root is how this directory got cluttered
+the first time.
+
+Each tool sits one level down, so it resolves paths against the manuscript root
+with `ROOT = Path(__file__).resolve().parent.parent`, not `.parent`. Copy that
+line from an existing one rather than writing `Path(".")`, which works when you
+run it by hand from the root and breaks under `just` from anywhere else.
 
 ## Scope
 

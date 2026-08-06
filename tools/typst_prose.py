@@ -46,7 +46,8 @@ STATS = r'#s\(\s*"([^"]+)"\s*,?\s*\)'
 STATS_N = r'#n\(\s*"([^"]+)"\s*,?\s*\)'
 
 # Written by analysis/scripts/gen_stats.py, beside the generated SI tables.
-STATS_JSON = Path(__file__).resolve().parent / "si" / "stats.json"
+# .parent.parent because this file lives in tools/; si/ is at the root.
+STATS_JSON = Path(__file__).resolve().parent.parent / "si" / "stats.json"
 
 # An explicit cross-reference call: Typst's own `#ref(<x>)` or a manuscript's
 # `#refn(<x>)` helper. BOTH forms have to be here. `#ref(` is the more natural

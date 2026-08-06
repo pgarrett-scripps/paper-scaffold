@@ -34,9 +34,10 @@ from typst_prose import (
     unescape_unicode,
 )
 
-HERE = Path(__file__).resolve().parent
-PAPER = HERE / "paper.typ"
-SI = HERE / "si-body.typ"
+# The manuscript root, one level up: this file lives in tools/.
+ROOT = Path(__file__).resolve().parent.parent
+PAPER = ROOT / "paper.typ"
+SI = ROOT / "si-body.typ"
 
 BODY_START = re.compile(r"(?m)^// >>> BODY START.*$")
 BODY_END = re.compile(r"(?m)^// <<< BODY END.*$")

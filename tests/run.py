@@ -33,7 +33,7 @@ ROOT = HERE.parent
 FIXTURE = HERE / "fixture.typ"
 EXPECTED = HERE / "expected"
 
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "audio"))
 
 import readability  # noqa: E402
@@ -415,6 +415,11 @@ def new_paper_cases() -> bool:
             ("si/ copied", (dest / "si" / "example_table.typ").is_file()),
             ("stamp copied", (dest / ".assets-stamp").is_file()),
             ("analysis/ copied", (dest / "analysis" / "justfile").is_file()),
+            ("tools/ copied", (dest / "tools" / "prose_check.py").is_file()),
+            # A bare `--exclude=__pycache__` only matched at the top level, so
+            # the caches under tools/ rode along the moment the toolchain moved
+            # one directory down.
+            ("no __pycache__ anywhere", not list(dest.rglob("__pycache__"))),
 
             # tar rather than cp -r, so this stays a symlink. A copy here drifts
             # from CLAUDE.md and the drifted one is what some agent reads.
@@ -509,7 +514,7 @@ def bibliography_cases() -> bool:
     # `update-to` lives on the NOTICE and points at what it retracts, while
     # `updated-by` lives on the PAPER. Reading the wrong one found nothing on a
     # paper retracted in 2010.
-    sys.path.insert(0, str(ROOT))
+    sys.path.insert(0, str(ROOT / "tools"))
     import bib_audit as ba
     if ba.UPDATED_BY != "updated-by":
         print(f"  bib-audit reads {ba.UPDATED_BY!r}; the paper-side field is "

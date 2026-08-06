@@ -29,7 +29,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+# The manuscript root, one level up: this file lives in tools/.
+ROOT = Path(__file__).resolve().parent.parent
 API = "https://api.crossref.org/works/"
 
 # Crossref asks for a contact address so they can reach whoever is hammering
@@ -55,9 +56,9 @@ TITLE_MARKERS = ("retracted:", "retracted article:", "withdrawn:")
 
 
 def _entries():
-    sys.path.insert(0, str(HERE))
+    sys.path.insert(0, str(ROOT))
     import prose_check
-    bibs = sorted(HERE.glob("*.bib"))
+    bibs = sorted(ROOT.glob("*.bib"))
     if not bibs:
         print("no .bib file here, nothing to audit")
         return []
@@ -94,7 +95,7 @@ def audit(timeout: float = 15.0) -> int:
         doi = (e.get("doi") or "").strip()
         if not doi:
             continue                            # prose_check reports these offline
-        sys.path.insert(0, str(HERE))
+        sys.path.insert(0, str(ROOT))
         import prose_check
         doi = prose_check._normalize_doi(doi)
         state, msg = _fetch(doi, timeout)

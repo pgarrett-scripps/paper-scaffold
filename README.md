@@ -87,6 +87,29 @@ have to drop their import. The exact edits are under
 | `just audiobook` | Chaptered `.m4b` of the main text |
 | `just all` | PDF + Word + both audiobooks, then `just check` |
 
+## Layout
+
+```
+paper.typ  config.typ  si-body.typ    the manuscript
+stats.typ  wordcount.typ              Typst helpers it imports
+references.bib  paper.pdf             bibliography, and the tracked output
+justfile  pyproject.toml              how to build it, and what with
+prose-check.toml                      this project's prose exceptions
+
+tools/       the Python and shell toolchain. Nothing here is imported by the
+             manuscript; every one of them READS it. Run through `just`.
+analysis/    your analysis. Writes into figures/ and si/. Own environment.
+figures/ si/ generated, and tracked, so a fresh clone compiles
+audio/       narration. Optional, deletable.
+tests/       the extractor fixture and its golden files
+scripts/     new-paper.sh, which makes a manuscript out of this directory
+```
+
+The root holds what a person edits and what a build produces. Everything that
+processes the manuscript lives in `tools/`, and each of those resolves paths
+against the repository root (`.parent.parent`, since they sit one level down),
+so they still run from anywhere via `just`.
+
 ## The parts worth understanding
 
 ### `config.typ` is the only place the paper's identity lives
@@ -146,7 +169,7 @@ the treated group scored #s("effect.treated_over_control") over control
 Three things make it hold:
 
 - **An unknown id fails the build.** `#s(...)` panics at compile time, so a
-  number that stops existing is loud rather than blank. `readability.py` and the
+  number that stops existing is loud rather than blank. `tools/readability.py` and the
   narrator resolve the same call, because they read the source, not the PDF.
 - **Guards run when the file is generated.** A value can be declared `sign="-"`
   or `between=(0, 100)`. If a sentence says "fell" and a re-run turns the value
@@ -246,7 +269,7 @@ without installing Typst. `check-pdf` is what keeps that honest.
    heading styling are layout-only primitives that Typst's HTML export silently
    discards. Without the bypass you lose every section heading and the abstract.
 2. `paper.typ` wraps equations in `html.frame()` under that same flag, because
-   HTML export drops math outright. `typst2docx.py` rasterizes them back inline
+   HTML export drops math outright. `tools/typst2docx.py` rasterizes them back inline
    and stitches the paragraphs Typst split around them.
 3. pandoc comes from `uv` (`pypandoc-binary`), so no system install is needed.
 
@@ -297,8 +320,8 @@ throughout.
 prose is unchanged by a reflow. Add a case there when you add a construct.
 
 The recognition patterns those checks protect (`#refn(`, `#link(`, emphasis, and
-the balanced-paren stripper) live in `typst_prose.py`, imported by both
-`readability.py` and `audio/extract_prose.py`. They are shared because keeping
+the balanced-paren stripper) live in `tools/typst_prose.py`, imported by both
+`tools/readability.py` and `audio/extract_prose.py`. They are shared because keeping
 them in two files meant fixing each of those three bugs twice.
 
 ### Reading the prose metrics

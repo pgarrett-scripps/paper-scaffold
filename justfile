@@ -61,7 +61,7 @@ typst_min := "0.14"
 # from inside whichever recipe happened to need it first. Required tools fail
 # this; optional ones are reported and cost only the feature they serve.
 #
-# python3 is in the required list because wordcount.sh shells out to it directly
+# python3 is in the required list because tools/wordcount.sh shells out to it directly
 # for the JSON formatting, before uv is ever involved.
 # Check that the external tools this directory needs are installed and new enough
 doctor:
@@ -89,7 +89,7 @@ doctor:
   report typst    typst    required "PDF and Word builds"            typst --version
   report just     just     required "every recipe in this file"      just --version
   report uv       uv       required "the Python toolchain"           uv --version
-  report python3  python3  required "wordcount.sh"                   python3 --version
+  report python3  python3  required "tools/wordcount.sh"                   python3 --version
   report git      git      optional "just check-pdf (skipped without it)" git --version
   report typstyle typstyle optional "just fmt and just fmt-check"    typstyle --version
   report curl     curl     optional "not required; handy for diagnosis" curl --version
@@ -126,7 +126,7 @@ doctor:
 # and hedges per 1,000 words, plus the sections that depart from the paper's own
 # norms. These are what make prose dense; a reading-level score cannot see them.
 density:
-  @uv run --quiet python density.py
+  @uv run --quiet python tools/density.py
 
 # Rebuild everything this directory owns, from the current source, in the order
 # that fails fastest: the PDF first (any Typst error surfaces in seconds), then
@@ -369,23 +369,23 @@ draft:
 # Compile paper.typ -> paper.pdf, then print word counts and readability
 paper:
   typst compile paper.typ
-  @bash wordcount.sh
+  @bash tools/wordcount.sh
   @echo ""
-  @uv run --quiet python readability.py
+  @uv run --quiet python tools/readability.py
   @echo ""
-  @uv run --quiet python density.py
+  @uv run --quiet python tools/density.py
 
 # See wordcount.typ for exactly what is excluded (refs, figures/tables, captions,
 # math, code) vs. included (headings, inline code).
 # Journal-style word counts (main text / SI / total), without rebuilding the PDF
 wordcount:
-  @bash wordcount.sh
+  @bash tools/wordcount.sh
 
 # Computed from the Typst source with the same exemptions as the word count. Uses
 # `textstat` if installed, else a built-in estimate. No PDF rebuild.
 # Readability metrics (Flesch-Kincaid grade, reading ease, words/sentence, fog)
 readability:
-  @uv run --quiet python readability.py
+  @uv run --quiet python tools/readability.py
 
 # Live preview, recompiling on save
 watch:
@@ -418,9 +418,9 @@ watch:
 # uncited figure) and exit non-zero. Warnings are judgement calls (long sentences,
 # verbosity, repetition, citation order) and are reported without failing, because
 # a checker that fails the build over the word "very" gets disabled within a week.
-# Add --strict to treat warnings as failures: uv run python prose_check.py --strict
+# Add --strict to treat warnings as failures: uv run python tools/prose_check.py --strict
 prose-check:
-  @uv run --quiet python prose_check.py
+  @uv run --quiet python tools/prose_check.py
 
 # Every DOI in the bibliography, checked against Crossref: does it resolve, and
 # has the work been retracted?
@@ -444,11 +444,11 @@ prose-check:
 # what you have written.
 # Diagnostics about the draft -> viz/ (sentence length, word use, citation ages)
 viz:
-  @uv run --quiet python viz.py
+  @uv run --quiet python tools/viz.py
 
 # Check every DOI against Crossref for retractions and dead links (needs network)
 bib-audit:
-  @uv run --quiet python bib_audit.py
+  @uv run --quiet python tools/bib_audit.py
 
 # Assert the prose extractors still handle every construct, and still do so after
 # a reflow. Runs against tests/fixture.typ, which is NOT part of the manuscript --
@@ -481,7 +481,7 @@ fmt-check:
 #      styling are layout-only primitives that Typst's HTML export silently discards,
 #      which would otherwise cost every section heading and the abstract.
 #   2. paper.typ wraps equations in html.frame() under that same flag, because HTML
-#      export drops math outright; typst2docx.py rasterizes them back inline.
+#      export drops math outright; tools/typst2docx.py rasterizes them back inline.
 #   3. pandoc comes from uv (pypandoc-binary), so no system install is needed.
 # Figures embed as images, tables stay real Word tables, and `=` sections map onto
 # Word's Heading 1. Typst's HTML export is experimental and prints "ignored during
@@ -490,7 +490,7 @@ fmt-check:
 # Compile paper.typ -> paper.docx (Word), for journals/co-authors that want .docx
 docx:
   typst compile --features html --input docx=true -f html paper.typ paper.docx.html
-  uv run --quiet python typst2docx.py paper.docx.html paper.docx
+  uv run --quiet python tools/typst2docx.py paper.docx.html paper.docx
   @rm -f paper.docx.html
 
 # ---------------------------------------------------------------------------

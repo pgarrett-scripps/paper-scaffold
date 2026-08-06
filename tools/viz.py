@@ -30,8 +30,9 @@ import density                          # noqa: E402  (the section splitter)
 import prose_check                      # noqa: E402  (COMMON, the bib reader)
 import readability                      # noqa: E402
 
-HERE = Path(__file__).resolve().parent
-OUT = HERE / "viz"
+# The manuscript root, one level up: this file lives in tools/.
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "viz"
 
 # Determinism, so a rebuild with no edits produces the same bytes and does not
 # look like a change. Same reason the figure generators seed their RNG.
@@ -60,8 +61,8 @@ low lower large larger small smaller same different
 def prose() -> tuple[str, str]:
     """(main text, SI) as cleaned prose."""
     main = readability.clean(
-        readability.slice_body((HERE / "paper.typ").read_text()))
-    si_path = HERE / "si-body.typ"
+        readability.slice_body((ROOT / "paper.typ").read_text()))
+    si_path = ROOT / "si-body.typ"
     si = readability.clean(si_path.read_text()) if si_path.is_file() else ""
     return main, si
 
@@ -89,7 +90,7 @@ def sentence_lengths(main: str, si: str) -> None:
     lens = [len(s.split()) for s in prose_check.sentences(main + " " + si)]
     if not lens:
         return
-    limit = prose_check.load_config(HERE).limit("max-sentence-words")
+    limit = prose_check.load_config(ROOT).limit("max-sentence-words")
     over = [n for n in lens if n > limit]
 
     fig, ax = plt.subplots(figsize=(7, 3.2))
@@ -205,7 +206,7 @@ def citation_years() -> None:
     cannot see from the .bib. Recent years are highlighted so the balance reads
     at a glance.
     """
-    bibs = sorted(HERE.glob("*.bib"))
+    bibs = sorted(ROOT.glob("*.bib"))
     entries = [e for b in bibs for e in prose_check._bib_entries(b)]
     years = []
     for e in entries:
@@ -383,7 +384,7 @@ def _own_surnames() -> set[str]:
     Parsed with the same regex audio/config.py uses rather than imported from
     it, because audio/ is optional and deleting it must not take this with it.
     """
-    cfg = HERE / "config.typ"
+    cfg = ROOT / "config.typ"
     if not cfg.is_file():
         return set()
     out = set()
@@ -395,7 +396,7 @@ def _own_surnames() -> set[str]:
 
 
 def _bib_authors() -> tuple[list[dict], set[str]]:
-    entries = [e for b in sorted(HERE.glob("*.bib"))
+    entries = [e for b in sorted(ROOT.glob("*.bib"))
                for e in prose_check._bib_entries(b)]
     return entries, _own_surnames()
 
@@ -469,7 +470,7 @@ def write_report(main: str, si: str, rows: list[dict], floats: list[dict],
     """
     import json
 
-    cfg = prose_check.load_config(HERE)
+    cfg = prose_check.load_config(ROOT)
     limit = cfg.limit("max-sentence-words")
     sents = prose_check.sentences(main + " " + si)
     lens = sorted(len(s.split()) for s in sents)
@@ -511,8 +512,8 @@ def main() -> int:
         return 1
     print("writing diagnostics to viz/ (not figures/ -- these are not manuscript figures)")
 
-    main_src = (HERE / "paper.typ").read_text()
-    si_src_path = HERE / "si-body.typ"
+    main_src = (ROOT / "paper.typ").read_text()
+    si_src_path = ROOT / "si-body.typ"
     si_src = si_src_path.read_text() if si_src_path.is_file() else ""
 
     sentence_lengths(main_text, si)

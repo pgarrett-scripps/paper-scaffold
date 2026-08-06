@@ -26,7 +26,7 @@ OUT = Path(__file__).resolve().parent / "paper_prose.txt"
 # The shared Typst-recognition primitives live one level up, beside the
 # manuscript. strip_balanced is re-exported because make_audiobook.py imports it
 # from here.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 from typst_prose import (  # noqa: E402
     CITE,
     FOOTNOTE,

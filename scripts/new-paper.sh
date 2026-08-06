@@ -143,7 +143,7 @@ tar -C "$SCAFFOLD" -cf - \
     --exclude='./audio/piper' \
     --exclude='./audio/models' \
     --exclude='./audio/chapters*' \
-    --exclude='__pycache__' \
+    --exclude='*__pycache__*' \
     --exclude='*.pyc' \
     --exclude='./paper.pdf' \
     --exclude='./paper-draft.pdf' \

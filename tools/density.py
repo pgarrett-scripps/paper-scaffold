@@ -24,7 +24,8 @@ from pathlib import Path
 
 import readability
 
-HERE = Path(__file__).resolve().parent
+# The manuscript root, one level up: this file lives in tools/.
+ROOT = Path(__file__).resolve().parent.parent
 
 # A section that exceeds the manuscript's own median by this factor is flagged.
 OUTLIER_FACTOR = 1.6
@@ -95,8 +96,8 @@ def median(xs: list[float]) -> float:
 
 
 def main() -> int:
-    paper = readability.slice_body((HERE / "paper.typ").read_text())
-    si = (HERE / "si-body.typ").read_text()
+    paper = readability.slice_body((ROOT / "paper.typ").read_text())
+    si = (ROOT / "si-body.typ").read_text()
 
     rows: list[tuple[str, dict]] = []
     for label, src in (("Main text", paper), ("Supporting Info", si)):

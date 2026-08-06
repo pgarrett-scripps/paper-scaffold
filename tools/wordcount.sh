@@ -4,7 +4,8 @@
 # (see wordcount.typ for exactly what is excluded vs. included). Pure query --
 # does not build paper.pdf.
 set -euo pipefail
-cd "$(dirname "$0")"
+# The manuscript root, one level up: this script lives in tools/.
+cd "$(dirname "$0")/.."
 
 json=$(typst query wordcount.typ '<wc>' --field value --one)
 
