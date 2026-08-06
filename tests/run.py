@@ -58,6 +58,8 @@ FORBIDDEN = [
     "sym.",            # a symbol token leaked
     "lovelace1843",    # a citation key leaked
     "typst.app",       # a link URL leaked
+    "#s(",             # a generated number was left as a call instead of resolved
+    "#n(",             # ditto for the raw-value helper
 ]
 
 
@@ -661,7 +663,6 @@ def suppression_cases() -> bool:
 
     # Every rule the checker can emit must be declared, or its findings would
     # crash the reporter and could never be suppressed.
-    import prose_check as pc2
     declared = set(pr.RULES)
     emitted = set(re.findall(r'add\(\s*"([a-z-]+)"', Path(pc2.__file__).read_text()))
     emitted |= set(re.findall(r'Finding\(\s*\n?\s*"([a-z-]+)"',

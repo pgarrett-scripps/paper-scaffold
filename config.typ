@@ -91,7 +91,17 @@
 // Generational and post-nominal suffixes, so a surname lookup does not return
 // "III" for "John R. Yates III". Compared case- and period-insensitively.
 #let name-suffixes = (
-  "jr", "sr", "ii", "iii", "iv", "v", "phd", "md", "dphil", "dsc", "esq",
+  "jr",
+  "sr",
+  "ii",
+  "iii",
+  "iv",
+  "v",
+  "phd",
+  "md",
+  "dphil",
+  "dsc",
+  "esq",
 )
 
 // The family name: the last token that is not a suffix. "John R. Yates III"

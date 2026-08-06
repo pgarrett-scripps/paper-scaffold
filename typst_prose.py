@@ -32,6 +32,19 @@ from pathlib import Path
 # the real value leaves the extractors seeing what a reader sees.
 STATS = r'#s\(\s*"([^"]+)"\s*,?\s*\)'
 
+# The raw-value helper, `#n("cohort.total_n")`. Rarer in prose than `s`, because
+# `n` exists for arithmetic and stats.typ says to prefer `s` for anything a
+# reader sees -- but "rarer" is not "never", and an unhandled one leaked the call
+# text verbatim into the word count and gave the narrator `#n("cohort.total_n")`
+# to read aloud. Exactly the `#ref(` failure again, which reached 68 places.
+#
+# Resolves to the RAW value, not the display string, because that is what Typst
+# renders for this helper. A `n()` nested inside a larger expression
+# (`#calc.round(n("a") / n("b"), digits: 1)`) is a different and much bigger
+# problem: the whole expression would have to be evaluated. This handles the
+# direct call only.
+STATS_N = r'#n\(\s*"([^"]+)"\s*,?\s*\)'
+
 # Written by analysis/scripts/gen_stats.py, beside the generated SI tables.
 STATS_JSON = Path(__file__).resolve().parent / "si" / "stats.json"
 
@@ -80,31 +93,37 @@ def unescape_unicode(text: str) -> str:
 
 
 def resolve_stats(text: str, path: Path | None = None) -> str:
-    """Substitute `#s("id")` with its display value from si/stats.json.
+    """Substitute `#s("id")` and `#n("id")` with their values from si/stats.json.
 
-    A no-op when the text contains no such call, so a manuscript that does not
+    `s` resolves to the display string (already rounded by the analysis), `n` to
+    the raw value, matching what Typst renders for each.
+
+    A no-op when the text contains neither call, so a manuscript that does not
     use the mechanism (and has no stats.json) still extracts. When it IS used,
     both a missing file and an unknown id raise: the same failure Typst gives at
     compile time, rather than a number quietly vanishing from the word count.
     """
-    if not re.search(STATS, text):
+    if not re.search(STATS, text) and not re.search(STATS_N, text):
         return text
     p = path or STATS_JSON
     if not p.is_file():
         raise SystemExit(
-            f'error: prose uses #s("...") but {p} is missing; '
+            f'error: prose uses #s("...") or #n("...") but {p} is missing; '
             f"regenerate it with `just assets`")
     values = json.loads(p.read_text()).get("values", {})
 
-    def repl(m: re.Match) -> str:
-        id = m.group(1)
-        if id not in values:
-            raise SystemExit(
-                f"error: {p.name} has no value '{id}'; declare it in "
-                f"analysis/scripts/gen_stats.py, or fix the id in the prose")
-        return str(values[id].get("display", ""))
+    def repl(field: str):
+        def sub(m: re.Match) -> str:
+            id = m.group(1)
+            if id not in values:
+                raise SystemExit(
+                    f"error: {p.name} has no value '{id}'; declare it in "
+                    f"analysis/scripts/gen_stats.py, or fix the id in the prose")
+            return str(values[id].get(field, ""))
+        return sub
 
-    return re.sub(STATS, repl, text)
+    text = re.sub(STATS, repl("display"), text)
+    return re.sub(STATS_N, repl("value"), text)
 
 
 def markup(delim: str) -> str:

@@ -82,11 +82,12 @@ the skeleton compiles and the numbering resolves before anything is written
 tooling handles specially does not live here, it lives in `tests/fixture.typ`,
 which `just test` checks and which is never part of the manuscript.
 
-A number the analysis computes is read rather than typed: across
-#s("cohort.n_conditions") conditions and #s("cohort.total_n") participants, the
-treated group scored #s("effect.treated_over_control") over control, a
-#s("effect.treated_fold")-fold change. Each of those comes from
-`analysis/scripts/gen_stats.py` and fails the build if it stops existing.
+A number the analysis computes is read rather than typed: across #s(
+  "cohort.n_conditions",
+) conditions and #s("cohort.total_n") participants, the treated group scored #s(
+  "effect.treated_over_control",
+) over control, a #s("effect.treated_fold")-fold change. Each of those comes
+from `analysis/scripts/gen_stats.py` and fails the build if it stops existing.
 
 = Methods <sec:methods>
 

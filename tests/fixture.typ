@@ -87,6 +87,29 @@ A Unicode escape denotes a character and must reach the prose as one: a subscrip
 written log\u{2082} is a single word to a reader, not the four the raw escape
 tokenizes into, and the narrator needs a character it can speak.
 
+= Numbers read from the analysis
+
+A generated number must be RESOLVED rather than stripped or left alone. The
+extractors read the source and not the PDF, so a stripped `s` call silently
+deletes a figure from the word count and a spoken sentence, while an unstripped
+one leaks the call text into both. Across #s("cohort.n_conditions") conditions
+and #s("cohort.total_n") participants the treated group scored
+#s("effect.treated_over_control") over control, a #s("effect.treated_fold")-fold
+change, best in #s("effect.best_condition").
+
+This paragraph exists mainly for the reflow: `just fmt` with --wrap-text breaks a
+long line INSIDE the call rather than before it, so any of the calls above can
+arrive with the id on its own line and a trailing comma after it. The next one is
+written that way explicitly, so the case stays covered even if the wrapper stops
+choosing to break here: #s(
+  "cohort.total_n",
+) participants, already exploded.
+
+The raw-value helper resolves too, to the unrounded value rather than the display
+string: #n("cohort.total_n") participants and #n("cohort.n_conditions")
+conditions. It is rarer in prose than `s`, and went unhandled for exactly that
+reason until it leaked verbatim.
+
 = Figures and tables
 
 Whole figures, including their captions, are excluded from the word count and are
