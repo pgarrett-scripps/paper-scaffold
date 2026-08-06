@@ -69,7 +69,7 @@ jobs:
           chmod +x "$BIN/typstyle"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v9
+        uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
 
@@ -192,7 +192,7 @@ jobs:
           curl -sSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
             | tar -xz -C "$BIN" just
 
-      - uses: astral-sh/setup-uv@v9
+      - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
 
@@ -246,7 +246,7 @@ jobs:
           curl -sSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-$( [ "$RUNNER_OS" = macOS ] && echo aarch64-apple-darwin || echo x86_64-unknown-linux-musl ).tar.gz" \
             | tar -xz -C "$BIN" just
 
-      - uses: astral-sh/setup-uv@v9
+      - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
 
