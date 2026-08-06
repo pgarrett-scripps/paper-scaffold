@@ -45,13 +45,12 @@ be moved between groups without restructuring the file.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
-import sys
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-PAPER = HERE.parent.parent            # analysis/scripts/ -> analysis/ -> paper/
+from _provenance import PAPER, caller_script, code_inputs, declared_inputs
 
 # At the manuscript root, not under si/, because this is no longer purely
 # generated output: `origin.by = "hand"` entries are written by a person and are
@@ -69,20 +68,24 @@ class StatError(Exception):
 
 
 def _caller_script() -> str:
-    """Path of the running generator, relative to the manuscript root.
+    """Which generator is writing, recorded as `origin.by`."""
+    return caller_script()
 
-    Recorded as `origin.by` so `write()` knows which entries are its own to
-    replace, and so `tools/check_stats.py` can tell a derived number from a typed
-    one. Derived from __main__ rather than passed in, because a generator that
-    had to name itself would eventually name itself wrongly after a rename.
+
+def _checksum(value, fmt: str) -> str:
+    """A short digest of what this entry asserts.
+
+    Catches a generated value edited by hand in stats.json. Re-deriving would
+    catch it too and more convincingly, but re-deriving means re-running the
+    analysis, which is exactly what `just verify` must not do. A hand-edit will
+    not know to update this, so it is caught for free on every check.
+
+    Protection against accident, not against a determined edit -- someone who
+    updates both is indistinguishable from the generator, and no scheme that
+    keeps the record next to the value can do better.
     """
-    main = sys.modules.get("__main__")
-    p = getattr(main, "__file__", None)
-    if not p:
-        raise StatError(
-            "cannot tell which script is writing stats.json (no __main__.__file__). "
-            "Run the generator as a script, not from an interactive session.")
-    return Path(p).resolve().relative_to(PAPER).as_posix()
+    payload = json.dumps([value, fmt], sort_keys=True, separators=(",", ":"))
+    return "v1:" + hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
 class Stats:
@@ -152,6 +155,7 @@ class Stats:
         self._values[id] = {
             "value": value,
             "fmt": fmt,
+            "checksum": _checksum(value, fmt),
             "unit": unit,
             "desc": desc,
             "expect": expect,
@@ -181,7 +185,7 @@ class Stats:
                     f"  Usually a unit error or a changed denominator. Widen the "
                     f"band if the new value is genuinely right.")
 
-    def write(self, out: Path | None = None) -> int:
+    def write(self, out: Path | None = None, *, inputs: list[str] = ()) -> int:
         """Merge these values into stats.json and report what is unguarded.
 
         MERGES rather than overwrites. Entries whose `origin.by` names this same
@@ -198,6 +202,15 @@ class Stats:
         # against what is committed. Pointed at an empty directory there is
         # nothing to merge with, so what comes back is purely this script's own
         # output -- which is exactly what the diff needs.
+        # `inputs` are the DATA files this generator read, relative to the
+        # manuscript root. Together with the code it imported they become the
+        # `sources` block: the CHEAP gate that lets `just check-stats` say "the
+        # analysis behind these numbers moved" without re-running the analysis.
+        #
+        # That gate is the whole point. Re-deriving is a stronger check and it is
+        # opt-in (`--deep`), because `just verify` must rebuild nothing: a project
+        # whose gen_stats.py takes an hour cannot pay that on every run of the
+        # gate, and the first version of this made it do exactly that.
         p = out or Path(os.environ.get("PAPER_STATS_OUT") or OUT)
         p.parent.mkdir(parents=True, exist_ok=True)
         mine = _caller_script()
@@ -230,8 +243,28 @@ class Stats:
                 f"script declares it too. One id, one owner: rename one of them.")
 
         merged = {**kept, **self._values}
+
+        # Recorded once per generator, not per entry: one script writes the whole
+        # file by contract, and 1000 values do not need 1000 copies of the same
+        # input map.
+        sources = {}
+        if p.is_file():
+            try:
+                sources = json.loads(p.read_text()).get("sources", {}) or {}
+            except json.JSONDecodeError:
+                sources = {}
+        sources = {k: v for k, v in sources.items() if k != mine}
+        if self._values:
+            sources[mine] = {**code_inputs(), **declared_inputs(inputs)}
+            if not inputs:
+                print(f"  note: {mine} declares no data inputs, so a change to "
+                      f"the data behind these numbers cannot be detected. "
+                      f"Pass write(inputs=[...]) if it reads any.")
+
         p.write_text(json.dumps(
-            {"_about": ABOUT, "values": dict(sorted(merged.items()))},
+            {"_about": ABOUT,
+             "sources": dict(sorted(sources.items())),
+             "values": dict(sorted(merged.items()))},
             indent=2, sort_keys=False) + "\n")
         hand = sum(1 for v in merged.values()
                    if v.get("origin", {}).get("by") == "hand")

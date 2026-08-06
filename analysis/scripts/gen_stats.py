@@ -67,7 +67,7 @@ def main() -> int:
     st.add("effect.best_condition", best,
            desc="Condition with the highest observed effect")
 
-    return st.write()
+    return st.write(inputs=[str(SRC.relative_to(HERE.parent.parent))])
 
 
 if __name__ == "__main__":

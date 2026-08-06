@@ -822,6 +822,30 @@ def check_stats_cases() -> bool:
                   + (f" -- {[f.msg for f in found]}" if got else ""))
             ok = False
 
+    # The checksum is what makes re-derivation affordable to skip. It has to
+    # catch a hand-edited generated value using only what is in the file, since
+    # the default path must not re-run the analysis.
+    import _stats
+    good = {"value": 35, "fmt": ",", "checksum": _stats._checksum(35, ","),
+            "origin": {"by": "analysis/scripts/gen_stats.py"}}
+    checks = [
+        ("intact", good, 0),
+        ("value edited", {**good, "value": 999}, 1),
+        ("fmt edited", {**good, "fmt": ".2f"}, 1),
+        # Written before checksums existed: reported by nothing, so an upgrade
+        # is not a wall of errors. `just assets` adds one.
+        ("no checksum recorded", {k: v for k, v in good.items() if k != "checksum"}, 0),
+        # A hand entry has no generator to have written a checksum, so there is
+        # nothing to compare against. Its guarantee is the guard and the note.
+        ("hand entry is skipped",
+         {**good, "value": 999, "origin": {"by": "hand", "note": "x"}}, 0),
+    ]
+    for name, rec, want in checks:
+        got = len([f for f in cs._checksum({"x.y": rec}) if f.level == "error"])
+        if got != want:
+            print(f"  check-stats checksum [{name}]: expected {want}, got {got}")
+            ok = False
+
     # Unused ids are reported against the real manuscript sources, so this only
     # asserts the shape: an id nothing could possibly call must be reported.
     with tempfile.TemporaryDirectory() as d:

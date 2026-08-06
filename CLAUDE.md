@@ -73,8 +73,13 @@ What `verify` runs, and what each one is for:
   and uncited figures; reports long sentences, verbosity, repetition, and
   unexpanded acronyms as warnings you should read rather than silence.
 - **`just check-stats`** -- re-runs every guard in `stats.json` against the
-  committed values, re-runs `gen_stats.py` and diffs the values it owns, insists a
-  hand-entered number carries a note, and reports ids nothing reads.
+  committed values, checks each generated value against the checksum its
+  generator recorded, compares the hashes of the code and data behind them,
+  insists a hand-entered number carries a note, and reports ids nothing reads.
+  Reads files only; it does **not** re-run the analysis.
+- **`just check-stats-deep`** -- the same plus re-running `gen_stats.py` and
+  diffing every value it owns. Stronger and as slow as your analysis, so it is
+  NOT in `verify`. Run it before submitting.
 - **`just check-assets-manifest`** -- per generated file: does it still hash to
   what was recorded, does its generator still exist, have its declared inputs
   changed, and does anything reference it.

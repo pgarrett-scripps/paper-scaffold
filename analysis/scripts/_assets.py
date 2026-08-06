@@ -42,14 +42,11 @@ answer beats an implicit one that looks total.
 """
 from __future__ import annotations
 
-import hashlib
 import json
-import sys
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-PAPER = HERE.parent.parent            # analysis/scripts/ -> analysis/ -> paper/
-ANALYSIS = PAPER / "analysis"
+from _provenance import PAPER, caller_script, code_inputs, declared_inputs, sha
+
 OUT = PAPER / "assets.json"
 
 ABOUT = ("Figures and tables the manuscript includes, referenced as "
@@ -63,54 +60,7 @@ class AssetError(Exception):
     """A declared asset is not usable by the manuscript."""
 
 
-def _sha(p: Path) -> str:
-    h = hashlib.sha256()
-    with p.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return "sha256:" + h.hexdigest()
 
-
-def _caller_script() -> str:
-    main = sys.modules.get("__main__")
-    p = getattr(main, "__file__", None)
-    if not p:
-        raise AssetError(
-            "cannot tell which script is writing assets.json. Run the generator "
-            "as a script, not from an interactive session.")
-    return Path(p).resolve().relative_to(PAPER).as_posix()
-
-
-def _code_inputs() -> dict[str, str]:
-    """Every module under analysis/ that is currently imported.
-
-    Reliable in a way the data half is not: an import is always Python-level, so
-    sys.modules is a complete record of the code that ran. Catches the shared
-    helper a generator imports, which a hand-declared list forgets after the
-    second refactor.
-
-    analysis/.venv/ is excluded, and that exclusion is not cosmetic: the
-    virtualenv lives INSIDE analysis/, so without it every site-package a
-    generator imports is recorded as an input. The first run of this recorded 257
-    inputs for one figure, nearly all of them PIL and matplotlib internals, which
-    would then have marked the figure stale on every dependency upgrade.
-    """
-    out: dict[str, str] = {}
-    for mod in list(sys.modules.values()):
-        f = getattr(mod, "__file__", None)
-        if not f:
-            continue
-        p = Path(f).resolve()
-        try:
-            rel = p.relative_to(PAPER).as_posix()
-        except ValueError:
-            continue                              # stdlib, or outside the paper
-        if not rel.startswith("analysis/") or not p.is_file():
-            continue
-        if "/.venv/" in rel or "/__pycache__/" in rel:
-            continue
-        out[rel] = _sha(p)
-    return out
 
 
 def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
@@ -133,14 +83,10 @@ def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
             f"{id!r} declares {path}, which does not exist. Write the file "
             f"first, then record it.")
 
-    declared: dict[str, str] = {}
-    for src in inputs:
-        p = PAPER / src
-        if not p.is_file():
-            raise AssetError(
-                f"{id!r} declares input {src}, which does not exist. Paths are "
-                f"relative to the manuscript root, not to analysis/.")
-        declared[Path(src).as_posix()] = _sha(p)
+    try:
+        declared = declared_inputs(inputs)
+    except RuntimeError as e:
+        raise AssetError(f"{id!r}: {e}") from None
 
     # A generator that declared no data at all is the blind spot this contract
     # has: its output can go stale against data nothing here knows about, and no
@@ -154,9 +100,9 @@ def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
         "path": Path(path).as_posix(),
         "kind": kind,
         "desc": desc,
-        "hash": _sha(target),
-        "origin": {"by": _caller_script()},
-        "inputs": dict(sorted({**_code_inputs(), **declared}.items())),
+        "hash": sha(target),
+        "origin": {"by": caller_script()},
+        "inputs": dict(sorted({**code_inputs(), **declared}.items())),
     }
 
     # Read-modify-write, one entry at a time. Safe because analysis/justfile runs

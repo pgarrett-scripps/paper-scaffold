@@ -45,6 +45,54 @@ rather than a copy.
 
 ---
 
+## 3.2.0
+
+`just verify` re-ran the analysis. That was a bug in 3.0.0 and it hid behind the
+scaffold's own numbers: `check-stats` re-derived every value by re-running
+gen_stats.py, which here reads a four-row CSV and costs 0.02s. On a real project
+whose stats generator does real work, the gate cost the analysis -- every time,
+for a command CLAUDE.md describes as rebuilding nothing and safe to run
+constantly.
+
+The code even carried the precondition in a comment ("affordable only because
+gen_stats.py is a single fast script") without anything guaranteeing it.
+
+### Re-derivation is opt-in
+
+`just check-stats` now reads files and nothing else. `just check-stats-deep`
+re-runs the generator and diffs, and is what to run before submitting. `verify`
+calls the cheap one.
+
+Nothing was lost from the default path, because two cheaper checks replace what
+re-derivation was covering:
+
+- **`sources`**, a per-generator block of `{path: sha256}` covering the script,
+  every module it imports from `analysis/`, and the data files it declares. This
+  answers "has the analysis behind these numbers moved" without running it.
+  Recorded once per generator rather than per entry, so a thousand values do not
+  carry a thousand copies of the same map.
+- **`checksum`**, a per-entry digest of `value` + `fmt` written by the generator.
+  A hand-edited generated value does not know to update it. Protection against
+  accident, which is the threat model; nothing that keeps the record beside the
+  value can do better.
+
+Verified both catch their case with the analysis untouched: a changed CSV reports
+the source moved, and a value edited to 999 reports the checksum mismatch.
+
+### Provenance moved into one module
+
+`_stats.py` and `_assets.py` had separate copies of the hashing and the
+sys.modules walk. Both now import `analysis/scripts/_provenance.py`.
+
+While consolidating, the walk stopped recording the contract modules themselves.
+`_assets.py` was an input to every asset it wrote, so editing its DOCSTRING
+marked every figure and table in the manuscript stale -- the one file guaranteed
+not to affect any output was also the one guaranteed to invalidate all of them.
+
+**Upgrading:** run `just assets` once to write the `sources` block and the
+checksums. Add `inputs=[...]` to `st.write()` naming the data your generator
+reads, or it will say it cannot detect data changes.
+
 ## 3.1.0
 
 Subtraction. Nothing new here -- five things came out that had stopped earning

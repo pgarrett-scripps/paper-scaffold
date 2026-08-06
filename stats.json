@@ -1,9 +1,16 @@
 {
   "_about": "Numbers the manuscript states in prose, read as #s(\"<id>\"). Entries with origin.by pointing at a script are rewritten by that script; entries with origin.by = \"hand\" are yours and are never overwritten.",
+  "sources": {
+    "analysis/scripts/gen_stats.py": {
+      "analysis/scripts/gen_stats.py": "sha256:2427564e0dcb27bb2a11a7499a9caa6e02660f601d086bf9dabc64a3ce3509ff",
+      "analysis/scripts/example_data.csv": "sha256:c19c83771308bceecc3f22425ecea53ee3c37db0af1e4ceeea61e844b212b187"
+    }
+  },
   "values": {
     "cohort.n_conditions": {
       "value": 3,
       "fmt": ",",
+      "checksum": "v1:113e3581f3a835a4",
       "unit": "",
       "desc": "Number of conditions compared",
       "expect": {
@@ -16,6 +23,7 @@
     "cohort.total_n": {
       "value": 35,
       "fmt": ",",
+      "checksum": "v1:c276b59bf2191046",
       "unit": "",
       "desc": "Total participants across all conditions",
       "expect": {
@@ -28,6 +36,7 @@
     "effect.best_condition": {
       "value": "Treated",
       "fmt": "",
+      "checksum": "v1:29810d8e074bbb3c",
       "unit": "",
       "desc": "Condition with the highest observed effect",
       "expect": {},
@@ -38,6 +47,7 @@
     "effect.treated_fold": {
       "value": 2.068627450980392,
       "fmt": ".2f",
+      "checksum": "v1:54f50f3f1b0df883",
       "unit": "x",
       "desc": "Treated effect as a fold change over Control",
       "expect": {
@@ -52,6 +62,7 @@
     "effect.treated_over_control": {
       "value": 1.0899999999999999,
       "fmt": "+.2f",
+      "checksum": "v1:db6ae27ce0b2dfeb",
       "unit": "",
       "desc": "Treated minus Control observed effect",
       "expect": {

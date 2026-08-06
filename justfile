@@ -270,9 +270,23 @@ check-declared:
   just check-assets || rc=1
   exit $rc
 
-# Check stats.json: guards, provenance, and generated values against the analysis
+# Reads files only -- guards, provenance, checksums, and a hash comparison of the
+# code and data behind the numbers. Deliberately does NOT re-run the analysis:
+# `just verify` is the command you run constantly and it must rebuild nothing.
+# The first version of this re-derived every time, which on the scaffold cost
+# 0.02s and looked free, and on a real analysis would make the gate cost the
+# analysis.
+# Check stats.json: guards, provenance, checksums, and the hashes behind them
 check-stats:
   @uv run --quiet python tools/check_stats.py
+
+# The strong check, and the expensive one: re-runs gen_stats.py and diffs every
+# value it owns against what the analysis produces now. Run it before submitting,
+# or when `just check-stats` reports the sources moved and you want to know which
+# numbers actually change. Not part of `just verify`.
+# Re-run the analysis and diff every generated number against it
+check-stats-deep:
+  @uv run --quiet python tools/check_stats.py --deep
 
 # assets.json is the same contract for figures and tables: declared by the script
 # that writes them, referenced from the prose by id. Because the compile resolves

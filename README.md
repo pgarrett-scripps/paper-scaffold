@@ -195,10 +195,17 @@ Three things make it hold:
   shipping "fell by -3.1%". A plausibility band catches the unit error.
 - **`just prose-check` flags a typed numeral** that matches a declared value, so
   the rule is enforced rather than merely intended.
-- **`just check-stats` re-checks the committed file.** It re-runs every guard
-  against the values as they sit in `stats.json`, re-runs the generator and diffs
-  the values it owns, and reports ids nothing reads. The guards above only fire
-  while the generator runs, which does nothing for a value edited afterwards.
+- **`just check-stats` re-checks the committed file, without running anything.**
+  Every guard is re-run against the values as they sit in `stats.json`; each
+  generated value is compared to the checksum its generator recorded, so a
+  hand-edit is caught; and the `sources` block hashes the code and data behind
+  the numbers, so "the analysis moved" is answered in milliseconds. The guards
+  above only fire while the generator runs, which does nothing for a value edited
+  afterwards.
+- **`just check-stats-deep` re-runs the generator and diffs.** Stronger — it
+  recomputes from the data rather than comparing fingerprints — and it costs
+  whatever your analysis costs, so it is deliberately not part of `just verify`.
+  `verify` must rebuild nothing; run this before submitting.
 
 ### stats.json is yours, not just the analysis's
 
