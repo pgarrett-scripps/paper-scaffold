@@ -30,8 +30,12 @@ copied at the time. To upgrade:
 ```bash
 just version                                    # what the project is on
 git -C ~/Repos/paper-scaffold log --oneline vOLD..vNEW
-git -C ~/Repos/paper-scaffold diff vOLD..vNEW -- justfile *.py tests/
+git -C ~/Repos/paper-scaffold diff vOLD..vNEW -- justfile tools/ tests/ scripts/
 ```
+
+That path list was `justfile *.py tests/` before 2.0.0, when the toolchain sat
+in the root. Upgrading from 1.x means the `*.py` half of it matches nothing and
+reports a clean diff over the files that changed most.
 
 Then apply what you want by hand. There is deliberately no automatic upgrade: a
 manuscript directory diverges from the scaffold the moment real writing starts,
@@ -40,6 +44,190 @@ Read the major entries below first, since those are the ones that need an edit
 rather than a copy.
 
 ---
+
+## 2.0.0
+
+The scaffold became something that can be handed to someone else. Until now it
+was a directory that worked on the machine it was written on, documented well
+enough to be copied by hand. Most of this release is the difference between
+those two things, and most of the bugs below were found by asking what happens
+on a machine that is not this one.
+
+Major because the layout changed. Nothing in `paper.typ`, `si-body.typ` or
+`analysis/` has to be edited, so by the letter of the policy above this is a
+minor. It is a major anyway, because the upgrade instructions themselves broke:
+the toolchain is no longer `*.py` in the root, and a 1.x project running the old
+diff command sees a clean result over the files that changed most. A version
+number that makes someone read the entry is doing its job.
+
+### The toolchain moved to `tools/`
+
+The root had reached 28 files, nine of them Python and shell that nothing in the
+manuscript imports -- they all read it. That is the split: the root is what a
+person edits and what a build produces, `tools/` is what processes it. 19 files
+left in the root, and a layout map in the README, which it never had.
+
+Six tools defined `HERE = Path(__file__).resolve().parent` meaning "the
+manuscript root", which stopped being true when they moved down a level. They
+are `ROOT` now and point at `.parent.parent`; a variable called HERE pointing at
+its parent directory is how the next bug gets written.
+
+**Upgrading:** create `tools/`, move `prose_check.py`, `prose_rules.py`,
+`readability.py`, `typst_prose.py`, `typst2docx.py`, `density.py`, `viz.py`,
+`bib_audit.py` and `wordcount.sh` into it, fix those path constants, and take the
+new `justfile`. `audio/extract_prose.py` and `tests/run.py` both reach for the
+shared patterns and need their `sys.path` updated too.
+
+### Starting a paper: `scripts/new-paper.sh`
+
+The documented way to start a manuscript was `cp -r`, which copies `.git` along
+with everything else. The new paper then carried the scaffold's history, and two
+checks answered the wrong question while reporting confidently: `check-pdf`
+compared the paper against the *scaffold's* commits, and `just version` reported
+the scaffold's last commit as the manuscript's state.
+
+The script copies the working files, fills in `config.typ`, builds the first PDF
+and Word export, and starts a history belonging to the paper. Interactive, or
+every field as a flag.
+
+Three things it does that are not obvious. It copies with `tar`, not `cp -r`, so
+the `AGENTS.md` symlink stays a symlink rather than becoming a second copy of
+CLAUDE.md free to drift. It builds the PDF *before* the first commit, because
+`check-pdf` compares commit dates and the reverse order makes a brand-new
+manuscript report itself stale. And it builds the Word export nobody asked for on
+day one, because `paper.docx` is gitignored and `just check` reports a missing
+one -- without it the first thing a new manuscript does is fail its own gate.
+
+It is tested in `tests/run.py` rather than as its own recipe, and skips itself in
+a derived manuscript, where `scripts/` is gone: a paper does not make papers.
+
+### `just verify`, and `just doctor`
+
+`verify` runs `fmt-check`, `test`, `prose-check` and `check` in one pass,
+rebuilding nothing. Every part of it already existed and was already documented;
+what did not exist was a single thing to run. The instruction was a four-step
+ritual with two conditions in it ("if you changed prose...", "if you changed
+inline markup..."), and a conditional ritual is one people skip -- the conditions
+need a judgement about which files a change touched that is easy to get wrong
+from inside the edit. CLAUDE.md is now `just paper && just verify`.
+
+`doctor` reports whether the external tools are present and new enough, instead
+of leaving a missing one to surface as "command not found" from inside whichever
+recipe needed it first. `just setup` depends on it, because `uv sync` succeeding
+proves nothing about typst.
+
+### The Typst floor is 0.14, and the obvious answer was wrong
+
+`--features html` and `html.frame()` both arrived in 0.13, so 0.13 is the
+obvious floor. On 0.13 `just docx` runs, exits 0, and silently contains **no
+figures**: that version's HTML export emits no `<img>` for an `image()` call,
+while tables and the rasterized equations survive. The result is a .docx that
+looks finished with every plot missing.
+
+Established by running 0.13.1, 0.14.2 and 0.15.1 through `just docx` and
+comparing the output, not by reading a changelog.
+
+CI holds the floor by counting `<img>` in the export against `image()` calls in
+the source. Counting embedded images in the .docx cannot do it, and that was the
+first attempt: 0.13 keeps both rasterized equations, so the file still contains
+images and still looks fine.
+
+### CI
+
+Every bug in this repository's history was found by hand-porting the scaffold
+into another manuscript. That works and it is slow, and it only happens when
+someone starts a paper.
+
+Three jobs: the gate across a Typst version matrix, a generated manuscript built
+from `new-paper.sh` and checked, and the audio toolchain on Linux and macOS.
+Tools install from pinned release binaries by curl rather than marketplace
+actions.
+
+### Piper is a uv dependency
+
+The audiobooks were the one part of this directory that could not run on a Mac.
+Piper was a binary tarball fetched by curl, pinned to a release that shipped
+x86_64 Linux only. `piper-tts` on PyPI ships abi3 wheels covering Linux, both
+Macs and Windows, and installs with everything else -- which is what pandoc and
+ffmpeg already did here.
+
+Narration is a library call now rather than a subprocess, so the ONNX model
+loads once instead of once per chapter. `VOICE_LANG` is gone: it held a
+hand-built path into a HuggingFace repo that had to be kept in step with
+`VOICE_NAME`, and a mismatch arrived as a 404 that read like a network failure.
+
+The migration left `_audio-check` still gating on `piper/piper`, which is the
+kind of thing that passes locally forever. Only a fresh clone would have hit it.
+
+### The SI could not use generated numbers
+
+Only `paper.typ` imported `stats.typ`, and Typst's `include` gives the included
+file its own scope, so `#s("id")` anywhere in `si-body.typ` failed with
+`unknown variable: s` one line below a file that imports it. The SI is the
+data-heavy half and is where a generated number most belongs.
+
+The two sides disagreed, which is the worse half. `readability.py`,
+`wordcount.typ` and the SI narration all resolve `#s()` out of `si-body.typ` and
+always did, so the tooling reported a number the compiler refused to produce.
+
+**Upgrading:** add `#import "stats.typ": n, s` to `si-body.typ`.
+
+Removing the mechanism was also documented wrong. Three `.typ` files import it,
+and `wordcount.typ` names the helpers a second time in its eval scope, so the old
+instructions left `just paper` working and `just wordcount` failing -- the
+command you run constantly is fine and the one you run before submitting is not.
+Now a four-step procedure, verified by doing exactly it to a copy.
+
+### Four extractor leaks
+
+`#n("id")` was never handled at all. Rarer in prose than `s`, and an unhandled
+one put the call text verbatim into the word count and gave the narrator
+`#n("cohort.total_n")` to read aloud.
+
+The other three came from testing constructs the fixture did not contain, which
+is the trap a fixture sets: everything in it passes, and what a real manuscript
+uses instead was never looked at.
+
+- **A bare `#link("url")` leaked entirely.** The pattern required the
+  `[shown text]` bracket. `#link("https://...")` with no body is valid Typst
+  that renders the URL as its own visible text, and it is what a data- or
+  code-availability statement is written with -- the one section every paper now
+  has. This is the `#ref(` failure again, which reached 68 places.
+- **A bare `#table(` in prose leaked.** Only `#figure(` was stripped.
+- **A footnote welded onto the word it annotates.** The generic `#name[` rule is
+  gap-free on purpose, so `H#sub[2]O` stays "H2O". A footnote attaches the same
+  way and must not: "high#footnote[...]" counted and narrated as one word.
+
+All four have fixture cases. Links now go through `strip_links()` in
+`typst_prose.py`, shared, because these two extractors have been fixed
+separately three times already.
+
+Probed at the same time and found correct, so unchanged: `config.typ`'s
+`surname-of` across suffixes, single names, hyphens and particles, and all four
+draft-mode behaviours.
+
+### `.assets-stamp` carries two hashes
+
+The stamp covered the analysis *source*, so it caught a generator edited and not
+re-run. It never caught the reverse: an edit to the *generated* file. That is the
+rule CLAUDE.md states most loudly and nothing enforced it, and the failure is
+quiet and total -- the edit renders, every check reports current, and the next
+`just assets` overwrites it. An "AUTO-GENERATED" header is a request; this is a
+check.
+
+**Upgrading:** run `just assets` once to rewrite the stamp in the new two-line
+form. The old single-hash file is reported as stale rather than guessed at.
+
+### Distribution
+
+`LICENSE` (MIT). The whole use case is copying this directory, which nobody
+could legally do. `new-paper.sh` carries it into a new project renamed
+`LICENSE.scaffold`, so a `LICENSE` at a manuscript root does not read as a claim
+about the paper.
+
+`AGENTS.md`, a symlink to `CLAUDE.md`, so tools following either convention read
+one document. A symlink rather than a copy for the reason everything else here
+is shared: the copy drifts, and the drifted one is what the agent read.
 
 ## 1.6.0
 
