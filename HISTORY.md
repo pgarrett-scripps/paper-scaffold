@@ -122,6 +122,14 @@ Per entry, rather than one hash over the file:
 - `display` re-derived from `value` and `fmt`, catching an edit to one that no
   longer matches the other -- the edit that changes what a reader sees without
   changing what `#n("id")` computes with.
+
+`display` is also optional now, and stored only when formatting changes
+something. `"display": "3"` for the value `3` carried nothing, and three of the
+five example entries lost it. `stats.typ` falls back to `str(value)`. Floats
+always keep theirs: Typst's `str()` rounds and Python's does not
+(`1.0899999999999999` is `1.09` there, the full expansion here), so a float
+without a stored display would be rendered by a rule this project does not own.
+`check-stats` rejects an omission that is not legitimate.
 - a `by` naming a script that no longer exists.
 - a hand entry with no note.
 - ids nothing reads (a warning; the opposite direction already panics at compile).

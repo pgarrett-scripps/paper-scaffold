@@ -208,7 +208,16 @@ That is also why `stats.json` sits at the manuscript root rather than under
 to edit cannot be guarded by "did anything change".
 
 Rounding is set once per value with `fmt`, next to the analysis, so every mention
-is punctuated identically.
+is punctuated identically. The rendered string is stored as `display` only when
+the formatting actually changes something: an integer `3` needs no stored `"3"`,
+and `stats.typ` falls back to `str(value)`.
+
+Floats always keep their `display`, and that is not an oversight. Typst's `str()`
+rounds where Python's does not — `1.0899999999999999` renders as `1.09` there and
+in full here — so a float without a stored display would be rendered by a rule
+this project does not own. `just check-stats` verifies both directions: a stored
+display that no longer matches its value, and an omitted one that should not have
+been.
 
 While ids are still in flux, `just draft` renders an unresolved one as a loud
 `?id?` placeholder instead of stopping the compile, and writes `paper-draft.pdf`

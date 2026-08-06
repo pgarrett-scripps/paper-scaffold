@@ -176,7 +176,13 @@ def resolve_stats(text: str, path: Path | None = None) -> str:
                 raise SystemExit(
                     f"error: {p.name} has no value '{id}'; declare it in "
                     f"analysis/scripts/gen_stats.py, or fix the id in the prose")
-            return str(values[id].get(field, ""))
+            rec = values[id]
+            # `display` is omitted when it would just be str(value) -- see
+            # _omittable() in analysis/scripts/_stats.py. Same fallback here, so
+            # the word count and the narration see what the PDF shows.
+            if field == "display" and "display" not in rec:
+                return str(rec.get("value", ""))
+            return str(rec.get(field, ""))
         return sub
 
     text = re.sub(STATS, repl("display"), text)

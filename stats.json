@@ -3,7 +3,6 @@
   "values": {
     "cohort.n_conditions": {
       "value": 3,
-      "display": "3",
       "fmt": ",",
       "unit": "",
       "desc": "Number of conditions compared",
@@ -17,7 +16,6 @@
     },
     "cohort.total_n": {
       "value": 35,
-      "display": "35",
       "fmt": ",",
       "unit": "",
       "desc": "Total participants across all conditions",
@@ -31,7 +29,6 @@
     },
     "effect.best_condition": {
       "value": "Treated",
-      "display": "Treated",
       "fmt": "",
       "unit": "",
       "desc": "Condition with the highest observed effect",

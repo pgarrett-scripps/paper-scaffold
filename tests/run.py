@@ -796,12 +796,27 @@ def check_stats_cases() -> bool:
         # display and value disagreeing is the edit that changes what a reader
         # sees without changing what #n() computes with.
         ("display does not match value", {"display": "9.99"}, 1),
-        ("display missing",        {"display": None}, 1),
+        # `display` is optional, and omitted whenever formatting changes nothing.
+        # Legitimate for an int or a string, where Typst and Python render the
+        # same. NOT legitimate for a float: Typst's str() rounds and Python's does
+        # not, so a float without a stored display is rendered by a rule this
+        # project does not control.
+        ("omitted for an int",
+         {"value": 3, "fmt": "", "display": "__drop__"}, 0),
+        ("omitted for a string",
+         {"value": "Treated", "fmt": "", "display": "__drop__"}, 0),
+        ("omitted for a float",
+         {"value": 2.07, "fmt": "", "display": "__drop__"}, 1),
+        # An int whose fmt DOES change it still has to carry the display.
+        ("omitted but fmt changes the value",
+         {"value": 1204, "fmt": ",", "display": "__drop__"}, 1),
     ]
     for name, over, want in cases:
         rec = entry(**over)
         if over.get("origin", "keep") is None:
             rec["origin"] = None
+        if rec.get("display") == "__drop__":
+            del rec["display"]
         found = cs._origin("x.y", rec) + cs._display("x.y", rec) + cs._guard("x.y", rec)
         got = sum(1 for f in found if f.level == "error")
         if got != want:

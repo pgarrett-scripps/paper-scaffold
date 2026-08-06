@@ -61,14 +61,22 @@
 }
 
 // The display string: already rounded, by the rule set next to the analysis.
+//
+// `display` is OPTIONAL, and absent whenever formatting changes nothing -- an
+// integer 3 needs no stored "3". str() is the fallback, and is only ever reached
+// for ints and strings, which Typst and Python render identically. A float
+// always carries its display, because Typst's str() rounds and Python's does
+// not, so the two would disagree about the value a reader sees.
 // In draft mode an unknown id becomes a placeholder that is hard to overlook and
 // trivial to grep for.
 #let s(id) = {
   let e = _entry(id)
   if e == none {
     box(fill: yellow, inset: (x: 2pt), text(fill: red, weight: "bold", "?" + id + "?"))
-  } else {
+  } else if "display" in e {
     e.display
+  } else {
+    str(e.value)
   }
 }
 
