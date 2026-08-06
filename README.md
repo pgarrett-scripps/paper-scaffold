@@ -52,10 +52,13 @@ Then, in the new directory:
 Nothing else should need editing. `just verify` is the gate that says whether the
 directory is in a shippable state.
 
-Three parts are optional and can simply be deleted: `analysis/` (no generated
-assets), `audio/` (no narration), and `stats.typ` + `si/stats.json` +
-`analysis/scripts/gen_stats.py` (no numbers stated in prose). Every recipe and
-check adapts rather than failing.
+Three parts are optional. `analysis/` (no generated assets) and `audio/` (no
+narration) can simply be deleted: every recipe and check adapts rather than
+failing. The generated-numbers mechanism (`stats.typ` + `si/stats.json` +
+`analysis/scripts/gen_stats.py`) also comes out, but not by deleting alone —
+Typst cannot conditionally import a file that is not there, so three `.typ` files
+have to drop their import. The exact edits are under
+[Numbers in prose](#numbers-in-prose-sid-not-a-typed-numeral).
 
 ## What to run
 
@@ -168,11 +171,24 @@ file its own scope: without that import an `#s("id")` in the SI fails with
 include. The SI is the data-heavy half, so it is where generated numbers belong
 most.
 
-To drop the mechanism from a project that states no computed numbers, delete
-`stats.typ`, `si/stats.json` and `gen_stats.py`, **and the
-`#import "stats.typ": n, s` line from all three files that carry it**:
-`paper.typ`, `si-body.typ` and `wordcount.typ`. Each import is commented to say
-so. Nothing beyond those three refers to it.
+To drop the mechanism from a project that states no computed numbers, four steps.
+Typst has no conditional import and no way to ask whether a file exists, so the
+references have to come out by hand; each one is commented to say so.
+
+```bash
+rm stats.typ si/stats.json analysis/scripts/gen_stats.py
+```
+
+1. Delete the `#import "stats.typ": n, s` line from **`paper.typ`,
+   `si-body.typ` and `wordcount.typ`**. All three carry it.
+2. In `wordcount.typ`, also drop the helpers from the eval scope:
+   `scope: (refn: refn, s: s, n: n)` becomes `scope: (refn: refn)`. The import
+   alone is not enough — this line names them again, and missing it is the one
+   that bites, because `just paper` still works and only `just wordcount` fails.
+3. Remove any `#s()` / `#n()` calls left in the prose.
+
+Verified by doing exactly this to a copy and confirming `just paper`,
+`just wordcount`, `just readability` and the narration all still work.
 
 ### `analysis/` lives inside the manuscript, and writes to it directly
 
