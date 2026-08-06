@@ -45,6 +45,7 @@ RULES: dict[str, tuple[str, str]] = {
     "em-dash":            ("error", ""),
     "british-spelling":   ("error", "the word"),
     "doubled-word":       ("error", "the repeated word"),
+    "misspelling":        ("error", "the misspelled word"),
     "uncited-figure":     ("error", "the label, e.g. fig:example"),
     "long-sentence":      ("warn",  ""),
     "verbose-phrase":     ("warn",  "the phrase"),

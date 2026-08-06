@@ -263,6 +263,12 @@ PY
 # The build is best-effort. It needs the network the first time (the arkheion
 # template is fetched from Typst Universe and cached), and a new manuscript
 # started on a plane should still end up with a working directory.
+#
+# The Word export is built too, and not because anyone wants it on day one:
+# paper.docx is gitignored, so `just check` can only judge it by mtime and
+# reports a missing one as something to rebuild. Without this, the first thing a
+# new manuscript does is fail its own gate over a file the author never asked
+# for, which teaches them the gate is noise on day one.
 # ---------------------------------------------------------------------------
 built=0
 if [ "$DO_BUILD" = 1 ]; then
@@ -271,6 +277,11 @@ if [ "$DO_BUILD" = 1 ]; then
   if (cd "$DEST" && just paper >/dev/null 2>&1); then
     built=1
     echo "  wrote paper.pdf"
+    if (cd "$DEST" && just docx >/dev/null 2>&1); then
+      echo "  wrote paper.docx"
+    else
+      echo "  note: the Word export did not build; run 'just docx' to see why"
+    fi
   else
     echo "  could not build yet (typst, uv, or the network). Run: just doctor"
   fi

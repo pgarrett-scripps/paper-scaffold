@@ -3,7 +3,7 @@ name = "paper"
 # The paper-scaffold version this manuscript is built on. Travels with the
 # scaffold when it is copied, so a project can always say where it came from.
 # See HISTORY.md for what bumps major, minor, and patch.
-version = "1.4.0"
+version = "1.5.0"
 description = "Python toolchain for building the manuscript"
 requires-python = ">=3.10"
 
@@ -16,6 +16,7 @@ dependencies = [
   "cairosvg",         # rasterizes math SVGs for the Word path
   "pillow",           # crops those rasters to their ink
   "textstat",         # sharper syllable counts for the readability report
+  "codespell",        # the misspelling dictionary the spelling check reads
 ]
 
 # Only needed to build the audiobooks. `just audio-setup` installs it.

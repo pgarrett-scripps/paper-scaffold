@@ -41,6 +41,44 @@ rather than a copy.
 
 ---
 
+## 1.5.0
+
+**`misspelling`, from codespell's dictionary.** Runs on the same code-removed
+prose the British-spelling check uses, so a tool's own flag is never reported as
+a typo.
+
+The choice of tool is the whole point, and it was made from measurement rather
+than preference. Three candidates were run against 15,175 words of a real
+manuscript:
+
+- **pyspellchecker** flagged 418 words, 18% of the vocabulary. After discarding
+  hyphenated compounds whose parts are all known, 181 remained, and they were
+  `bruker`, `cerevisiae`, `centroider`, `ddapasef`, `carbamidomethyl`,
+  `bonferroni` -- essentially no typos. A dictionary check asks "is this word in
+  the wordlist", which on a scientific manuscript flags the subject matter.
+- **proselint** produced 7 findings, of which 3 were `--reanalyse`, a DIA-NN
+  command-line option it could not tell from prose. This pipeline already solves
+  that, which is exactly why the check has to run on cleaned prose.
+- **codespell** produced **zero** false positives and caught every injected typo.
+  It ships curated confusion pairs rather than a dictionary, so it only fires
+  when confident.
+
+Zero findings on a finished manuscript is the right result: the check costs
+nothing now and is there for the next typo typed.
+
+One implementation note worth keeping. Matching word-by-word disagreed with
+codespell on exactly one token: `mis-transferred`. codespell's list contains
+fragments that are wrong only standing alone (`mis -> miss, mist`), so splitting
+a compound and matching its prefix invents a finding codespell itself does not
+make. Words adjacent to a hyphen are therefore skipped by this check and NOT by
+the British one, whose list is curated and must still catch the `colour` in
+`colour-coded`. Both behaviours have cases.
+
+Grammar checking was considered and rejected for now. `language_tool_python` is
+the only serious option; it needs Java 17 or newer and downloads about 250 MB, so
+it breaks the clone-and-run property. If it is ever added it belongs behind its
+own recipe with `just doctor` reporting the JVM, never in `just verify`.
+
 ## 1.4.0
 
 **Severity and vocabulary are the project's call.** Before this, a rule could be

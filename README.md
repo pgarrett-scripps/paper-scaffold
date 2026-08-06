@@ -17,23 +17,40 @@ a reflow. That check survives for the life of the project.
 ## Quick start
 
 ```bash
-cp -r paper-scaffold /path/to/your-project/paper
-cd /path/to/your-project/paper
+git clone https://github.com/YOURNAME/paper-scaffold
+cd paper-scaffold
+just doctor                          # is the toolchain present and new enough?
 
-just assets        # regenerate the example figure + SI table via analysis/
-just paper         # -> paper.pdf, plus word count and readability
-just docx          # -> paper.docx
+./scripts/new-paper.sh ~/papers/my-paper
 ```
 
-Then:
+The script asks for the title, author, and the rest of the identity, copies the
+working files, fills in `config.typ`, builds the first PDF, and starts a git
+history that belongs to the new paper. Every field also has a flag, so a
+scripted run needs no terminal:
 
-1. Edit `config.typ` (title, authors, abstract, keywords, bibliography style).
+```bash
+./scripts/new-paper.sh --yes --title "My Paper" --author "Ada Lovelace" ~/papers/mine
+./scripts/new-paper.sh --help
+```
+
+**Do not start a paper with `cp -r`.** It copies `.git` too, and the new
+manuscript then carries the scaffold's history: `just check-pdf` compares the
+paper against the *scaffold's* commits, and `just version` reports the
+scaffold's last commit as the manuscript's state. Both keep reporting
+confidently while answering the wrong question.
+
+Then, in the new directory:
+
+1. Replace the abstract in `config.typ`. Title, authors and keywords are already
+   filled in; the abstract is prose and is left for you.
 2. Replace the placeholder prose in `paper.typ` and `si-body.typ`.
 3. Replace `references.bib`.
 4. Put your analysis in `analysis/`, keeping `just assets` as its front door. Or
    delete `analysis/` entirely if the paper has no generated assets.
 
-Nothing else should need editing.
+Nothing else should need editing. `just verify` is the gate that says whether the
+directory is in a shippable state.
 
 Three parts are optional and can simply be deleted: `analysis/` (no generated
 assets), `audio/` (no narration), and `stats.typ` + `si/stats.json` +
@@ -44,6 +61,8 @@ check adapts rather than failing.
 
 | Command | Does |
 |---|---|
+| `just verify` | **The gate.** Formatting, extractors, prose rules and staleness, in one pass |
+| `just doctor` | Are the external tools installed and new enough? |
 | `just paper` | Compile `paper.pdf`, then print word counts and readability |
 | `just draft` | Compile `paper-draft.pdf` with unresolved `#s()` numbers shown as `?id?` |
 | `just watch` | Live preview, recompiling on save |
@@ -347,9 +366,18 @@ clone needs `just audio-setup` once (~60 MB download).
 
 ## Requirements
 
-- `typst`, `just`, `uv`
-- `typstyle` for `just fmt` (`cargo install typstyle`)
+Run `just doctor` and it will tell you which of these you are missing, and
+whether the ones you have are new enough.
+
+- `typst` **0.13 or newer**, `just`, `uv`, `python3`
+- `typstyle` for `just fmt` and `just fmt-check` (`cargo install typstyle`)
+- `git` for `just check-pdf`, which skips itself outside a repository
 - `curl` and a network connection for `just audio-setup` only
+
+The Typst floor is 0.13 because `just docx` is built on `--features html` and
+`html.frame()`, which arrived there. On an older binary the PDF path still works
+and only the Word export fails, with an error that does not obviously point at
+the version. Developed and tested against 0.14.
 
 `just setup` builds the Python environment from `pyproject.toml` and commits the
 resolution to `uv.lock`, so every machine gets the same versions. There are two
@@ -393,9 +421,30 @@ Read HISTORY.md's "Decisions reversed" section before changing something that
 looks obviously improvable. Several obvious improvements were tried here and were
 wrong for reasons only visible from use.
 
+## Notes for agents
+
+The working rules for editing a manuscript built on this scaffold are in
+[CLAUDE.md](CLAUDE.md): what never to hand-edit, what to run before calling the
+work done, and the Typst and Python conventions.
+
+`AGENTS.md` is a **symlink** to that same file, so tools following either
+convention read one document. It is a symlink rather than a copy on purpose: two
+files of instructions drift, and the one that drifts is always the one the agent
+happened to read. Preserve it as a symlink if you move the directory around by
+hand (`scripts/new-paper.sh` uses `tar` rather than `cp -r` for exactly this
+reason).
+
 ## Provenance
 
 Extracted from the `dnoise` manuscript pipeline. The design decisions encoded
 here (commit-date PDF checking, byte-compared figure copies, generated SI tables,
 the docx-mode template bypass) each came from a specific way that manuscript went
 wrong.
+
+## License
+
+MIT, see [LICENSE](LICENSE). It covers the scaffold and its tooling, not any
+manuscript you write with it. `scripts/new-paper.sh` carries the notice into a
+new project as `LICENSE.scaffold`, renamed so that a `LICENSE` at the root of a
+manuscript directory does not read as a claim about the paper, which is a
+different question and yours to answer.

@@ -23,6 +23,10 @@ unexpanded-acronym = [
 # A British spelling that is really a name, a quotation, or a product.
 # british-spelling = ["Grey"]   # a surname
 
+# A word codespell calls a typo that is really a term, a name, or a quotation.
+# The list is curated and rarely wrong, so check the word before adding it.
+# misspelling = ["Nd"]   # an element symbol, not a typo of "and"
+
 # A phrase flagged as verbose but quoted from a source, or a term of art.
 # verbose-phrase = ["essentially"]
 

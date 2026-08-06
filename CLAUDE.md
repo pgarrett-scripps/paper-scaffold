@@ -27,29 +27,48 @@ the prose at them, and each hard-fails without them.
 
 ## Before saying the work is done
 
-Run `just check`. It exits non-zero if the committed PDF predates a source
-commit, if the Word export is older than what it renders, or if `figures/` and
-`si/` are older than the `analysis/` code that generates them. "I edited the
-text" is not done; "`just check` is clean" is done.
+Two commands, in this order:
 
-It deliberately does not check the audiobooks, and there is no upstream figure
-copy to compare against any more. See HISTORY.md's "Decisions reversed" before
-adding either back.
+```bash
+just paper      # rebuild, and print the current word count and readability
+just verify     # the gate: formatting, extractors, prose rules, staleness
+```
 
-If you changed prose, also run `just paper` so the word count and readability
-numbers in your report are current, and quote them rather than estimating. Do not silence a prose-check finding by editing prose_check.py. Add it to
-`prose-check.toml` with a comment saying why, so the exception is reviewable. Run
-`just prose-check --show-suppressed` occasionally to see what has accumulated.
+"I edited the text" is not done. "`just verify` is clean" is done. It rebuilds
+nothing, so run it as often as you like; when it reports something stale it also
+names the recipe that clears it.
 
-Run
-`just prose-check` too: it fails on em dashes, British spellings, doubled words,
-and uncited figures, and reports long sentences, verbosity, repetition, and
-unexpanded acronyms as warnings you should read rather than silence. `just
-density` shows which section is densest relative to the rest of the paper.
+Quote the word count and readability numbers `just paper` prints. Do not
+estimate them.
 
-If you changed inline markup, math, links, or cross-references, run `just test`.
-Those constructs are recognized by regexes in `typst_prose.py` that a reflow can
-break silently, which has happened three times (see that file for the cases).
+What `verify` runs, and what each one is for:
+
+- **`just fmt-check`** -- the hand-written sources are reflowed to 80 columns.
+  Skipped with a note if typstyle is not installed.
+- **`just test`** -- the prose extractors still handle every construct, before
+  and after a reflow. This is the one that matters when you touch inline markup,
+  math, links, or cross-references: those are recognized by regexes in
+  `typst_prose.py` that a reflow can break silently, which has happened three
+  times (see that file for the cases).
+- **`just prose-check`** -- fails on em dashes, British spellings, doubled words,
+  and uncited figures; reports long sentences, verbosity, repetition, and
+  unexpanded acronyms as warnings you should read rather than silence.
+- **`just check`** -- a committed PDF that predates a source commit, a Word
+  export older than what it renders, `figures/` and `si/` older than the
+  `analysis/` code behind them.
+
+`just check` deliberately does not check the audiobooks, and there is no upstream
+figure copy to compare against any more. See HISTORY.md's "Decisions reversed"
+before adding either back.
+
+Do not silence a prose-check finding by editing `prose_check.py`. Add it to
+`prose-check.toml` with a comment saying why, so the exception is reviewable, and
+run `just prose-check --show-suppressed` occasionally to see what has
+accumulated.
+
+Two more worth running by hand, not part of the gate: `just density` shows which
+section is densest relative to the rest of the paper, and `just doctor` reports
+whether the external toolchain is present and new enough.
 
 If you taught an extractor to handle a new construct, add a case for it to
 `tests/fixture.typ` and regenerate the golden files with `just test-update`,

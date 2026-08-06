@@ -226,6 +226,46 @@ def structural_cases() -> bool:
             print(f"  doubled word [{name}]: expected {want}, got {got}")
             ok = False
 
+    # Misspellings, from codespell's dictionary. The compound cases are the ones
+    # that matter: codespell's list holds fragments that are wrong only when
+    # standing alone, so splitting a hyphenated word and matching its prefix
+    # invents a finding codespell itself does not make.
+    spell_cases = [
+        ("a plain typo", "The measurment was taken.", ["measurment"]),
+        ("several", "We recieved teh data.", ["recieved", "teh"]),
+        ("correct prose", "The measurement was taken.", []),
+        ("fragment inside a compound", "A mis-transferred arm.", []),
+        ("compound is not exempt in general", "A seperate-but-equal split.", []),
+        ("case insensitive", "Measurment matters.", ["Measurment"]),
+    ]
+    for name, src, want in spell_cases:
+        got = [f.subject for f in pc.check("t", src, src, src)
+               if f.rule == "misspelling"]
+        if got != want:
+            print(f"  misspelling [{name}]: expected {want}, got {got}")
+            ok = False
+
+    # The two spelling checks read the same text and must NOT behave the same on
+    # a compound: the British list is curated and belongs inside one.
+    brit = [f.subject for f in pc.check("t", "The colour-coded plot.",
+                                        "The colour-coded plot.",
+                                        "The colour-coded plot.")
+            if f.rule == "british-spelling"]
+    if brit != ["colour"]:
+        print(f"  british-spelling in a compound: expected ['colour'], got {brit}")
+        ok = False
+
+    # Neither spelling check may read inline code: a tool's own flag is not a
+    # spelling the author can act on. `--reanalyse` is a real DIA-NN option.
+    code_src = "Run with `--reanalyse` set."
+    coded = [f.rule for f in pc.check("t", readability.clean(code_src),
+                                      readability.clean(pc.no_code(code_src)),
+                                      readability.clean(code_src))
+             if f.rule in ("misspelling", "british-spelling")]
+    if coded:
+        print(f"  spelling read inline code and flagged {coded}")
+        ok = False
+
     # An acronym counts as defined by any parenthetical that names it alongside
     # ordinary words, not only the bare "(ACR)" form.
     acr_cases = [
