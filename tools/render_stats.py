@@ -44,7 +44,15 @@ def main() -> int:
         # Not an error: the generated-numbers mechanism is optional, and a
         # manuscript that deleted it must still build. stats.typ is deleted along
         # with stats.json in that case, so nothing will read the output either.
-        print("no stats.json: nothing to render")
+        #
+        # The derived file is removed rather than left behind: a stale
+        # stats-rendered.json outliving its source is a corpse a compile could
+        # still read, which is the one way this step could serve stale numbers.
+        if OUT.is_file():
+            OUT.unlink()
+            print(f"no stats.json: removed the stale {OUT.name}")
+        else:
+            print("no stats.json: nothing to render")
         return 0
 
     try:

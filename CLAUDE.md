@@ -106,6 +106,11 @@ What `verify` runs, and what each one is for:
 figure copy to compare against any more. See HISTORY.md's "Decisions reversed"
 before adding either back.
 
+Before an actual submission, run `just preflight` instead: fresh builds of both
+outputs, then `verify`, then `check-stats-deep`, then `bib-audit`. It is as slow
+as the analysis plus the network, which is why it is its own command and not
+part of `verify`.
+
 Do not silence a prose-check finding by editing `tools/prose_check.py`. Add it to
 `prose-check.toml` with a comment saying why, so the exception is reviewable, and
 run `just prose-check --show-suppressed` occasionally to see what has

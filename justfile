@@ -217,6 +217,44 @@ verify:
   fi
   exit $rc
 
+# The day-of-submission gate. `verify` answers "is this done" cheaply and
+# constantly; this answers "is this safe to SUBMIT", and pays for it. The
+# expensive checks were each documented as "run before submitting" -- three
+# commands in three places, which is a conditional ritual, and conditional
+# rituals get skipped (the same reasoning that created `verify`).
+#
+# What it runs, in order: fresh builds of both outputs (as dependencies), the
+# whole verify gate, the deep stats check (re-runs the analysis behind the
+# numbers and diffs -- as slow as your gen_stats.py), and the bibliography audit
+# (network: every DOI checked against Crossref for retractions). Every stage
+# runs even after one fails, same as verify: the full list beats four rounds of
+# fix-and-rerun on submission day.
+#
+# NOT here: `just assets`. Regenerating every figure may take hours and is a
+# rebuild, not a check -- `check-assets` (inside verify) already reports if the
+# analysis moved out from under the committed figures, and names what to re-run.
+# Everything to run before submitting: fresh builds, verify, deep stats, DOI audit
+preflight: paper docx
+  #!/usr/bin/env bash
+  set -uo pipefail
+  rc=0
+  just verify || rc=1
+  echo ""
+  echo "=== deep stats (just check-stats-deep) ==="
+  just check-stats-deep || rc=1
+  echo ""
+  echo "=== bibliography (just bib-audit) ==="
+  just bib-audit || rc=1
+  echo ""
+  if [ $rc -eq 0 ]; then
+    echo "PREFLIGHT OK -- fresh builds, the full gate, re-derived numbers and the"
+    echo "bibliography all pass. Remaining judgement calls: read the prose-check"
+    echo "warnings above, and \`just viz\` for the shape of the draft."
+  else
+    echo "PREFLIGHT FAILED -- see the stages above."
+  fi
+  exit $rc
+
 # Covers the three ways a manuscript directory actually goes stale: a tracked
 # paper.pdf committed before a source fix, generated artifacts older than the
 # text they narrate or render, and generated figures/tables older than the
@@ -334,15 +372,22 @@ draft: render-stats
   typst compile --input draft=true paper.typ paper-draft.pdf
   @echo 'wrote paper-draft.pdf -- unresolved numbers appear as ?id?; `just paper` is the real build'
 
+# The source stamp is taken BEFORE the compile, in both build recipes: a source
+# edit saved while typst runs is then not claimed as built, and the next
+# `just check` reports stale -- wrong in the safe direction. Stamping afterwards
+# claimed the edited sources as rendered when they were not.
 # Compile paper.typ -> paper.pdf, then print word counts and readability
 paper: render-stats
+  #!/usr/bin/env bash
+  set -euo pipefail
+  stamp=$(just _stamp-manuscript)
   typst compile paper.typ
-  @just _record-build paper.pdf
-  @bash tools/wordcount.sh
-  @echo ""
-  @uv run --quiet python tools/readability.py
-  @echo ""
-  @uv run --quiet python tools/density.py
+  just _record-build paper.pdf "$stamp"
+  bash tools/wordcount.sh
+  echo ""
+  uv run --quiet python tools/readability.py
+  echo ""
+  uv run --quiet python tools/density.py
 
 # See wordcount.typ for exactly what is excluded (refs, figures/tables, captions,
 # math, code) vs. included (headings, inline code).
@@ -462,10 +507,13 @@ fmt-check:
 # nothing in the prose. The PDF build is entirely unaffected by the docx flag.
 # Compile paper.typ -> paper.docx (Word), for journals/co-authors that want .docx
 docx: render-stats
+  #!/usr/bin/env bash
+  set -euo pipefail
+  stamp=$(just _stamp-manuscript)
   typst compile --features html --input docx=true -f html paper.typ paper.docx.html
   uv run --quiet python tools/typst2docx.py paper.docx.html paper.docx
-  @rm -f paper.docx.html
-  @just _record-build paper.docx
+  rm -f paper.docx.html
+  just _record-build paper.docx "$stamp"
 
 # ---------------------------------------------------------------------------
 # Generated assets. The contract: numbers and plots in the manuscript are written
@@ -568,9 +616,9 @@ audio-clean:
 # all of them, and getting one back out means rewriting history.
 #
 # So staleness is answered by a CONTENT STAMP rather than by git. `just paper` and
-# `just docx` record the hash of the sources they rendered; this recompares it.
-# No git, no mtimes -- mtimes are rewritten by a clone or a checkout, which is why
-# the git version existed in the first place.
+# `just docx` record the hash of the sources they rendered AND of the output they
+# produced; this recompares both. No git, no mtimes -- mtimes are rewritten by a
+# clone or a checkout, which is why the git version existed in the first place.
 #
 # .build-stamp is itself untracked, and has to be: it describes local build output.
 # Tracking it would mean a rebuild on one machine reports every other checkout
@@ -587,17 +635,30 @@ check-build:
   for out in paper.pdf paper.docx; do
     recipe=$([ "$out" = "paper.pdf" ] && echo "just paper" || echo "just docx")
     was=$(grep -m1 "^$out " .build-stamp 2>/dev/null | cut -d" " -f2)
+    outwas=$(grep -m1 "^$out " .build-stamp 2>/dev/null | cut -d" " -f3)
     if [ ! -f "$out" ]; then
-      echo "MISSING: $out -- rebuild: $recipe"
+      echo "MISSING:  $out -- rebuild: $recipe"
       rc=1
     elif [ -z "$was" ]; then
       # Built before this check existed, or written by something other than the
       # recipe. Reported rather than guessed at: assuming current would hide the
       # exact case the stamp is for.
-      echo "UNKNOWN: $out has no entry in .build-stamp -- rebuild: $recipe"
+      echo "UNKNOWN:  $out has no entry in .build-stamp -- rebuild: $recipe"
       rc=1
     elif [ "$now" != "$was" ]; then
-      echo "STALE:   $out was built from different sources -- rebuild: $recipe"
+      echo "STALE:    $out was built from different sources -- rebuild: $recipe"
+      rc=1
+    elif [ -z "$outwas" ]; then
+      # A stamp from before output hashes were recorded. One rebuild upgrades it.
+      echo "UNKNOWN:  $out predates output hashing in .build-stamp -- rebuild: $recipe"
+      rc=1
+    elif [ "$(sha256sum "$out" | cut -d" " -f1)" != "$outwas" ]; then
+      # The sources match, but the FILE is not what that build produced: it was
+      # overwritten, truncated, or restored from somewhere else after the build.
+      # Without this line, a paper.pdf copied in from Downloads passes as
+      # current -- the source stamp only proves a build happened, not that this
+      # file is its output.
+      echo "REPLACED: $out is not the file that build produced -- rebuild: $recipe"
       rc=1
     fi
   done
@@ -621,14 +682,17 @@ _stamp-manuscript:
       -type f -not -name '*.pyc' \
       -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum | sha256sum | cut -d" " -f1
 
-# Record that <name> was just built from the current sources. Rewrites only its
-# own line, so building the PDF does not claim the Word export is current too.
-_record-build name:
+# Record that <name> was just built from the sources hashed in <srchash>, which
+# the build recipe captured BEFORE compiling. Rewrites only its own line, so
+# building the PDF does not claim the Word export is current too. The line also
+# records the hash of the output itself, so check-build can tell "this file is
+# that build's product" from "a build happened once".
+_record-build name srchash:
   #!/usr/bin/env bash
   set -euo pipefail
   touch .build-stamp
   { grep -v "^{{name}} " .build-stamp || true; } > .build-stamp.tmp
-  echo "{{name}} $(just _stamp-manuscript)" >> .build-stamp.tmp
+  echo "{{name}} {{srchash}} $(sha256sum "{{name}}" | cut -d" " -f1)" >> .build-stamp.tmp
   mv .build-stamp.tmp .build-stamp
 
 # Remove the built PDF and Word export

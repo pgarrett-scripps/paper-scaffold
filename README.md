@@ -65,6 +65,7 @@ have to drop their import. The exact edits are under
 | Command | Does |
 |---|---|
 | `just verify` | **The gate.** Formatting, extractors, prose rules and staleness, in one pass |
+| `just preflight` | **The submission gate.** Fresh builds + `verify` + deep stats + DOI audit |
 | `just doctor` | Are the external tools installed and new enough? |
 | `just paper` | Compile `paper.pdf`, then print word counts and readability |
 | `just draft` | Compile `paper-draft.pdf` with unresolved `#s()` numbers shown as `?id?` |
@@ -433,15 +434,27 @@ Hashes rather than commit dates, because the generators are deterministic on
 purpose. Re-running one after an edit that does not move the output produces no
 new commit, and a date-based check would then nag with no way to satisfy it.
 
-### `just check` is a submission gate
+### `just check` reports staleness; `just preflight` gates a submission
 
-It exits non-zero if anything is stale, and covers the three failure modes that
-actually happen:
+`just check` exits non-zero if anything is stale, and covers the failure modes
+that actually happen:
 
 - `paper.pdf` or `paper.docx` built from sources that have since changed. `just
   paper` and `just docx` record the hash of what they rendered in `.build-stamp`;
-  `just check-build` recompares it.
+  `just check-build` recompares it. The source hash is captured *before* the
+  compile, so an edit saved mid-build errs toward stale rather than current.
+- An output that is **not the file that build produced** — overwritten,
+  truncated, or restored from somewhere else. The stamp records the output's own
+  hash too; without it, a `paper.pdf` copied in from Downloads passes as
+  current, because the source stamp only proves a build happened.
 - `figures/` and `si/` older than the `analysis/` code that generates them.
+
+`just preflight` is the day-of-submission command: fresh builds of both
+outputs, the whole `verify` gate, `check-stats-deep` (re-derives every
+generated number from the analysis and diffs), and `bib-audit` (every DOI
+against Crossref for retractions and dead links). Those last two are too slow
+and too network-bound for `verify`, and "run them before submitting" scattered
+across the docs is a ritual — this is the ritual as one command.
 
 **Neither output is tracked in git**, and neither is `.build-stamp`. Git keeps
 every version of a binary forever, a clone pays for all of them, and removing one

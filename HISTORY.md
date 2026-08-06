@@ -45,6 +45,46 @@ rather than a copy.
 
 ---
 
+## 3.4.0
+
+Three holes between "the checks pass" and "the file being submitted is not
+stale", found by auditing the guarantee chain end to end and demonstrating each
+one before fixing it.
+
+### check-build now checks the output, not just the sources
+
+The build stamp recorded only the hash of the sources. That proves a build
+happened from them -- not that the paper.pdf on disk is that build's output. A
+PDF overwritten, truncated, or restored from Downloads after the build passed
+as "current with the source", demonstrated by replacing it with a line of text.
+`_record-build` now records the output's own hash too, and check-build reports
+the mismatch as REPLACED. A stamp from before this change reports UNKNOWN; one
+rebuild upgrades it.
+
+The source stamp is also captured BEFORE the compile now. Stamping afterwards
+meant an edit saved mid-compile was claimed as built; capturing first errs
+toward stale, which is the safe direction.
+
+### `just preflight`: the submission gate as one command
+
+check-stats-deep, bib-audit and fresh builds were each documented as "run
+before submitting" -- three commands in three places, a conditional ritual, and
+conditional rituals get skipped (the reasoning that created `verify`).
+`preflight` is that ritual as one command: build both outputs fresh, run the
+whole verify gate, re-derive every generated number, audit every DOI. As slow
+as the analysis plus the network, which is why it is not `verify`.
+
+Deliberately not included: `just assets`. Regenerating every figure is a
+rebuild, not a check, and check-assets already reports when the analysis has
+moved out from under the committed figures.
+
+### render-stats removes its output when the source is gone
+
+A stats-rendered.json outliving a deleted stats.json was a corpse a compile
+could still read -- the one way the render step could serve stale numbers.
+
+---
+
 ## 3.3.0
 
 stats.json's entries were owned whole by whichever script wrote them, which put
