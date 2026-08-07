@@ -710,6 +710,29 @@ def stats_cases() -> bool:
             print("  derivable-number: reported findings with no stats.json")
             ok = False
 
+        # 4b. unaccounted-number: the other half. A distinctive numeral that
+        #     matches NOTHING declared is the least traceable number in the
+        #     paper; a match is derivable-number's case, a year or a short
+        #     count is noise, and no stats.json means nowhere to trace to.
+        unaccounted = [
+            ("matches nothing", "recovery reached 84.7% overall.", 1),
+            ("undeclared thousands", "we screened 9,999 records.", 1),
+            ("matches a declared display", "recovery reached 84.2% overall.", 0),
+            ("matches a declared raw value", "the mean was 84.23 exactly.", 0),
+            ("a year", "unchanged since 2019.", 0),
+            ("too short to flag", "there were 3 conditions.", 0),
+            ("derived is not typed", 'reached #s("a.pct")% overall.', 0),
+            ("inline code is not prose", "pass `--cutoff 84.7` to it.", 0),
+        ]
+        for name, src, want in unaccounted:
+            got = len(pc.check_unaccounted_numbers({"t": src}, p))
+            if got != want:
+                print(f"  unaccounted-number [{name}]: expected {want}, got {got}")
+                ok = False
+        if pc.check_unaccounted_numbers({"t": "84.7"}, Path(d) / "absent.json"):
+            print("  unaccounted-number: reported findings with no stats.json")
+            ok = False
+
     # 5. guards. Shape errors (a guard on a label, a misspelt sign) fail at
     #    add(), next to the line that wrote them. VALUE violations fail at
     #    write(), because the guard that judges a value is the one in the file
@@ -895,6 +918,39 @@ def check_stats_cases() -> bool:
         if (got_err, got_warn) != (want_err, want_warn):
             print(f"  check-stats checksum [{name}]: expected "
                   f"{want_err}e/{want_warn}w, got {got_err}e/{got_warn}w")
+            ok = False
+
+    # The fmt half of "fail where the mistake was made": a broken fmt edited
+    # into stats.json used to pass verify and kill the next build inside
+    # render_stats instead. check-stats now renders every entry itself.
+    display_cases = [
+        ("fmt applies", {"value": 84.23, "fmt": ".1f"}, 0),
+        ("numeric fmt on a label", {"value": "Treated", "fmt": ".2f"}, 1),
+        ("nonsense fmt", {"value": 84.23, "fmt": ".2q"}, 1),
+        ("no fmt is fine for anything", {"value": "Treated", "fmt": ""}, 0),
+    ]
+    for name, rec, want in display_cases:
+        got = len([f for f in cs._display({"x.y": rec}) if f.level == "error"])
+        if got != want:
+            print(f"  check-stats display [{name}]: expected {want}, got {got}")
+            ok = False
+
+    # The hash cache behind _sources/_pinned/check_assets: correct on first
+    # sight, correct again after the file changes. The cache may only ever
+    # change WHEN the hash is computed, never WHAT it is.
+    import hashlib as _hl
+    import hashcache
+    with tempfile.TemporaryDirectory() as d:
+        f = Path(d) / "data.bin"
+        f.write_bytes(b"one")
+        want = "sha256:" + _hl.sha256(b"one").hexdigest()
+        if hashcache.sha(f) != want or hashcache.sha(f) != want:
+            print("  hashcache: wrong digest on first or cached read")
+            ok = False
+        f.write_bytes(b"two-longer")
+        want2 = "sha256:" + _hl.sha256(b"two-longer").hexdigest()
+        if hashcache.sha(f) != want2:
+            print("  hashcache: served a stale digest after the file changed")
             ok = False
 
     # Pinned files: declared by the author, hashed by `just pin`, watched from

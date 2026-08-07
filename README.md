@@ -4,6 +4,30 @@ A reusable Typst manuscript directory: PDF, Word export, journal word counts,
 readability metrics, auto-generated Supporting Information tables, figure
 staleness checking, and offline audiobook narration.
 
+## The ideas
+
+```
+A number worth stating is worth tracing.
+Declared and read back beats typed and remembered.
+A copy is the thing that goes stale.
+A manifest nothing reads is already wrong.
+The value is the analysis's; how it reads is the author's.
+What cannot be discovered must be declared,
+    and an honest partial answer beats one that looks total.
+A check that never fails is not a check.
+The gate you run constantly must cost nothing;
+    the gate that costs something must be one command.
+A ritual with conditions is a ritual skipped.
+A warning with an expensive fix is a warning ignored.
+Silence is not success -- fail where the mistake was made.
+Hashes, not dates; content, not history.
+"It changed" means it changed, not that the script ran.
+Every guarantee was proven by breaking it first.
+```
+
+Each line is a decision this repository actually made, usually after the
+opposite failed; HISTORY.md records which failure produced which line.
+
 Clone it and `just paper` produces a compiling three-page skeleton before you
 have written anything. `paper.typ` and `si-body.typ` are placeholders meant to be
 deleted, so they stay short.
@@ -197,8 +221,12 @@ Three things make it hold:
   instead of the paper shipping "fell by -3.1%". A band catches the unit error.
   The fresh value is judged against the guard *as it stands in `stats.json`* —
   the author's — not against whatever the script happened to pass.
-- **`just prose-check` flags a typed numeral** that matches a declared value, so
-  the rule is enforced rather than merely intended.
+- **`just prose-check` flags a typed numeral** — one that matches a declared
+  value (use `#s()` instead), and one that matches *nothing* declared, which is
+  worse: mistyped, stale from an earlier draft, or from a source nobody
+  recorded. The paths out are compute it, declare it by hand with a note, or
+  suppress it in `prose-check.toml` with a comment — all three leave a trail.
+  Years and short counts are skipped, so the warnings stay worth reading.
 - **`just check-stats` re-checks the committed file, without running anything.**
   Every guard is re-run against the values as they sit in `stats.json`; each
   generated value is compared to the checksum its generator recorded, so a

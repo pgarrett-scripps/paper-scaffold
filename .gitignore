@@ -10,6 +10,10 @@
 paper.pdf
 paper-draft.pdf
 .build-stamp
+# Stat-keyed cache for the content hashes `just verify` compares. Local build
+# state like .build-stamp: safe to delete, never the recorded truth (that stays
+# in stats.json / assets.json). See tools/hashcache.py.
+.hash-cache.json
 
 # Rendered from stats.json by tools/render_stats.py: the display strings Typst
 # reads. Derived, not source -- stats.json holds the value and the format spec,

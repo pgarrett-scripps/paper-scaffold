@@ -24,13 +24,16 @@ staleness report about it anyway.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
+
+import hashcache  # noqa: E402
+
 ASSETS = ROOT / "assets.json"
 
 # Where generated outputs live. An entry must point inside one of these, and a
@@ -48,12 +51,9 @@ class Finding:
         return f"  {self.level:<6} {self.id:<28} {self.msg}"
 
 
-def _sha(p: Path) -> str:
-    h = hashlib.sha256()
-    with p.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return "sha256:" + h.hexdigest()
+# Through the stat-keyed cache: declared inputs can be gigabytes, and this runs
+# inside `just verify`, the gate that must cost nothing.
+_sha = hashcache.sha
 
 
 def _entry(id: str, rec: dict) -> list[Finding]:

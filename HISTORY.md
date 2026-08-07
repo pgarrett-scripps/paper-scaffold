@@ -45,6 +45,37 @@ rather than a copy.
 
 ---
 
+## 3.5.0
+
+The README gained the pipeline's ideas as fifteen lines, and the lines were
+then audited against the pipeline. Twelve held. Three did not, and the code
+moved to match the claims rather than the claims to match the code:
+
+**"A number worth stating is worth tracing"** was only enforced in one
+direction: a typed numeral matching a declared value was flagged, but a
+distinctive numeral matching *nothing* -- mistyped, stale from an earlier
+draft, or from a source nobody recorded -- was the least traceable number in
+the paper and the only silent one. `unaccounted-number` (warning) closes it:
+compute it, declare it by hand with a note, or suppress it with a comment --
+every path leaves a trail. Years and short counts are skipped, because a
+checker whose warnings are mostly noise is one nobody reads.
+
+**"Silence is not success -- fail where the mistake was made"**: a broken
+`fmt` edited into stats.json passed `just verify` and killed the next build
+inside render_stats instead. check-stats now renders every entry through the
+same function the build uses, and names the entry.
+
+**"The gate you run constantly must cost nothing"** was false at scale: verify
+re-hashed every declared input and pinned file on every run, and a declared
+input can be a multi-gigabyte HDF5 -- the 3.2.0 scale-blindness one layer
+down. tools/hashcache.py adds a stat-keyed cache: (size, mtime_ns) decides
+when to re-hash, the sha256 stays the only recorded truth, and the cache file
+is disposable local state like .build-stamp. Recording paths (`just pin`, the
+generators) still hash the bytes directly -- the moment a hash becomes the
+recorded truth it is computed, not looked up.
+
+---
+
 ## 3.4.1
 
 Ten defects in the 3.3.0/3.4.0 code, found by an adversarial review of that

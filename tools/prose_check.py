@@ -908,6 +908,68 @@ def check_derivable_numbers(sources: dict[str, str],
     return out
 
 
+def check_unaccounted_numbers(sources: dict[str, str],
+                              stats_path: Path | None = None) -> list[Finding]:
+    """Flag a distinctive numeral in the prose that matches NOTHING declared.
+
+    The other half of derivable-number, and the worse case: that check catches
+    a typed copy of a value the analysis computes, but a distinctive number
+    matching nothing at all -- mistyped, stale from an earlier draft, or from
+    a source nobody recorded -- is the least traceable number in the paper,
+    and used to be the only silent one. "A number worth stating is worth
+    tracing" (README) is only a fact about the pipeline if this fires.
+
+    A warning, never an error: some numbers are legitimately literal. The path
+    for each is (a) compute it -> gen_stats.py, (b) no script can -> stats.json
+    with origin.by = "hand" and a note, (c) genuinely just prose -> suppress it
+    in prose-check.toml with a comment. All three leave a trail, which is the
+    point.
+
+    Same distinctiveness bar as derivable-number (a decimal point, a thousands
+    separator, or four-plus digits), because a flagged "3" would bury the real
+    findings. Bare integers 1500-2100 are additionally skipped as probable
+    years -- "since 2019" is prose, not a result -- accepting that a real
+    result landing in that range slips through; the alternative flags every
+    year in the background section, and a checker whose warnings are mostly
+    noise is one nobody reads. Runs only when stats.json exists: the mechanism
+    is optional, and without it there is nowhere to trace a number TO.
+    """
+    p = stats_path or typst_prose.STATS_JSON
+    if not p.is_file():
+        return []
+    values = json.loads(p.read_text()).get("values", {})
+
+    declared: set[str] = set()
+    for rec in values.values():
+        try:
+            declared.add(typst_prose.display_of(rec).strip().lstrip("+-"))
+        except (TypeError, ValueError):
+            pass
+        declared.add(str(rec.get("value")).lstrip("+-"))
+
+    out: list[Finding] = []
+    for name, src in sources.items():
+        stripped = re.sub(typst_prose.STATS, " ", src)
+        stripped = re.sub(typst_prose.STATS_N, " ", stripped)
+        prose = readability.clean(no_code(stripped))
+        for m in re.finditer(r"(?<![\d.,])\d[\d,]*(?:\.\d+)?(?![\d.,])", prose):
+            bare = m.group(0)
+            if not ("." in bare or "," in bare or len(bare) >= 4):
+                continue                  # too common to flag without noise
+            if re.fullmatch(r"\d{4}", bare) and 1500 <= int(bare) <= 2100:
+                continue                  # probably a year
+            if bare in declared:
+                continue                  # derivable-number's case, not ours
+            out.append(Finding(
+                "unaccounted-number", "warn",
+                f"'{bare}' matches nothing in stats.json. If the analysis "
+                f"computes it, declare it in gen_stats.py; if no script can, "
+                f"add it by hand with an origin note; if it is genuinely just "
+                f"prose, suppress it in prose-check.toml",
+                subject=bare, where=name, context=_ctx(prose, m.start())))
+    return out
+
+
 def check_structure(sources: dict[str, str]) -> list[Finding]:
     """Checks that need the Typst source rather than the extracted prose.
 
@@ -991,6 +1053,7 @@ def main() -> int:
                           readability.clean(src, gap=GAP), cfg)
     findings += check_structure(targets)
     findings += check_derivable_numbers(targets)
+    findings += check_unaccounted_numbers(targets)
     findings += check_bypassed_assets(targets)
     findings += check_orphaned_assets()
     findings += check_figure_resolution(cfg=cfg)

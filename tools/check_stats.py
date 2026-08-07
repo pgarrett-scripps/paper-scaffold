@@ -41,6 +41,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
+import hashcache  # noqa: E402
 import typst_prose  # noqa: E402
 
 STATS = ROOT / "stats.json"
@@ -139,6 +140,26 @@ def _origin(id: str, rec: dict) -> list[Finding]:
     return []
 
 
+def _display(values: dict) -> list[Finding]:
+    """Every entry's fmt must actually apply to its value.
+
+    fmt is the author's to edit, and an edit that breaks it ('.2f' on a label,
+    a typo like '.2ff') used to pass `just verify` and kill the next build
+    inside render_stats instead -- a silence here, a failure somewhere else.
+    The check is the render itself, through the same function the build uses.
+    """
+    out: list[Finding] = []
+    for id, rec in sorted(values.items()):
+        try:
+            typst_prose.display_of(rec)
+        except (TypeError, ValueError) as e:
+            out.append(Finding("error", id,
+                f"value {rec.get('value')!r} cannot be rendered with fmt "
+                f"{rec.get('fmt', '')!r}: {e}. The build would fail on this; "
+                f"fix the fmt in stats.json."))
+    return out
+
+
 def _checksum(values: dict) -> list[Finding]:
     """A generated value edited by hand in stats.json.
 
@@ -211,8 +232,9 @@ def _pinned(doc: dict) -> list[Finding]:
     matters, and until `just pin` runs nothing can say whether it moved. A
     pinned file that is absent is a note, like an absent source -- data usually
     lives outside the repository, and a fresh clone cannot act on it.
+
+    Cached hashing, like _sources: pins exist precisely for the big raw files.
     """
-    import hashlib
     out: list[Finding] = []
     pinned = doc.get("pinned") or {}
     if not isinstance(pinned, dict):
@@ -231,11 +253,7 @@ def _pinned(doc: dict) -> list[Finding]:
             out.append(Finding("note", src,
                 "is pinned but not present, so it could not be verified"))
             continue
-        h = hashlib.sha256()
-        with p.open("rb") as fh:
-            for chunk in iter(lambda: fh.read(1 << 20), b""):
-                h.update(chunk)
-        if "sha256:" + h.hexdigest() != want:
+        if hashcache.sha(p) != want:
             out.append(Finding("error", src,
                 "has changed since it was pinned. Check the numbers that "
                 "depend on it, then re-record it: just pin"))
@@ -252,8 +270,11 @@ def _sources(doc: dict) -> list[Finding]:
     A file that is not present is reported as unverifiable rather than stale --
     analysis/data/ is normally untracked, so that is the ordinary state of a
     fresh clone, and failing there would be a red gate nobody can act on.
+
+    Hashing goes through the stat-keyed cache in hashcache.py: a declared input
+    can be gigabytes, and the constant gate must not pay a full read of it on
+    every run when the file has not been touched.
     """
-    import hashlib
     out: list[Finding] = []
     for script, inputs in sorted((doc.get("sources") or {}).items()):
         for src, want in sorted((inputs or {}).items()):
@@ -262,11 +283,7 @@ def _sources(doc: dict) -> list[Finding]:
                 out.append(Finding("note", script,
                     f"input {src} is not present, so it could not be verified"))
                 continue
-            h = hashlib.sha256()
-            with p.open("rb") as fh:
-                for chunk in iter(lambda: fh.read(1 << 20), b""):
-                    h.update(chunk)
-            if "sha256:" + h.hexdigest() != want:
+            if hashcache.sha(p) != want:
                 out.append(Finding("error", script,
                     f"{src} has changed since these numbers were written -- "
                     f"run: just assets  (or `just check-stats-deep` to see "
@@ -381,6 +398,7 @@ def main() -> int:
     for id, rec in sorted(values.items()):
         found += _origin(id, rec)
         found += _guard(id, rec)
+    found += _display(values)
     found += _checksum(values)
     found += _sources(doc)
     found += _pinned(doc)

@@ -82,8 +82,9 @@ What `verify` runs, and what each one is for:
   `tools/typst_prose.py` that a reflow can break silently, which has happened three
   times (see that file for the cases).
 - **`just prose-check`** -- fails on em dashes, British spellings, doubled words,
-  and uncited figures; reports long sentences, verbosity, repetition, and
-  unexpanded acronyms as warnings you should read rather than silence.
+  and uncited figures; reports long sentences, verbosity, repetition,
+  unexpanded acronyms, and distinctive numerals that match nothing in
+  `stats.json` as warnings you should read rather than silence.
 - **`just check-stats`** -- re-runs every guard in `stats.json` against the
   committed values, checks each generated value against the checksum its
   generator recorded, compares the hashes of the code and data behind them --

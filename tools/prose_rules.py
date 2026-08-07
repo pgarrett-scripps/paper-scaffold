@@ -56,6 +56,7 @@ RULES: dict[str, tuple[str, str]] = {
     "reference-order":    ("warn",  "the label cited early"),
     "unexpanded-acronym": ("warn",  "the acronym"),
     "derivable-number":   ("warn",  "the typed value"),
+    "unaccounted-number": ("warn",  "the typed value"),
     "orphaned-asset":     ("warn",  "the file name"),
     "bypassed-asset":     ("error", "the file path"),
     "low-resolution-figure": ("warn", "the file name"),
