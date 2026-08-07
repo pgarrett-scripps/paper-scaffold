@@ -4,9 +4,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Typst 0.14+](https://img.shields.io/badge/Typst-0.14%2B-239dad)
 
-A reusable Typst manuscript directory: PDF, Word export, journal word counts,
-readability metrics, auto-generated Supporting Information tables, figure
-staleness checking, and offline audiobook narration.
+A reusable Typst manuscript directory built around one idea: every number,
+figure and table in the paper is traced to the analysis or source that
+produced it, and checked for staleness — your scripts write them, the
+manuscript references them by id, and a typed or drifted value fails a check
+instead of shipping. Around that: PDF and Word export, journal word counts,
+readability and prose-style checks, and offline audiobook narration.
 
 ## The ideas
 
@@ -32,8 +35,9 @@ Every guarantee was proven by breaking it first.
 Each line is a decision this repository actually made, usually after the
 opposite failed; HISTORY.md records which failure produced which line.
 
-Clone it and `just paper` produces a compiling three-page skeleton before you
-have written anything. `paper.typ` and `si-body.typ` are placeholders meant to be
+Clone it and `just paper` produces a compiling skeleton — title, abstract,
+sections, a generated figure and table, references and SI — before you have
+written anything. `paper.typ` and `si-body.typ` are placeholders meant to be
 deleted, so they stay short.
 
 Coverage of the constructs the tooling handles specially does **not** live in the
