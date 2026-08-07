@@ -124,10 +124,13 @@ DEST="$(cd "$DEST" && pwd)"
 #
 # What is left out: the scaffold's git history (the whole point), both
 # virtualenvs and every cache (rebuilt by `just setup`), this scripts/ directory
-# (it makes new papers, and a paper does not make papers), and the built
-# artifacts, which describe the scaffold's demo paper and not yours. figures/,
-# si/, assets.json and stats.json DO come along, so the copy compiles and `just check` is
-# clean before the analysis has ever run.
+# (it makes new papers, and a paper does not make papers), MIGRATING.md (a new
+# paper is not migrating; the guide describes moving onto the scaffold, not
+# living on it), local state (.build-stamp, .hash-cache.json, viz/, the
+# rendered stats) and the built artifacts, which describe the scaffold's demo
+# paper and not yours. figures/, si/, assets.json and stats.json DO come along,
+# so the copy compiles and `just check` is clean before the analysis has ever
+# run.
 # ---------------------------------------------------------------------------
 echo ""
 echo "copying scaffold -> $DEST"
@@ -148,8 +151,12 @@ tar -C "$SCAFFOLD" -cf - \
     --exclude='./paper.pdf' \
     --exclude='./paper-draft.pdf' \
     --exclude='./.build-stamp' \
+    --exclude='./.hash-cache.json' \
+    --exclude='./stats-rendered.json' \
+    --exclude='./viz' \
     --exclude='./paper.docx' \
     --exclude='./paper.docx.html' \
+    --exclude='./MIGRATING.md' \
     . | tar -C "$DEST" -xf -
 
 # The scaffold's MIT terms cover the TOOLING, which the new directory is now

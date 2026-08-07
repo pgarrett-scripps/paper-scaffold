@@ -45,6 +45,22 @@ rather than a copy.
 
 ---
 
+## 3.6.1
+
+MIGRATING.md: the runbook for moving an existing manuscript onto the scaffold
+-- the phased order, the paper-must-not-change invariant (pdftotext baseline,
+re-diffed word-by-word at every phase boundary), the three decisions to make
+before editing, the earned-specifics rule, and the traps from 3.6.0 in the
+place someone doing the job will actually look. README and CLAUDE.md point to
+it; new-paper.sh excludes it from copies, because a new paper is not
+migrating.
+
+Copy hygiene found while wiring that exclusion: new-paper.sh was also copying
+.hash-cache.json and viz/ -- local state added after its exclude list was
+last touched. Both excluded now.
+
+---
+
 ## 3.6.0
 
 Lessons from watching another project migrate an existing manuscript onto this

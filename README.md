@@ -38,6 +38,10 @@ lives in `tests/fixture.typ`, which is never part of the manuscript, and
 `just test` asserts the extractors still handle every case and still do so after
 a reflow. That check survives for the life of the project.
 
+Starting fresh is `new-paper.sh` below. Moving an **existing** manuscript onto
+the scaffold is a different job with its own traps — see
+[MIGRATING.md](MIGRATING.md).
+
 ## Quick start
 
 ```bash
