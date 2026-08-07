@@ -1,5 +1,9 @@
 # paper-scaffold
 
+[![CI](https://github.com/pgarrett-scripps/paper-scaffold/actions/workflows/ci.yml/badge.svg)](https://github.com/pgarrett-scripps/paper-scaffold/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Typst 0.14+](https://img.shields.io/badge/Typst-0.14%2B-239dad)
+
 A reusable Typst manuscript directory: PDF, Word export, journal word counts,
 readability metrics, auto-generated Supporting Information tables, figure
 staleness checking, and offline audiobook narration.
@@ -45,7 +49,7 @@ the scaffold is a different job with its own traps — see
 ## Quick start
 
 ```bash
-git clone https://github.com/YOURNAME/paper-scaffold
+git clone https://github.com/pgarrett-scripps/paper-scaffold
 cd paper-scaffold
 just doctor                          # is the toolchain present and new enough?
 
