@@ -61,8 +61,9 @@ typst_min := "0.14"
 # from inside whichever recipe happened to need it first. Required tools fail
 # this; optional ones are reported and cost only the feature they serve.
 #
-# python3 is in the required list because tools/wordcount.sh shells out to it directly
-# for the JSON formatting, before uv is ever involved.
+# python3 is in the required list because the justfile's own inline recipes
+# (_stamp-manuscript, _audio-check) shell out to it directly, before uv is
+# involved.
 # Check that the external tools this directory needs are installed and new enough
 doctor:
   #!/usr/bin/env bash
@@ -89,7 +90,7 @@ doctor:
   report typst    typst    required "PDF and Word builds"            typst --version
   report just     just     required "every recipe in this file"      just --version
   report uv       uv       required "the Python toolchain"           uv --version
-  report python3  python3  required "tools/wordcount.sh"                   python3 --version
+  report python3  python3  required "the justfile inline recipes"                   python3 --version
   report git      git      optional "just text-diff word compare; version reporting" git --version
   report typstyle typstyle optional "just fmt and just fmt-check"    typstyle --version
   report pdftotext pdftotext optional "just text-baseline and just text-diff" pdftotext -v

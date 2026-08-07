@@ -231,19 +231,23 @@ def main() -> int:
         ("Supporting Information", metrics(si_txt)),
         ("Main + SI", metrics(combined)),
     ]
-    name_w = max(len(r[0]) for r in rows + [("Readability", {})])
-    # The title sits in the header row's corner cell, so the report is a table
-    # and nothing else. No words column: it measured a slightly different text
-    # slice than the journal count printed above it, and two disagreeing
-    # columns both named "words" is worse than one.
-    print(f"  {'Readability':<{name_w}}  {'w/sent':>6}  {'FK grade':>8}  "
-          f"{'ease':>5}  {'fog':>5}")
-    for name, m in rows:
-        print(f"  {name:<{name_w}}  {m['wps']:>6.1f}  "
-              f"{m['fk']:>8.1f}  {m['ease']:>5.0f}  {m['fog']:>5.1f}")
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from report import console, table
+
+    # No words column: it measured a slightly different text slice than the
+    # journal count printed above it, and two disagreeing columns both named
+    # "words" is worse than one.
     mt = rows[0][1]
-    print(f"  ~grade {mt['fk']:.0f} main text ({_band(mt['fk'])}); "
-          f"lower FK / higher ease = easier")
+    t = table("Readability",
+              caption=f"main text ~grade {mt['fk']:.0f} "
+                      f"({_band(mt['fk'])}); lower is easier")
+    t.add_column()
+    for col in ("w/sent", "FK grade", "ease", "fog"):
+        t.add_column(col, justify="right")
+    for name, m in rows:
+        t.add_row(name, f"{m['wps']:.1f}", f"{m['fk']:.1f}",
+                  f"{m['ease']:.0f}", f"{m['fog']:.1f}")
+    console.print(t)
     return 0
 
 

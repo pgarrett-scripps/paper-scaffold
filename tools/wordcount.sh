@@ -9,20 +9,25 @@ cd "$(dirname "$0")/.."
 
 json=$(typst query wordcount.typ '<wc>' --field value --one)
 
-python3 - "$json" <<'PY'
+# uv run rather than bare python3: the table renders through rich, which lives
+# in the locked toolchain environment. The exemption list stays one caption
+# line -- the full version lives in wordcount.typ, where it is enforced.
+uv run --quiet python - "$json" <<'PY'
 import json, sys
+sys.path.insert(0, "tools")
+from report import console, table
+
 d = json.loads(sys.argv[1])
-rows = [
-    ("Abstract (own limit; not in total)", d["abstract_words"], d["abstract_chars"]),
-    ("Main text",                          d["main_words"],     d["main_chars"]),
-    ("Supporting Information",             d["si_words"],       d["si_chars"]),
-    ("Total (main + SI)",                  d["total_words"],    d["total_chars"]),
-]
-name_w = max(len(r[0]) for r in rows)
-# One header line. The full exemption list lives in wordcount.typ, where it is
-# enforced; repeating it all here made every build print a paragraph.
-print("Journal word count  (excludes refs, floats, captions, math, block code)")
-print(f"  {'':<{name_w}}  {'words':>8}  {'chars':>9}")
-for name, w, c in rows:
-    print(f"  {name:<{name_w}}  {w:>8,}  {c:>9,}")
+t = table("Journal word count",
+          caption="excludes refs, floats, captions, math, block code")
+t.add_column()
+t.add_column("words", justify="right")
+t.add_column("chars", justify="right")
+t.add_row("Abstract [dim](own limit; not in total)[/]",
+          f"{d['abstract_words']:,}", f"{d['abstract_chars']:,}")
+t.add_row("Main text", f"{d['main_words']:,}", f"{d['main_chars']:,}")
+t.add_row("Supporting Information", f"{d['si_words']:,}", f"{d['si_chars']:,}")
+t.add_row("[bold]Total (main + SI)[/]",
+          f"[bold]{d['total_words']:,}[/]", f"[bold]{d['total_chars']:,}[/]")
+console.print(t)
 PY

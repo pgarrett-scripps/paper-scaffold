@@ -42,6 +42,16 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.8.0
+
+The console reports render through rich, styled once in `tools/report.py`:
+real tables, right-aligned numbers, styling dropped automatically when piped.
+Piped output gets a 200-column console, because rich's 80-column fallback
+truncated "numerals" to "nume…" -- worse than no styling at all.
+`wordcount.sh` runs its formatting through `uv run` now (rich lives in the
+locked environment), so doctor's python3 requirement belongs to the justfile's
+inline recipes alone.
+
 ## 3.7.1
 
 The build report was a wall on a real manuscript: three stacked header blocks,

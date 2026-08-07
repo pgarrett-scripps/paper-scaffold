@@ -109,14 +109,19 @@ def main() -> int:
         print("  no prose to measure")
         return 0
 
-    print("Density (per 1,000 words; FK grade does not see any of these)")
-    label_w = max(len(l) for l, _ in rows)
-    head = f"  {'':<{label_w}}  {'words':>6}" + "".join(f"  {c:>9}" for c in COLS)
-    print(head)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from report import console, table
+
+    t = table("Density, per 1,000 words",
+              caption="what a reading-level score does not see")
+    t.add_column()
+    t.add_column("words", justify="right")
+    for c in COLS:
+        t.add_column(c, justify="right")
     for label, m in rows:
-        line = f"  {label:<{label_w}}  {m['words']:>6,}"
-        line += "".join(f"  {m[c]:>9.1f}" for c in COLS)
-        print(line)
+        t.add_row(label, f"{m['words']:,}",
+                  *(f"{m[c]:.1f}" for c in COLS))
+    console.print(t)
 
     # --- per-section outliers, judged against this paper's own median ---
     secs = []
@@ -130,30 +135,30 @@ def main() -> int:
         print("\n  (too few substantial sections to compare against each other)")
         return 0
 
-    print(f"\nSection outliers (> {OUTLIER_FACTOR}x this paper's own median, "
-          f"sections over {MIN_SECTION_WORDS} words)")
     meds = {c: median([m[c] for _, m in secs]) for c in COLS}
-    # Full names, aligned to the longest that actually has a finding. The old
-    # fixed 34-column cut turned "Implementation and format compatibility" into
-    # a truncated string that had to be guessed at -- in a report whose whole
-    # job is to send you to a specific section.
+    # Full names, never truncated. The old fixed 34-column cut turned
+    # "Implementation and format compatibility" into a string that had to be
+    # guessed at -- in a report whose whole job is to name a section.
     flagged = []
     for name, m in secs:
-        flags = [f"{c} {m[c]:.0f} (median {meds[c]:.0f})"
+        flags = [f"{c} [bold]{m[c]:.0f}[/] (median {meds[c]:.0f})"
                  for c in COLS if meds[c] > 0 and m[c] > OUTLIER_FACTOR * meds[c]]
         if flags:
             flagged.append((name, flags))
-    if flagged:
-        name_w = max(len(n) for n, _ in flagged)
-        for name, flags in flagged:
-            print(f"  {name:<{name_w}}  {flags[0]}")
-            for extra in flags[1:]:
-                print(f"  {'':<{name_w}}  {extra}")
-    else:
-        print("  none: every section sits close to the manuscript's own norms")
 
-    print("\n  These are heuristics, not limits. A high rate is a prompt to reread")
-    print("  the section, not a defect. See STYLE.md.")
+    console.print()
+    t = table(f"Section outliers, > {OUTLIER_FACTOR}x this paper's own median",
+              caption="heuristics, not limits: a high rate is a prompt to "
+                      "reread the section, not a defect. See STYLE.md.")
+    t.add_column("section")
+    t.add_column("departs from the rest of the paper")
+    if flagged:
+        for name, flags in flagged:
+            t.add_row(name, "\n".join(flags))
+    else:
+        t.add_row("[dim]none[/]",
+                  "[dim]every section sits close to the manuscript's norms[/]")
+    console.print(t)
     return 0
 
 
