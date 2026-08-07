@@ -110,10 +110,11 @@ def main() -> int:
         return 0
 
     print("Density (per 1,000 words; FK grade does not see any of these)")
-    head = f"  {'':<16}  {'words':>6}" + "".join(f"  {c:>9}" for c in COLS)
+    label_w = max(len(l) for l, _ in rows)
+    head = f"  {'':<{label_w}}  {'words':>6}" + "".join(f"  {c:>9}" for c in COLS)
     print(head)
     for label, m in rows:
-        line = f"  {label:<16}  {m['words']:>6,}"
+        line = f"  {label:<{label_w}}  {m['words']:>6,}"
         line += "".join(f"  {m[c]:>9.1f}" for c in COLS)
         print(line)
 
@@ -132,14 +133,23 @@ def main() -> int:
     print(f"\nSection outliers (> {OUTLIER_FACTOR}x this paper's own median, "
           f"sections over {MIN_SECTION_WORDS} words)")
     meds = {c: median([m[c] for _, m in secs]) for c in COLS}
-    hits = 0
+    # Full names, aligned to the longest that actually has a finding. The old
+    # fixed 34-column cut turned "Implementation and format compatibility" into
+    # a truncated string that had to be guessed at -- in a report whose whole
+    # job is to send you to a specific section.
+    flagged = []
     for name, m in secs:
-        flags = [f"{c} {m[c]:.0f} vs {meds[c]:.0f}"
+        flags = [f"{c} {m[c]:.0f} (median {meds[c]:.0f})"
                  for c in COLS if meds[c] > 0 and m[c] > OUTLIER_FACTOR * meds[c]]
         if flags:
-            hits += 1
-            print(f"  {name[:34]:<34}  " + ";  ".join(flags))
-    if not hits:
+            flagged.append((name, flags))
+    if flagged:
+        name_w = max(len(n) for n, _ in flagged)
+        for name, flags in flagged:
+            print(f"  {name:<{name_w}}  {flags[0]}")
+            for extra in flags[1:]:
+                print(f"  {'':<{name_w}}  {extra}")
+    else:
         print("  none: every section sits close to the manuscript's own norms")
 
     print("\n  These are heuristics, not limits. A high rate is a prompt to reread")

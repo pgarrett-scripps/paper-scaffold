@@ -231,17 +231,19 @@ def main() -> int:
         ("Supporting Information", metrics(si_txt)),
         ("Main + SI", metrics(combined)),
     ]
-    name_w = max(len(r[0]) for r in rows)
-    print("Readability (prose only; same exemptions as the word count: no refs,")
-    print("             figures/tables + captions, math, or block code)")
-    print(f"  {'':<{name_w}}  {'words':>6}  {'w/sent':>6}  {'FK grade':>8}  "
+    name_w = max(len(r[0]) for r in rows + [("Readability", {})])
+    # The title sits in the header row's corner cell, so the report is a table
+    # and nothing else. No words column: it measured a slightly different text
+    # slice than the journal count printed above it, and two disagreeing
+    # columns both named "words" is worse than one.
+    print(f"  {'Readability':<{name_w}}  {'w/sent':>6}  {'FK grade':>8}  "
           f"{'ease':>5}  {'fog':>5}")
     for name, m in rows:
-        print(f"  {name:<{name_w}}  {m['words']:>6,}  {m['wps']:>6.1f}  "
+        print(f"  {name:<{name_w}}  {m['wps']:>6.1f}  "
               f"{m['fk']:>8.1f}  {m['ease']:>5.0f}  {m['fog']:>5.1f}")
     mt = rows[0][1]
-    print(f"  Main text reads at ~grade {mt['fk']:.0f} ({_band(mt['fk'])}); "
-          f"lower FK / higher ease = easier.")
+    print(f"  ~grade {mt['fk']:.0f} main text ({_band(mt['fk'])}); "
+          f"lower FK / higher ease = easier")
     return 0
 
 

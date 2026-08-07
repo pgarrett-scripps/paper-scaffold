@@ -388,7 +388,13 @@ draft: render-stats
 # edit saved while typst runs is then not claimed as built, and the next
 # `just check` reports stale -- wrong in the safe direction. Stamping afterwards
 # claimed the edited sources as rendered when they were not.
-# Compile paper.typ -> paper.pdf, then print word counts and readability
+# Compile paper.typ -> paper.pdf, then print word counts and readability.
+#
+# The density report is NOT printed here any more. It is a diagnosis tool --
+# CLAUDE.md has always described it as "worth running by hand, not part of the
+# gate" -- and on a real manuscript its nine-column table plus the per-section
+# outlier list tripled the build output into a wall nobody read. The two
+# numbers a build should surface (how long, how readable) fit on nine lines.
 paper: render-stats
   #!/usr/bin/env bash
   set -euo pipefail
@@ -398,8 +404,7 @@ paper: render-stats
   bash tools/wordcount.sh
   echo ""
   uv run --quiet python tools/readability.py
-  echo ""
-  uv run --quiet python tools/density.py
+  echo "  density and per-section outliers: just density"
 
 # See wordcount.typ for exactly what is excluded (refs, figures/tables, captions,
 # math, code) vs. included (headings, inline code).

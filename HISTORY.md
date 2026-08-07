@@ -42,6 +42,17 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.7.1
+
+The build report was a wall on a real manuscript: three stacked header blocks,
+two disagreeing columns both named "words", a nine-column density table, and
+section names truncated at 34 characters in a report whose job is to name
+sections. Now: `just paper` prints the word count and readability as eleven
+lines (density moved fully behind `just density`, where CLAUDE.md always said
+it lived); readability lost its own words column rather than disagree with the
+journal count above it; density aligns full section names and reports
+"value (median N)".
+
 ## 3.7.0
 
 `just text-baseline` / `just text-diff`: snapshot the PDF's extracted text,
