@@ -90,8 +90,9 @@ doctor:
   report just     just     required "every recipe in this file"      just --version
   report uv       uv       required "the Python toolchain"           uv --version
   report python3  python3  required "tools/wordcount.sh"                   python3 --version
-  report git      git      optional "not required by any check; version reporting" git --version
+  report git      git      optional "just text-diff word compare; version reporting" git --version
   report typstyle typstyle optional "just fmt and just fmt-check"    typstyle --version
+  report pdftotext pdftotext optional "just text-baseline and just text-diff" pdftotext -v
   report curl     curl     optional "not required; handy for diagnosis" curl --version
 
   # Version floor. Compared on major.minor as a pair of integers, because a
@@ -411,6 +412,52 @@ wordcount: render-stats
 # Readability metrics (Flesch-Kincaid grade, reading ease, words/sentence, fog)
 readability:
   @uv run --quiet python tools/readability.py
+
+# ---------------------------------------------------------------------------
+# Text-invariance, for structural refactors: preamble changes, docx-mode edits,
+# a typstyle upgrade, a migration. The property being protected is "the words
+# in the PDF did not move", which no other check watches -- verify guards the
+# machinery, not the rendered text. Snapshot before the refactor, rebuild
+# after, diff. Word-level, because a reflow rewraps every line and a line diff
+# would report the whole paper changed.
+#
+# The baseline is local state like .build-stamp: untracked, disposable, and
+# meaningful only against the paper.pdf on this machine.
+# ---------------------------------------------------------------------------
+
+# Snapshot the current paper.pdf's extracted text as the baseline for text-diff
+text-baseline:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  command -v pdftotext >/dev/null 2>&1 || {
+    echo "pdftotext is not installed (package: poppler-utils). See: just doctor"; exit 1; }
+  [ -f paper.pdf ] || { echo "no paper.pdf -- build it first: just paper"; exit 1; }
+  pdftotext -layout paper.pdf .text-baseline
+  echo "baseline recorded from paper.pdf ($(wc -w < .text-baseline) words)."
+  echo "After the refactor: just paper && just text-diff"
+
+# Word-level diff of the current paper.pdf's text against the recorded baseline
+text-diff:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  command -v pdftotext >/dev/null 2>&1 || {
+    echo "pdftotext is not installed (package: poppler-utils). See: just doctor"; exit 1; }
+  [ -f .text-baseline ] || {
+    echo "no baseline -- record one BEFORE the refactor: just text-baseline"; exit 1; }
+  [ -f paper.pdf ] || { echo "no paper.pdf -- build it first: just paper"; exit 1; }
+  current=$(mktemp)
+  trap 'rm -f "$current"' EXIT
+  pdftotext -layout paper.pdf "$current"
+  # --word-diff, because the failure mode of a line diff here is a false alarm
+  # on every rewrap; --no-index because neither file is tracked.
+  if git diff --no-index --word-diff=color -- .text-baseline "$current"; then
+    echo "extracted text is unchanged from the baseline."
+  else
+    echo ""
+    echo "the words above moved. If every change is one you chose, accept the"
+    echo "new state as the baseline: just text-baseline"
+    exit 1
+  fi
 
 # Live preview, recompiling on save.
 #

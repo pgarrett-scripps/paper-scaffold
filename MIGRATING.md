@@ -13,18 +13,24 @@ invariant keeps the paper itself safe while the machinery changes around it.
 
 ## The invariant: the paper must not change
 
-Before touching anything, build the current PDF and save its extracted text:
+Before touching anything, build the current PDF and snapshot its extracted
+text. Once the scaffold's justfile is in place (phase 1), that is:
 
 ```bash
-pdftotext paper.pdf baseline.txt      # or whatever the old build produces
+just text-baseline        # snapshot paper.pdf's words
+just text-diff            # after each phase: word-level diff against it
 ```
 
-At every phase boundary, rebuild and re-diff. The extracted text must be
-unchanged except for edits you chose to make. If a diff looks like reflow,
-compare word-by-word (`git diff --word-diff --no-index`) before concluding
-nothing moved — line-based diffs report every rewrap as a change. This is the
-one check that catches a migration silently eating a sentence, and it costs a
-minute per phase.
+Before phase 1, do the same by hand: `pdftotext paper.pdf baseline.txt` from
+whatever the old build produces, then `git diff --word-diff --no-index`
+against a fresh extraction.
+
+At every phase boundary, rebuild and `just text-diff`. The extracted text must
+be unchanged except for edits you chose to make — the diff is word-level
+precisely because a reflow rewraps every line, and a line diff would report
+the whole paper changed. This is the one check that catches a migration
+silently eating a sentence, and it costs a minute per phase. When every change
+shown is one you chose, `just text-baseline` again to accept the new state.
 
 Also record the old word count. It will move (see trap 3), and you want to
 know that the move is a definition change, not lost prose.

@@ -3,7 +3,7 @@ name = "paper"
 # The paper-scaffold version this manuscript is built on. Travels with the
 # scaffold when it is copied, so a project can always say where it came from.
 # See HISTORY.md for what bumps major, minor, and patch.
-version = "3.6.1"
+version = "3.7.0"
 description = "Python toolchain for building the manuscript"
 requires-python = ">=3.10"
 

@@ -45,6 +45,20 @@ rather than a copy.
 
 ---
 
+## 3.7.0
+
+`just text-baseline` / `just text-diff`: the words in the PDF, snapshotted and
+word-diffed. The property being protected -- "the rendered text did not move"
+-- is one no other check watches: verify guards the machinery, not the words.
+It earns its place for any structural refactor (a preamble change, a docx-mode
+edit, a typstyle upgrade), not just the migration MIGRATING.md wrote it down
+for; the diff is word-level because a reflow rewraps every line and a line
+diff would report the whole paper changed. The baseline is local state like
+.build-stamp; pdftotext (poppler) is a new OPTIONAL tool, reported by doctor
+and costing only this feature when absent.
+
+---
+
 ## 3.6.1
 
 MIGRATING.md: the runbook for moving an existing manuscript onto the scaffold
