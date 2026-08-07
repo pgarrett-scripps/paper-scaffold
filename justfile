@@ -675,12 +675,28 @@ check-build:
 # Word file. A change to any of them changes what a build produces, which is the
 # definition of stale this stamp exists to catch. The rest of tools/ only
 # measures or checks, so it stays out.
+#
+# stats.json is hashed WITHOUT its `pinned` block, through python3 rather than
+# find. The pins are bookkeeping about external files; nothing a build renders
+# reads them, and hashing them whole meant `just pin` -- a pure record-keeping
+# command -- marked both outputs STALE and demanded a rebuild that would change
+# nothing.
 _stamp-manuscript:
-  @find paper.typ config.typ si-body.typ stats.typ stats.json assets.typ \
+  #!/usr/bin/env bash
+  set -uo pipefail
+  { find paper.typ config.typ si-body.typ stats.typ assets.typ \
       assets.json wordcount.typ references.bib si figures \
       tools/render_stats.py tools/typst_prose.py tools/typst2docx.py \
       -type f -not -name '*.pyc' \
-      -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum | sha256sum | cut -d" " -f1
+      -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum
+    python3 - 2>/dev/null <<'PY' || true
+  import hashlib, json
+  d = json.load(open("stats.json"))
+  d.pop("pinned", None)
+  h = hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()
+  print(f"{h}  stats.json(sans pinned)")
+  PY
+  } | sha256sum | cut -d" " -f1
 
 # Record that <name> was just built from the sources hashed in <srchash>, which
 # the build recipe captured BEFORE compiling. Rewrites only its own line, so

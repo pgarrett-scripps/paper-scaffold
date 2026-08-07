@@ -202,15 +202,29 @@ class Stats:
 
         `expect` may come from the file, where the author can write a one-sided
         bound (`min` without `max`), so each bound is checked independently.
+        And because it is hand-edited JSON, its SHAPE is validated too: an
+        unknown key ("between" instead of min/max), a quoted bound, a NaN --
+        each must fail loudly, because a guard that is silently not enforced is
+        worse than no guard at all.
         """
         if not expect:
             return
+        unknown = set(expect) - {"sign", "min", "max"}
+        if unknown:
+            raise StatError(
+                f"{id!r}: expect in stats.json has unknown key(s) "
+                f"{', '.join(sorted(unknown))} -- only sign, min and max are "
+                f"understood, so this guard would never be enforced.")
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise StatError(
                 f"{id!r} has a guard in stats.json but the analysis now "
                 f"produces {value!r}, which is not numeric. Remove the guard "
                 f"from the file, or fix the analysis.")
         v = float(value)
+        if v != v:
+            raise StatError(
+                f"{id!r} is NaN, which no guard can pass. The analysis "
+                f"produced a non-number; fix it before it reaches the prose.")
         sign = expect.get("sign")
         if sign is not None:
             ok = {"+": v > 0, "-": v < 0, "nonzero": v != 0}
@@ -226,6 +240,12 @@ class Stats:
                     f"Either the analysis changed meaning, or the sentence that "
                     f"reads it needs rewording -- the guard lives in stats.json.")
         lo, hi = expect.get("min"), expect.get("max")
+        for name, bound in (("min", lo), ("max", hi)):
+            if bound is not None and (isinstance(bound, bool)
+                                      or not isinstance(bound, (int, float))):
+                raise StatError(
+                    f"{id!r}: expect.{name} in stats.json is {bound!r}, not a "
+                    f"number -- a quoted bound is never compared, only refused.")
         if (lo is not None and v < lo) or (hi is not None and v > hi):
             band = f"[{lo if lo is not None else '-inf'}, {hi if hi is not None else 'inf'}]"
             raise StatError(
@@ -276,7 +296,13 @@ class Stats:
                     f"delete the file.") from None
         existing = existing_doc.get("values", {})
         if not isinstance(existing, dict):
-            existing = {}
+            # Refuse, exactly like the invalid-JSON case above: treating a
+            # malformed block as empty would rewrite the file with every
+            # hand-entered and other-script entry silently deleted.
+            raise StatError(
+                f"{p.name} has a `values` block that is not an object "
+                f"({type(existing).__name__}), so this script cannot merge into "
+                f"it without losing whatever is there. Fix the file.")
 
         kept: dict[str, dict] = {}
         prior: dict[str, dict] = {}
@@ -299,6 +325,13 @@ class Stats:
                 f"{kept[clash[0]].get('origin', {}).get('by', '?')}, and this "
                 f"script declares it too. One id, one owner: rename one of them.")
 
+        # What an author-owned field means when the file no longer has it: the
+        # author DELETED it, and a deletion is an edit like any other. Falling
+        # back to the seed here would resurrect the very argument the contract
+        # promises is ignored -- a guard removed from the file would come back
+        # from an add() call nobody remembered was still passing it.
+        empty = {"fmt": "", "unit": "", "desc": "", "expect": {}}
+
         overridden: list[tuple[str, str]] = []
         final: dict[str, dict] = {}
         for id, seed in self._values.items():
@@ -309,15 +342,19 @@ class Stats:
             else:
                 entry = {"value": seed["value"]}
                 for f in AUTHOR_FIELDS:
-                    entry[f] = old.get(f, seed[f])
+                    entry[f] = old[f] if f in old else empty[f]
                 # A seed the script still passes, that the file has moved away
                 # from: dead code in the generator, collected for one note below.
                 overridden += [(id, f) for f in self._passed.get(id, ())
                                if seed[f] != entry[f]]
                 # `at` is when the value last CHANGED, not when the script last
                 # ran -- a re-run that reproduces the number leaves it alone, so
-                # the timestamps in the file carry information.
-                unchanged = old.get("value") == seed["value"]
+                # the timestamps in the file carry information. The type check
+                # matters: 35 == 35.0 in Python but "35" != "35.0" in the file,
+                # so a dtype change is a change and the date must say so.
+                old_v = old.get("value")
+                unchanged = (old_v == seed["value"]
+                             and type(old_v) is type(seed["value"]))
                 at = (old.get("origin", {}).get("at") or _now()) if unchanged \
                     else _now()
 

@@ -830,6 +830,17 @@ def check_stats_cases() -> bool:
         ("one-sided min violated", {"value": -1.0, "expect": {"min": 0}}, 1),
         ("one-sided min satisfied", {"expect": {"min": 0}}, 0),
         ("one-sided max violated", {"value": 500.0, "expect": {"max": 100}}, 1),
+        # NaN compares False against every bound, so the per-bound rewrite
+        # would wave it through a band the old chained comparison rejected.
+        ("NaN inside a band",
+         {"value": float("nan"), "expect": {"min": 0, "max": 100}}, 1),
+        # expect is hand-edited JSON. A key this does not understand is a guard
+        # that never fires, and a quoted bound is one that cannot compare --
+        # each must be an error, not a silence or a TypeError.
+        ("unknown expect key",
+         {"value": -3.0, "expect": {"between": [0, 1]}}, 1),
+        ("quoted bound", {"value": 5.0, "expect": {"min": "0"}}, 1),
+        ("expect is not an object", {"expect": [0, 1]}, 1),
         # A label carries no guard and must not be treated as a broken number.
         ("non-numeric with no guard",
          {"value": "Treated", "fmt": "", "expect": {}}, 0),
@@ -858,24 +869,32 @@ def check_stats_cases() -> bool:
     good = {"value": 35, "fmt": ",", "checksum": _stats._checksum(35),
             "origin": {"by": "analysis/scripts/gen_stats.py"}}
     checks = [
-        ("intact", good, 0),
-        ("value edited", {**good, "value": 999}, 1),
-        ("fmt edited, which the author owns", {**good, "fmt": ".2f"}, 0),
-        ("v1 intact", {**good, "checksum": v1}, 0),
-        ("v1 value edited", {**good, "checksum": v1, "value": 999}, 1),
-        ("unknown checksum version", {**good, "checksum": "v9:beef"}, 1),
+        ("intact", good, 0, 0),
+        ("value edited", {**good, "value": 999}, 1, 0),
+        ("fmt edited, which the author owns", {**good, "fmt": ".2f"}, 0, 0),
+        ("v1 intact", {**good, "checksum": v1}, 0, 0),
+        # A v1 digest covers value AND fmt, and cannot tell the documented fmt
+        # edit from a value edit -- so a mismatch is a WARNING with the
+        # ambiguity stated, not an error that fails the gate over the exact
+        # edit the contract invites. `just assets` re-records as v2.
+        ("v1 mismatch is a warning", {**good, "checksum": v1, "value": 999}, 0, 1),
+        ("v1 fmt edit is the same warning", {**good, "checksum": v1, "fmt": ".2f"}, 0, 1),
+        ("unknown checksum version", {**good, "checksum": "v9:beef"}, 1, 0),
         # Written before checksums existed: reported by nothing, so an upgrade
         # is not a wall of errors. `just assets` adds one.
-        ("no checksum recorded", {k: v for k, v in good.items() if k != "checksum"}, 0),
+        ("no checksum recorded", {k: v for k, v in good.items() if k != "checksum"}, 0, 0),
         # A hand entry has no generator to have written a checksum, so there is
         # nothing to compare against. Its guarantee is the guard and the note.
         ("hand entry is skipped",
-         {**good, "value": 999, "origin": {"by": "hand", "note": "x"}}, 0),
+         {**good, "value": 999, "origin": {"by": "hand", "note": "x"}}, 0, 0),
     ]
-    for name, rec, want in checks:
-        got = len([f for f in cs._checksum({"x.y": rec}) if f.level == "error"])
-        if got != want:
-            print(f"  check-stats checksum [{name}]: expected {want}, got {got}")
+    for name, rec, want_err, want_warn in checks:
+        found = cs._checksum({"x.y": rec})
+        got_err = len([f for f in found if f.level == "error"])
+        got_warn = len([f for f in found if f.level == "warn"])
+        if (got_err, got_warn) != (want_err, want_warn):
+            print(f"  check-stats checksum [{name}]: expected "
+                  f"{want_err}e/{want_warn}w, got {got_err}e/{got_warn}w")
             ok = False
 
     # Pinned files: declared by the author, hashed by `just pin`, watched from
@@ -890,6 +909,10 @@ def check_stats_cases() -> bool:
         ("pinned and changed", {"references.bib": "sha256:" + "0" * 64}, 1),
         ("pinned but absent", {"no/such/file.csv": "sha256:" + "0" * 64}, 0),
         ("no pinned block at all", None, 0),
+        # Hand-authored block, so a wrong shape (a list of paths is the natural
+        # first guess) must be an error finding, not an AttributeError that
+        # kills the whole gate.
+        ("pinned is a list", ["references.bib"], 1),
     ]
     for name, pinned, want in pin_cases:
         doc = {"values": {}} if pinned is None else {"values": {}, "pinned": pinned}
@@ -908,6 +931,14 @@ def check_stats_cases() -> bool:
     _, rc = pin_tool.pin({"pinned": {"no/such/file.csv": None}}, ROOT)
     if rc == 0:
         print("  pin: exited 0 while failing to pin a missing file")
+        ok = False
+    try:
+        _, rc = pin_tool.pin({"pinned": ["references.bib"]}, ROOT)
+        if rc == 0:
+            print("  pin: accepted a list-shaped pinned block")
+            ok = False
+    except AttributeError:
+        print("  pin: crashed on a list-shaped pinned block instead of reporting it")
         ok = False
 
     # Unused ids are reported against the real manuscript sources, so this only
@@ -1039,6 +1070,100 @@ def stats_ownership_cases() -> bool:
         if json.loads(p.read_text()).get("pinned") != {"some/file.csv": "sha256:abc"}:
             print("  ownership: the pinned block was lost in a generator rewrite")
             ok = False
+
+        # 6b. DELETING an author-owned field is an edit like any other: a guard
+        #     removed from the file must stay removed, not come back from the
+        #     seed the contract promises is ignored.
+        doc = json.loads(p.read_text())
+        del doc["values"]["m.x"]["expect"]
+        p.write_text(json.dumps(doc))
+        st = Stats()
+        st.add("m.x", -5.0, sign="+")     # stale seed guard; value violates it
+        out = run(st)
+        e6 = json.loads(p.read_text())["values"]["m.x"]
+        if e6.get("expect") != {}:
+            print(f"  ownership: a deleted guard was resurrected -- {e6.get('expect')}")
+            ok = False
+        if "IGNORED" not in out:
+            print("  ownership: resurrection-averted seed was dropped with no note")
+            ok = False
+
+        # 6c. origin.at must move when the value's REPRESENTATION changes:
+        #     35 == 35.0 in Python but not in the file, and the checksum moves.
+        #     The stored date is backdated first, because _now() has second
+        #     granularity and two writes in one second look identical.
+        doc = json.loads(p.read_text())
+        doc["values"]["m.x"]["origin"]["at"] = "2000-01-01T00:00:00Z"
+        p.write_text(json.dumps(doc))
+        st = Stats()
+        st.add("m.x", -5)                 # same number, int now
+        run(st)
+        e6c = json.loads(p.read_text())["values"]["m.x"]
+        if e6c["origin"]["at"] == "2000-01-01T00:00:00Z":
+            print("  ownership: origin.at kept its date across an int/float change")
+            ok = False
+        # and the counterpart: an identical value keeps its date.
+        doc = json.loads(p.read_text())
+        doc["values"]["m.x"]["origin"]["at"] = "2000-01-01T00:00:00Z"
+        p.write_text(json.dumps(doc))
+        st = Stats()
+        st.add("m.x", -5)
+        run(st)
+        if json.loads(p.read_text())["values"]["m.x"]["origin"]["at"] \
+                != "2000-01-01T00:00:00Z":
+            print("  ownership: origin.at moved although the value did not")
+            ok = False
+
+        # 6d. a malformed values block must refuse the merge, not rewrite the
+        #     file with every hand and other-script entry silently deleted.
+        doc = json.loads(p.read_text())
+        doc["values"] = []
+        p.write_text(json.dumps(doc))
+        st = Stats()
+        st.add("m.x", 1.0)
+        try:
+            run(st)
+            print("  ownership: merged into a malformed values block")
+            ok = False
+        except StatError:
+            pass
+        if json.loads(p.read_text())["values"] == []:
+            pass        # untouched, as it must be
+        else:
+            print("  ownership: a refused merge still modified the file")
+            ok = False
+        # restore a valid file for anything below
+        doc["values"] = {}
+        p.write_text(json.dumps(doc))
+        st = Stats()
+        st.add("m.x", 1.0)
+        run(st)
+
+        # 6e. guards read from the file are hand-edited JSON: an unknown key, a
+        #     quoted bound and a NaN value must each refuse the write loudly.
+        for name, mutate, value in [
+            ("unknown expect key",
+             lambda e: e.__setitem__("expect", {"between": [0, 1]}), 2.0),
+            ("quoted bound",
+             lambda e: e.__setitem__("expect", {"min": "0"}), 2.0),
+            ("NaN against a guard",
+             lambda e: e.__setitem__("expect", {"min": 0}), float("nan")),
+        ]:
+            doc = json.loads(p.read_text())
+            mutate(doc["values"]["m.x"])
+            p.write_text(json.dumps(doc))
+            st = Stats()
+            st.add("m.x", value)
+            try:
+                run(st)
+                print(f"  ownership guard shape [{name}]: accepted silently")
+                ok = False
+            except StatError:
+                pass
+        # leave the temp file valid
+        doc = json.loads(p.read_text())
+        doc["values"]["m.x"]["expect"] = {}
+        p.write_text(json.dumps(doc))
 
     # 7. assets: origin.at means "the output changed", not "the script ran".
     import _assets

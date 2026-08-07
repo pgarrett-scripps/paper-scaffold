@@ -50,7 +50,14 @@ def pin(doc: dict, root: Path) -> tuple[list[str], int]:
     """Fill or refresh every hash in doc["pinned"]. Returns (report lines, rc)."""
     lines: list[str] = []
     rc = 0
-    for src, old in sorted((doc.get("pinned") or {}).items()):
+    pinned = doc.get("pinned") or {}
+    if not isinstance(pinned, dict):
+        # The block is hand-authored; a list of paths is the natural wrong
+        # first guess, and .items() on it would kill the one command that
+        # could explain the right shape.
+        return ([f'  pinned is not an object ({type(pinned).__name__}). '
+                 f'The shape is {{"path/relative/to/root": null}}.'], 1)
+    for src, old in sorted(pinned.items()):
         p = root / src
         if not p.is_file():
             # An error, unlike in check_stats: you are the one pinning, on the

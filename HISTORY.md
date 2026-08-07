@@ -45,6 +45,52 @@ rather than a copy.
 
 ---
 
+## 3.4.1
+
+Ten defects in the 3.3.0/3.4.0 code, found by an adversarial review of that
+range and each verified before fixing. The theme: the ownership split made
+stats.json hand-edited JSON, and hand-edited JSON can be malformed in ways the
+code either crashed on or -- worse -- silently accepted.
+
+The dangerous ones:
+
+- **A malformed `values` block deleted every hand entry.** write() replaced a
+  non-dict block with `{}` and rewrote the file with only its own entries. It
+  now refuses, like the invalid-JSON case always did.
+- **A stale seed guard silently disabled deep re-derivation.** _rederive ran
+  the generator against an empty shadow, so every entry counted as new and the
+  seeds -- not the file's author-edited guards -- judged the values. Widening a
+  guard in stats.json (the documented workflow) made the shadow run die on the
+  stale seed, and the death was downgraded to a note: preflight reported OK
+  while the one check that recomputes numbers never ran. The shadow now starts
+  as a copy of the real file, and a guard violation there is an error.
+- **NaN passed every range guard.** The per-bound rewrite (`v < lo or v > hi`)
+  is False for NaN where the old chained comparison flagged it. NaN is now an
+  explicit error in both the generator and the gate.
+- **A guard the code did not understand was a guard that never fired.**
+  `"expect": {"between": [0, 1]}` -- mirroring add()'s own argument name -- was
+  silently ignored; `"min": "0"` was a TypeError that killed the gate without
+  naming the entry; a list-shaped `pinned` block was an AttributeError in both
+  check-stats and `just pin`. All are named error findings now.
+- **Deleting an author-owned field resurrected the seed.** `old.get(f, seed[f])`
+  fell back to the add() argument when the author deleted a key, reinstating a
+  retired guard from the file that no longer contained it. Deletion is an edit:
+  the field stays deleted, and the stale seed is reported in the IGNORED note.
+
+The wrong-signal ones:
+
+- A v1-checksum mismatch is a warning, not an error: v1 covered value AND fmt,
+  so it cannot tell the now-documented fmt edit from tampering, and failing the
+  gate punished the documented workflow on exactly the clones that cannot run
+  `just assets` to clear it.
+- `just pin` no longer marks both outputs STALE: the build stamp hashes
+  stats.json without its `pinned` block, since no build renders the pins.
+- `origin.at` moves when 35 becomes 35.0: the value comparison now checks type,
+  because the file's representation and checksum change even when Python's `==`
+  says nothing did.
+
+---
+
 ## 3.4.0
 
 Three holes between "the checks pass" and "the file being submitted is not

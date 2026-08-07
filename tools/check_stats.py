@@ -67,9 +67,25 @@ def _guard(id: str, rec: dict) -> list[Finding]:
     """
     out: list[Finding] = []
     v = rec.get("value")
+    expect = rec.get("expect") or {}
+    # expect is hand-edited JSON, so its SHAPE is checked before its meaning: a
+    # key this does not understand ("between" instead of min/max) is a guard
+    # that would never fire, which must be an error, not a silence.
+    if not isinstance(expect, dict):
+        return [Finding("error", id,
+            f"has an expect that is not an object ({type(expect).__name__}); "
+            f"no guard in it can be enforced")]
+    unknown = set(expect) - {"sign", "min", "max"}
+    if unknown:
+        out.append(Finding("error", id,
+            f"expect has unknown key(s) {', '.join(sorted(unknown))} -- only "
+            f"sign, min and max are understood, so this guard is not being "
+            f"enforced"))
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         return out
-    expect = rec.get("expect") or {}
+    if v != v:
+        return out + [Finding("error", id,
+            "is NaN, which no guard can pass and no sentence can state")]
     sign = expect.get("sign")
     if sign:
         ok = {"+": v > 0, "-": v < 0, "nonzero": v != 0}.get(sign)
@@ -81,8 +97,18 @@ def _guard(id: str, rec: dict) -> list[Finding]:
                 f"is {v}, but the prose assumes it is {word}. Either the value "
                 f"is wrong or the sentence reading it needs rewording."))
     # Each bound on its own: expect is author-edited, and a one-sided band
-    # (`min` with no `max`) is a legitimate thing to write there.
+    # (`min` with no `max`) is a legitimate thing to write there. A bound that
+    # is not a number (a quoted "0") is reported, not compared -- comparing
+    # would be a TypeError that kills the whole gate without naming the entry.
     lo, hi = expect.get("min"), expect.get("max")
+    for name, bound in (("min", lo), ("max", hi)):
+        if bound is not None and (isinstance(bound, bool)
+                                  or not isinstance(bound, (int, float))):
+            out.append(Finding("error", id,
+                f"expect.{name} is {bound!r}, not a number -- quoted in the "
+                f"JSON? This bound is not being enforced."))
+    lo = lo if isinstance(lo, (int, float)) and not isinstance(lo, bool) else None
+    hi = hi if isinstance(hi, (int, float)) and not isinstance(hi, bool) else None
     if (lo is not None and v < lo) or (hi is not None and v > hi):
         band = f"[{lo if lo is not None else '-inf'}, {hi if hi is not None else 'inf'}]"
         out.append(Finding("error", id,
@@ -151,14 +177,25 @@ def _checksum(values: dict) -> list[Finding]:
         version = want[:3]
         have = version + hashlib.sha256(payload.encode()).hexdigest()[:16]
         if have != want:
-            hint = (" (v1 also covered fmt, so this can be a legitimate fmt "
-                    "edit made before `just assets` re-recorded it)"
-                    if version == "v1:" else "")
-            out.append(Finding("error", id,
-                f"value {rec.get('value')!r} does not match the checksum its "
-                f"generator recorded, so it was edited by hand{hint}. Change "
-                f"the analysis and re-run `just assets`, or take the value over "
-                f'with origin.by = "hand" and a note.'))
+            if version == "v1:":
+                # A v1 digest covers value AND fmt, and cannot tell a fmt edit
+                # -- which the contract now invites -- from a value edit, which
+                # it exists to catch. Failing the gate here would punish the
+                # documented workflow, and on a fresh clone the only clean fix
+                # (`just assets`) needs analysis data the clone does not have.
+                # So: a warning, with the honest ambiguity stated. The next
+                # `just assets` re-records as v2 and the ambiguity is gone.
+                out.append(Finding("warn", id,
+                    f"has a pre-3.3.0 (v1) checksum that no longer matches. "
+                    f"Either the fmt was edited (yours to do) or the value was "
+                    f"(not yours) -- a v1 digest cannot tell which. Verify the "
+                    f"value, then `just assets` to re-record it as v2."))
+            else:
+                out.append(Finding("error", id,
+                    f"value {rec.get('value')!r} does not match the checksum "
+                    f"its generator recorded, so it was edited by hand. Change "
+                    f"the analysis and re-run `just assets`, or take the value "
+                    f'over with origin.by = "hand" and a note.'))
     return out
 
 
@@ -177,7 +214,14 @@ def _pinned(doc: dict) -> list[Finding]:
     """
     import hashlib
     out: list[Finding] = []
-    for src, want in sorted((doc.get("pinned") or {}).items()):
+    pinned = doc.get("pinned") or {}
+    if not isinstance(pinned, dict):
+        # Hand-authored by design, so its shape is a thing that can be wrong.
+        # A list of paths is the obvious first guess at the syntax.
+        return [Finding("error", "pinned",
+            f'is not an object ({type(pinned).__name__}). The shape is '
+            f'{{"path/relative/to/root": null}}; then run: just pin')]
+    for src, want in sorted(pinned.items()):
         p = ROOT / src
         if not want:
             out.append(Finding("error", src,
@@ -263,29 +307,44 @@ def _rederive(values: dict) -> list[Finding]:
     there is nothing to re-derive from, and failing the gate there would make
     every fresh clone red for a reason the person cannot act on.
     """
+    mine = GEN.relative_to(ROOT).as_posix()
     owned = {id: r for id, r in values.items()
-             if r.get("origin", {}).get("by") == GEN.relative_to(ROOT).as_posix()}
+             if r.get("origin", {}).get("by") == mine}
     if not owned or not GEN.is_file():
         return []
 
     with tempfile.TemporaryDirectory() as d:
         shadow = Path(d) / "stats.json"
-        # The generator merges into whatever is at the target path, so it is
-        # pointed at an empty directory: what comes back is exactly this script's
-        # own output, with nothing inherited to compare against by accident.
+        # The shadow STARTS AS A COPY of the real stats.json, so the generator
+        # merges against the same file it would in `just assets` -- above all,
+        # its values are judged by the author-edited guards in the FILE, not by
+        # the seeds in add(). An empty shadow used to make every entry "new",
+        # which resurrected stale seed guards; the run then died on a guard the
+        # author had already widened, and the death was downgraded to a note --
+        # re-derivation silently disabled by the exact edit the contract invites.
+        shadow.write_text(STATS.read_text())
         proc = subprocess.run(
             [sys.executable, str(GEN)],
             cwd=GEN.parent, capture_output=True, text=True,
             env={**__import__("os").environ, "PAPER_STATS_OUT": str(shadow)})
         if proc.returncode != 0:
+            err = (proc.stderr.strip().splitlines()[-1]
+                   if proc.stderr.strip() else "no output")
+            if "StatError" in proc.stderr:
+                # The fresh value violated a guard in stats.json. That is a
+                # finding about the numbers, not an environment problem, and
+                # `just assets` would fail the same way.
+                return [Finding("error", "(re-derive)",
+                    f"the analysis now produces a value that violates a guard "
+                    f"in stats.json: {err}")]
             return [Finding("note", "(re-derive)",
                 f"could not re-run {GEN.relative_to(ROOT)}, so generated values "
-                f"were not re-checked: {proc.stderr.strip().splitlines()[-1] if proc.stderr.strip() else 'no output'}")]
-        if not shadow.is_file():
-            return [Finding("note", "(re-derive)",
-                "the generator did not honour PAPER_STATS_OUT, so generated "
-                "values were not re-checked")]
-        fresh = json.loads(shadow.read_text()).get("values", {})
+                f"were not re-checked: {err}")]
+        doc = json.loads(shadow.read_text())
+        # Only this generator's entries are compared: the copy carried the hand
+        # and other-script entries along, and they are not re-derivable.
+        fresh = {id: r for id, r in doc.get("values", {}).items()
+                 if r.get("origin", {}).get("by") == mine}
 
     out: list[Finding] = []
     for id, rec in sorted(owned.items()):
