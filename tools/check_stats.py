@@ -340,10 +340,24 @@ def _rederive(values: dict) -> list[Finding]:
         # author had already widened, and the death was downgraded to a note --
         # re-derivation silently disabled by the exact edit the contract invites.
         shadow.write_text(STATS.read_text())
+        # THROUGH uv, not sys.executable. The generator belongs to the analysis,
+        # which has its own environment (analysis/pyproject.toml) and its own
+        # dependencies -- pandas, typically -- that the manuscript toolchain has
+        # no reason to carry. Run with this interpreter it died on
+        # ModuleNotFoundError, which was downgraded to "could not re-run ...":
+        # the strongest check in the pipeline silently reduced to a note, on a
+        # machine where it could have run. `uv run` resolves the project from
+        # the script's directory, exactly as analysis/justfile does. Falls back
+        # to this interpreter when uv is absent, so a stdlib-only generator
+        # still re-derives. (Found downstream, in the dnoise manuscript.)
+        import os
+        import shutil
+        runner = (["uv", "run", "--quiet", "python", str(GEN)]
+                  if shutil.which("uv") else [sys.executable, str(GEN)])
         proc = subprocess.run(
-            [sys.executable, str(GEN)],
+            runner,
             cwd=GEN.parent, capture_output=True, text=True,
-            env={**__import__("os").environ, "PAPER_STATS_OUT": str(shadow)})
+            env={**os.environ, "PAPER_STATS_OUT": str(shadow)})
         if proc.returncode != 0:
             err = (proc.stderr.strip().splitlines()[-1]
                    if proc.stderr.strip() else "no output")

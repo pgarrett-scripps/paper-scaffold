@@ -42,6 +42,22 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.8.1
+
+Two fixes found downstream, in the dnoise manuscript, and taken upstream:
+
+- **`check-stats-deep` ran the generator with the toolchain's interpreter**,
+  which lacks the analysis environment's dependencies (pandas, typically), so
+  it died on ModuleNotFoundError -- downgraded to a "could not re-run" note.
+  The strongest check in the pipeline silently reduced itself to nothing on
+  exactly the projects with a real analysis. It runs through `uv run` now,
+  resolved from the generator's directory like analysis/justfile does, with a
+  sys.executable fallback when uv is absent.
+- **Two tests hardcoded `figures/example_figure.png`**, which a real
+  manuscript deletes in its second week; the tests then failed for a reason
+  unrelated to what they check. The figure is discovered from `figures/` now,
+  and the cases skip with a note when none exists.
+
 ## 3.8.0
 
 The console reports render through rich, styled once in `tools/report.py`:

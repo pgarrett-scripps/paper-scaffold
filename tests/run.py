@@ -1223,6 +1223,17 @@ def stats_ownership_cases() -> bool:
         p.write_text(json.dumps(doc))
 
     # 7. assets: origin.at means "the output changed", not "the script ran".
+    #
+    # record() insists the file it declares exists, so this needs a real one --
+    # DISCOVERED from the project rather than named. The scaffold's demo figure
+    # is deleted by the second week of a real manuscript, and a test hardcoding
+    # it then fails for a reason unrelated to what it checks. (Found downstream,
+    # in the dnoise manuscript.)
+    sample = next(iter(sorted((ROOT / "figures").glob("*.png"))), None)
+    if sample is None:
+        print("  note: no figures/*.png, so the asset origin.at cases were skipped")
+        return ok
+    fig_rel = sample.relative_to(ROOT).as_posix()
     import _assets
     saved = _assets.OUT
     try:
@@ -1230,13 +1241,13 @@ def stats_ownership_cases() -> bool:
             _assets.OUT = Path(d) / "assets.json"
             kw = dict(kind="figure", inputs=[], desc="d")
             with redirect_stdout(io.StringIO()):
-                _assets.record("fig.t", "figures/example_figure.png", **kw)
+                _assets.record("fig.t", fig_rel, **kw)
             doc = json.loads(_assets.OUT.read_text())
             old = "2000-01-01T00:00:00Z"
             doc["values"]["fig.t"]["origin"]["at"] = old
             _assets.OUT.write_text(json.dumps(doc))
             with redirect_stdout(io.StringIO()):
-                _assets.record("fig.t", "figures/example_figure.png", **kw)
+                _assets.record("fig.t", fig_rel, **kw)
             at = json.loads(_assets.OUT.read_text())["values"]["fig.t"]["origin"]["at"]
             if at != old:
                 print("  asset origin.at: moved although the output did not change")
@@ -1245,7 +1256,7 @@ def stats_ownership_cases() -> bool:
             doc["values"]["fig.t"]["hash"] = "sha256:" + "0" * 64
             _assets.OUT.write_text(json.dumps(doc))
             with redirect_stdout(io.StringIO()):
-                _assets.record("fig.t", "figures/example_figure.png", **kw)
+                _assets.record("fig.t", fig_rel, **kw)
             at = json.loads(_assets.OUT.read_text())["values"]["fig.t"]["origin"]["at"]
             if at == old:
                 print("  asset origin.at: kept a stale date across an output change")
@@ -1320,18 +1331,24 @@ def adoption_cases() -> bool:
             ok = False
 
     # A generator may take over an adopted id: rebuildable beats adopted.
+    # The figure is discovered, not named -- see the origin.at cases for why.
+    sample = next(iter(sorted((ROOT / "figures").glob("*.png"))), None)
+    if sample is None:
+        print("  note: no figures/*.png, so the adoption takeover case was skipped")
+        return ok
+    fig_rel = sample.relative_to(ROOT).as_posix()
     import _assets
     saved = _assets.OUT
     try:
         with tempfile.TemporaryDirectory() as d:
             _assets.OUT = Path(d) / "assets.json"
             _assets.OUT.write_text(json.dumps({"values": {
-                "fig.t": {"path": "figures/example_figure.png",
+                "fig.t": {"path": fig_rel,
                           "kind": "figure", "hash": "sha256:" + "0" * 64,
                           "origin": {"by": "adopted", "note": "legacy"}}}}))
             buf = io.StringIO()
             with redirect_stdout(buf):
-                _assets.record("fig.t", "figures/example_figure.png",
+                _assets.record("fig.t", fig_rel,
                                kind="figure", inputs=[], desc="d")
             e = json.loads(_assets.OUT.read_text())["values"]["fig.t"]
             if e["origin"]["by"] == "adopted":
