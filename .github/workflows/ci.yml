@@ -41,7 +41,7 @@ jobs:
       # A shallow checkout is fine: no check reads git history any more. Staleness
       # is a content stamp written at build time (`just check-build`), so this
       # needs the files and nothing else.
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
 
       # Tools go in a user-owned directory rather than /usr/local/bin, which is
       # not reliably writable across the runner images (and differs again on an
@@ -174,7 +174,7 @@ jobs:
   new-paper:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
 
       # Tools go in a user-owned directory rather than /usr/local/bin, which is
       # not reliably writable across the runner images (and differs again on an
@@ -236,7 +236,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5.1.0
+      - uses: actions/checkout@v7.0.1
 
       # Tools go in a user-owned directory rather than /usr/local/bin, which is
       # not reliably writable across the runner images (and differs again on an
