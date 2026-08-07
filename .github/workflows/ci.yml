@@ -41,7 +41,7 @@ jobs:
       # A shallow checkout is fine: no check reads git history any more. Staleness
       # is a content stamp written at build time (`just check-build`), so this
       # needs the files and nothing else.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
 
       # Tools go in a user-owned directory rather than /usr/local/bin, which is
       # not reliably writable across the runner images (and differs again on an
@@ -71,7 +71,10 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v9.0.0
         with:
-          enable-cache: true
+          # Caching is on by default on hosted runners; PRUNING is not, since
+          # v9. An unpruned uv cache grows run over run toward the 10 GB
+          # Actions quota until eviction makes every run a cache miss.
+          prune-cache: true
 
       # Also the first assertion: doctor must agree the toolchain is usable, and
       # must reject a typst below the floor. Both directions matter, since a
@@ -171,7 +174,7 @@ jobs:
   new-paper:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
 
       # Tools go in a user-owned directory rather than /usr/local/bin, which is
       # not reliably writable across the runner images (and differs again on an
@@ -194,7 +197,10 @@ jobs:
 
       - uses: astral-sh/setup-uv@v9.0.0
         with:
-          enable-cache: true
+          # Caching is on by default on hosted runners; PRUNING is not, since
+          # v9. An unpruned uv cache grows run over run toward the 10 GB
+          # Actions quota until eviction makes every run a cache miss.
+          prune-cache: true
 
       - name: Generate a manuscript and build it
         run: |
@@ -230,7 +236,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
 
       # Tools go in a user-owned directory rather than /usr/local/bin, which is
       # not reliably writable across the runner images (and differs again on an
@@ -248,7 +254,10 @@ jobs:
 
       - uses: astral-sh/setup-uv@v9.0.0
         with:
-          enable-cache: true
+          # Caching is on by default on hosted runners; PRUNING is not, since
+          # v9. An unpruned uv cache grows run over run toward the 10 GB
+          # Actions quota until eviction makes every run a cache miss.
+          prune-cache: true
 
       - run: just audio-setup
 

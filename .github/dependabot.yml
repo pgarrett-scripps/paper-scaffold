@@ -1,0 +1,11 @@
+# Keeps the exact-pinned action versions in ci.yml current. The pins are exact
+# on purpose -- the workflow's policy is to run exactly what was reviewed -- and
+# an exact pin with nothing bumping it means patch and security fixes upstream
+# never arrive. This is the something: one PR per update, reviewed like any
+# other change.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
