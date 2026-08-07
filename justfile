@@ -334,6 +334,17 @@ check-stats-deep:
 pin:
   @uv run --quiet python tools/pin.py
 
+# For a manuscript migrating onto this scaffold with figures whose analysis is
+# gone or unrunnable: every unclaimed file under figures/ and si/ is declared
+# with origin.by = "adopted" and your note as its provenance. The hash and
+# reference checks still apply; what is honestly absent is regeneration --
+# nothing can rebuild an adopted file, and the checks say so rather than
+# pretend. A generator that later calls record() with the same id takes it
+# over. Re-run with a new note to accept a deliberate change to an adopted file.
+# Adopt committed figures/tables no generator can rebuild (migration aid)
+adopt note="":
+  @uv run --quiet python tools/adopt_assets.py --note="{{note}}"
+
 # assets.json is the same contract for figures and tables: declared by the script
 # that writes them, referenced from the prose by id. Because the compile resolves
 # those ids, the manifest cannot rot into a file nobody reads -- which is what

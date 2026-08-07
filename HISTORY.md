@@ -45,6 +45,50 @@ rather than a copy.
 
 ---
 
+## 3.6.0
+
+Lessons from watching another project migrate an existing manuscript onto this
+scaffold -- the seat the scaffold had never sat in, since new-paper.sh only
+starts papers from zero.
+
+### Adopted assets: the honest answer when the analysis is gone
+
+A migrating manuscript usually has figures whose analysis cannot be re-run:
+code lost, data gone, or a pipeline nobody can rebuild. The manifest contract
+made those files permanent `unclaimed` errors, and the workarounds were to lie
+(fake a generator) or give up on the manifest.
+
+`just adopt note="..."` is the third option: every unclaimed file under
+figures/ and si/ is declared with `origin.by = "adopted"` and the note as its
+provenance -- the same contract as a hand-entered number in stats.json, note
+mandatory and all. The hash and reference checks still apply; a changed
+adopted file is an error until a re-run of `just adopt` accepts it
+deliberately, like `just pin`. What is honestly absent is regeneration, and
+the checks say so ("N adopted -- nothing can regenerate them") instead of
+pretending. A generator that later calls record() with an adopted id takes it
+over, because rebuildable beats adopted.
+
+No stats equivalent is needed: a value whose analysis is gone has been a
+hand entry with a note since 3.3.0.
+
+### Three load-bearing constraints, now written down
+
+Each was discoverable only by breaking it during a migration:
+
+- **analysis/ must live inside the manuscript.** _provenance resolves the root
+  as analysis/scripts/../.. and the sys.modules walk filters on the analysis/
+  prefix; a sibling analysis repository means forking tools. In README, with
+  the registry-packaging caveat (a newly nested analysis tree can ship to a
+  registry if the include list is loose).
+- **#include gives the included file its own scope.** A new .typ using s(),
+  fig() or tbl() needs its own imports; the error points into the included
+  file, not at the missing import. In CLAUDE.md's Typst gotchas.
+- **The BODY markers define what the word count MEANS.** Back matter sits
+  outside them and is not counted, so a migrated manuscript's headline number
+  drops without a word changing. In CLAUDE.md, next to the never-delete rule.
+
+---
+
 ## 3.5.0
 
 The README gained the pipeline's ideas as fifteen lines, and the lines were

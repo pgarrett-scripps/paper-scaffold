@@ -341,6 +341,7 @@ def structural_cases() -> bool:
     ok &= stats_cases()
     ok &= check_stats_cases()
     ok &= stats_ownership_cases()
+    ok &= adoption_cases()
     ok &= check_assets_cases()
     ok &= suppression_cases()
     ok &= new_paper_cases()
@@ -1248,6 +1249,96 @@ def stats_ownership_cases() -> bool:
             at = json.loads(_assets.OUT.read_text())["values"]["fig.t"]["origin"]["at"]
             if at == old:
                 print("  asset origin.at: kept a stale date across an output change")
+                ok = False
+    finally:
+        _assets.OUT = saved
+
+    return ok
+
+
+def adoption_cases() -> bool:
+    """The migration path: files whose analysis is gone, adopted with a note.
+
+    Adoption must buy the checks that still apply (hash, note) without the one
+    that cannot (a generator), and a restored generator must be able to take
+    the id back.
+    """
+    import io
+    import json
+    from contextlib import redirect_stdout
+    import adopt_assets as aa
+    import check_assets as ca
+    ok = True
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "figures").mkdir()
+        (root / "si").mkdir()
+        (root / "figures" / "legacy_plot.png").write_bytes(b"png-bytes")
+        (root / "si" / "old_table.typ").write_text("#table()")
+
+        # No note, no adoption: provenance is the entire point.
+        lines, rc = aa.adopt(root, "  ")
+        if rc == 0 or (root / "assets.json").is_file():
+            print("  adopt: proceeded without a note")
+            ok = False
+
+        lines, rc = aa.adopt(root, "imported from repo X at 3f2a1c0")
+        doc = json.loads((root / "assets.json").read_text())
+        e = doc["values"].get("fig.legacy-plot")
+        t = doc["values"].get("tbl.old-table")
+        if rc != 0 or not e or not t:
+            print(f"  adopt: expected fig.legacy-plot and tbl.old-table -- {list(doc.get('values', {}))}")
+            ok = False
+        elif (e["origin"]["by"], e["kind"], t["kind"]) != ("adopted", "figure", "table"):
+            print(f"  adopt: wrong provenance or kind -- {e}, {t}")
+            ok = False
+
+        # check_assets: an adopted entry passes with no generator on disk, and
+        # its note is mandatory.
+        old_root, ca.ROOT = ca.ROOT, root
+        try:
+            if [f for f in ca._entry("fig.legacy-plot", e) if f.level == "error"]:
+                print("  adopt: a clean adopted entry was reported as an error")
+                ok = False
+            noteless = {**e, "origin": {"by": "adopted"}}
+            if not [f for f in ca._entry("fig.legacy-plot", noteless)
+                    if f.level == "error"]:
+                print("  adopt: an adopted entry with no note passed")
+                ok = False
+            # A changed file is an error until re-adoption accepts it.
+            (root / "figures" / "legacy_plot.png").write_bytes(b"new-bytes")
+            if not [f for f in ca._entry("fig.legacy-plot", e) if f.level == "error"]:
+                print("  adopt: a changed adopted file passed the hash check")
+                ok = False
+        finally:
+            ca.ROOT = old_root
+        lines, rc = aa.adopt(root, "accepting the regenerated plot")
+        e2 = json.loads((root / "assets.json").read_text())["values"]["fig.legacy-plot"]
+        if e2["hash"] == e["hash"]:
+            print("  adopt: re-running did not refresh a changed hash")
+            ok = False
+
+    # A generator may take over an adopted id: rebuildable beats adopted.
+    import _assets
+    saved = _assets.OUT
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            _assets.OUT = Path(d) / "assets.json"
+            _assets.OUT.write_text(json.dumps({"values": {
+                "fig.t": {"path": "figures/example_figure.png",
+                          "kind": "figure", "hash": "sha256:" + "0" * 64,
+                          "origin": {"by": "adopted", "note": "legacy"}}}}))
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                _assets.record("fig.t", "figures/example_figure.png",
+                               kind="figure", inputs=[], desc="d")
+            e = json.loads(_assets.OUT.read_text())["values"]["fig.t"]
+            if e["origin"]["by"] == "adopted":
+                print("  adopt: a generator could not take over an adopted id")
+                ok = False
+            if "supersedes" not in buf.getvalue():
+                print("  adopt: a takeover happened silently")
                 ok = False
     finally:
         _assets.OUT = saved

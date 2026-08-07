@@ -54,7 +54,12 @@ being traceable.
 
 **Never delete the `// >>> BODY START` / `// <<< BODY END` markers** in
 `paper.typ`. The word counter, the readability report, and the narrator all slice
-the prose at them, and each hard-fails without them.
+the prose at them, and each hard-fails without them. Moving them changes what
+the word count MEANS, not just its value: the convention here is that back
+matter (the bibliography above all) sits outside the markers and is not
+counted. A count that used to include it will drop on migration to this
+scaffold without a word of prose changing -- expected, and worth knowing
+before quoting the number.
 
 ## Before saying the work is done
 
@@ -180,6 +185,13 @@ Typst gotcha worth knowing: a method chain broken across lines after `#let x =`
 or inside `[...]` ends at the first newline, and the continuation is parsed as
 literal text. The error points at a closure parameter and reads
 `unknown variable: a`. Wrap the chain in a code block `{ ... }`.
+
+Second gotcha: `#include` gives the included file its OWN scope -- it does not
+inherit the includer's imports. A new `.typ` file that uses `s()`, `n()`,
+`fig()` or `tbl()` needs its own `#import "stats.typ": s, n` and
+`#import "assets.typ": fig, tbl` lines, exactly as `si-body.typ` carries. The
+failure reads `unknown variable: tbl` pointing into the included file, not at
+the missing import.
 
 ## Python
 

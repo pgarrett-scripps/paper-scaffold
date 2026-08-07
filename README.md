@@ -442,6 +442,16 @@ in `figures/` is untouched, and the PDF keeps rendering a figure that no longer
 matches the numbers in its own caption. Writing to the destination removes the
 failure rather than adding a guard for it.
 
+**The location is load-bearing, not a taste.** The provenance machinery
+resolves the manuscript root as `analysis/scripts/../..`, and the
+`sys.modules` walk keeps exactly the modules whose paths start with
+`analysis/`. An analysis kept as a sibling repository means forking those
+tools, not just re-pointing a path — if you are migrating an existing paper,
+moving the analysis under the manuscript is what lets the scaffold work
+unmodified. (And if the repository publishes a package or crate, check its
+include/exclude list afterwards: a newly nested analysis tree can quietly ship
+to a registry.)
+
 **The contract is one recipe.** `analysis/justfile` exposes `assets`, which
 regenerates everything the manuscript includes. `just assets` at the top level
 delegates to it and knows nothing else. Whatever is inside `analysis/` is that
