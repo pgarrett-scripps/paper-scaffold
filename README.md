@@ -4,51 +4,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Typst 0.14+](https://img.shields.io/badge/Typst-0.14%2B-239dad)
 
-A reusable Typst manuscript directory built around one idea: every number,
-figure and table in the paper is traced to the analysis or source that
-produced it, and checked for staleness — your scripts write them, the
-manuscript references them by id, and a typed or drifted value fails a check
-instead of shipping. Around that: PDF and Word export, journal word counts,
-readability and prose-style checks, and offline audiobook narration.
+A reusable Typst manuscript directory where every number, figure and table is
+**traced to the analysis that produced it** and checked for staleness: your
+scripts write them, the prose references them by id, and a typed or drifted
+value fails a check instead of shipping. Around that: PDF and Word export,
+word counts, readability and style checks, and offline audiobook narration.
 
-## The ideas
-
-```
-A number worth stating is worth tracing.
-Declared and read back beats typed and remembered.
-A copy is the thing that goes stale.
-A manifest nothing reads is already wrong.
-The value is the analysis's; how it reads is the author's.
-What cannot be discovered must be declared,
-    and an honest partial answer beats one that looks total.
-A check that never fails is not a check.
-The gate you run constantly must cost nothing;
-    the gate that costs something must be one command.
-A ritual with conditions is a ritual skipped.
-A warning with an expensive fix is a warning ignored.
-Silence is not success -- fail where the mistake was made.
-Hashes, not dates; content, not history.
-"It changed" means it changed, not that the script ran.
-Every guarantee was proven by breaking it first.
-```
-
-Each line is a decision this repository actually made, usually after the
-opposite failed; HISTORY.md records which failure produced which line.
-
-Clone it and `just paper` produces a compiling skeleton — title, abstract,
-sections, a generated figure and table, references and SI — before you have
-written anything. `paper.typ` and `si-body.typ` are placeholders meant to be
-deleted, so they stay short.
-
-Coverage of the constructs the tooling handles specially does **not** live in the
-placeholder prose, because that prose is gone the moment real writing starts. It
-lives in `tests/fixture.typ`, which is never part of the manuscript, and
-`just test` asserts the extractors still handle every case and still do so after
-a reflow. That check survives for the life of the project.
-
-Starting fresh is `new-paper.sh` below. Moving an **existing** manuscript onto
-the scaffold is a different job with its own traps — see
-[MIGRATING.md](MIGRATING.md).
+New paper: quick start below. Existing manuscript: [MIGRATING.md](MIGRATING.md).
 
 ## Quick start
 
@@ -125,6 +87,32 @@ have to drop their import. The exact edits are under
 | `just audio-setup` | One-time: install the audio deps and download the voice model |
 | `just audiobook` | Chaptered `.m4b` of the main text |
 | `just all` | PDF + Word + both audiobooks, then `just check` |
+
+## The ideas
+
+```
+A number worth stating is worth tracing.
+Declared and read back beats typed and remembered.
+A copy is the thing that goes stale.
+A manifest nothing reads is already wrong.
+The value is the analysis's; how it reads is the author's.
+What cannot be discovered must be declared,
+    and an honest partial answer beats one that looks total.
+A check that never fails is not a check.
+The gate you run constantly must cost nothing;
+    the gate that costs something must be one command.
+A ritual with conditions is a ritual skipped.
+A warning with an expensive fix is a warning ignored.
+Silence is not success -- fail where the mistake was made.
+Hashes, not dates; content, not history.
+"It changed" means it changed, not that the script ran.
+Every guarantee was proven by breaking it first.
+```
+
+Each line is a decision this repository actually made, usually after the
+opposite failed; HISTORY.md records which failure produced which line. The
+rest of this README is the long form — skim the section heads and read the
+ones you are about to touch.
 
 ## Layout
 
