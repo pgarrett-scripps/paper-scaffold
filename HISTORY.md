@@ -42,6 +42,16 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.9.1
+
+`check-stats-deep`'s summary said "(re-derived)" whether or not anything was:
+on an all-hand-entered manuscript _rederive has nothing generator-owned to do,
+and on a frozen analysis it degrades to a note -- both still wore the
+verification label. The status now comes from _rederive itself: "N value(s)
+re-derived", "nothing generator-owned to re-derive", or "could not re-run the
+generator". Found by the koth-paper pipeline audit; dnoise's audit hit the
+other branch of the same defect.
+
 ## 3.9.0
 
 The checkers report through rich (one shared findings table in report.py --

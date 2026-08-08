@@ -327,8 +327,14 @@ def _rederive(values: dict) -> list[Finding]:
     mine = GEN.relative_to(ROOT).as_posix()
     owned = {id: r for id, r in values.items()
              if r.get("origin", {}).get("by") == mine}
-    if not owned or not GEN.is_file():
-        return []
+    # The status string reaches the summary line, because "(re-derived)" must
+    # not be printable when nothing was: on an all-hand-entered manuscript this
+    # returned empty and the summary still claimed re-derivation -- a silent
+    # no-op wearing a verification label. (Found downstream, in koth-paper.)
+    if not owned:
+        return [], "nothing generator-owned to re-derive"
+    if not GEN.is_file():
+        return [], f"{mine} is absent, nothing re-derived"
 
     with tempfile.TemporaryDirectory() as d:
         shadow = Path(d) / "stats.json"
@@ -367,10 +373,10 @@ def _rederive(values: dict) -> list[Finding]:
                 # `just assets` would fail the same way.
                 return [Finding("error", "(re-derive)",
                     f"the analysis now produces a value that violates a guard "
-                    f"in stats.json: {err}")]
+                    f"in stats.json: {err}")], "re-derivation failed on a guard"
             return [Finding("note", "(re-derive)",
                 f"could not re-run {GEN.relative_to(ROOT)}, so generated values "
-                f"were not re-checked: {err}")]
+                f"were not re-checked: {err}")], "could not re-run the generator"
         doc = json.loads(shadow.read_text())
         # Only this generator's entries are compared: the copy carried the hand
         # and other-script entries along, and they are not re-derivable.
@@ -391,7 +397,7 @@ def _rederive(values: dict) -> list[Finding]:
         out.append(Finding("error", id,
             "is produced by the generator but is missing from stats.json -- "
             "run: just assets"))
-    return out
+    return out, f"{len(owned)} value(s) re-derived"
 
 
 def main() -> int:
@@ -417,8 +423,11 @@ def main() -> int:
     found += _sources(doc)
     found += _pinned(doc)
     # Opt-in, because it re-runs the analysis. See the module docstring.
+    deep = ""
     if "--deep" in sys.argv:
-        found += _rederive(values)
+        rederived, status = _rederive(values)
+        found += rederived
+        deep = f" ({status})"
     found += _unused(values)
 
     hand = sum(1 for r in values.values()
@@ -427,7 +436,6 @@ def main() -> int:
 
     from report import findings
     findings([(f.level, f.id, f.msg) for f in found])
-    deep = " (re-derived)" if "--deep" in sys.argv else ""
     pins = len(doc.get("pinned") or {})
     print(f"  {len(values)} declared value(s), {hand} hand-entered{deep}"
           + (f", {pins} pinned file(s)" if pins else "")

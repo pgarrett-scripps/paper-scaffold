@@ -988,6 +988,17 @@ def check_stats_cases() -> bool:
             print("  hashcache: served a stale digest after the file changed")
             ok = False
 
+    # The deep check's summary must say what actually ran. On an
+    # all-hand-entered manuscript _rederive has nothing to do, and the old
+    # label printed "(re-derived)" anyway -- a silent no-op wearing a
+    # verification label. (Found downstream, in koth-paper.)
+    hand_only = {"x.y": {"value": 1, "origin": {"by": "hand", "note": "n"}}}
+    f, status = cs._rederive(hand_only)
+    if f != [] or "nothing generator-owned" not in status:
+        print(f"  check-stats rederive: expected an honest empty status, got "
+              f"{status!r}")
+        ok = False
+
     # Pinned files: declared by the author, hashed by `just pin`, watched from
     # then on. A pin with no hash is an error (the declaration says the file
     # matters and nothing is watching it yet); an absent file is a note, since a
