@@ -269,18 +269,24 @@ def report(findings: list[Finding], cfg: Config, *, show_suppressed: bool,
     errors = [f for f in kept if f.severity == "error"]
     warns = [f for f in kept if f.severity == "warn"]
 
+    from rich.text import Text
+    from report import SEVERITY_STYLE, console, findings
+
+    rows = []
     seen_rules: set[str] = set()
     for f in errors + warns:
-        tag = "ERROR" if f.severity == "error" else "warn "
-        print(f"  {tag}  {f.rule:<18} {f.line()}")
+        msg = Text(f.line())
+        # The silence hint rides in the same cell as the first finding of its
+        # rule, dim, rather than being its own pseudo-finding line.
         if f.rule not in seen_rules:
             seen_rules.add(f.rule)
-            print(f"         {'':<18} silence: {silencer(f)}")
+            msg.append(f"\nsilence: {silencer(f)}", style="dim")
+        rows.append((f.severity, f.rule, msg))
+    findings(rows)
 
     if show_suppressed and hidden:
-        print(f"\n  suppressed by {CONFIG_NAME}:")
-        for f in hidden:
-            print(f"    {f.rule:<18} {f.line()}")
+        console.print(f"  suppressed by {CONFIG_NAME}:", style="dim")
+        findings([("note", f.rule, f.line()) for f in hidden])
 
     if not kept and not hidden:
         print("  prose check clean")

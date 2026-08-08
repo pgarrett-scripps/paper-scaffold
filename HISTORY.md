@@ -42,6 +42,33 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.9.0
+
+The checkers report through rich (one shared findings table in report.py --
+severity styled, messages wrapping in their own column, everything through
+Text so a bracketed range is not eaten as markup), and audiobook synthesis
+shows a progress bar for the minutes it always ran silent (transient, and
+absent from piped logs, which keep their per-chapter lines).
+
+Plus four fixes from a downstream audit of the scaffold by the dnoise agent:
+
+- **Narration read `\u{2082}` escapes aloud.** The fix existed in the shared
+  layer for the word count and was never wired into audio -- and the golden
+  file had blessed the broken narration. Proven by the goldens themselves:
+  readability.txt said log2 (the character), narration.txt said the escape.
+- **bib-audit reported correct software/data DOIs as unresolvable.** Crossref
+  registers articles; Zenodo/figshare/Dryad mint through DataCite. A Crossref
+  404 now falls through to DataCite, which resolves the DOI but has no
+  retraction concept, and the summary says so.
+- **The fixture's #s() ids resolved against the manuscript's stats.json**,
+  coupling the permanent fixture to the placeholder analysis it exists to
+  outlive. tests/fixture-stats.json is owned by tests/ now; the manuscript's
+  file is the fallback for fixtures already adapted to their own ids.
+- **The hand-vs-generator id clash said "rename one of them"**, the opposite
+  of the migration handover where the ids SHOULD collide. The message now
+  describes the handover (delete the hand entry, seeds fill in); the takeover
+  stays manual, because a hand entry with a note is authored data.
+
 ## 3.8.2
 
 `unaccounted-number` met its first real manuscript and produced 189 warnings.

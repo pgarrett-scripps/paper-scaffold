@@ -425,8 +425,8 @@ def main() -> int:
                if r.get("origin", {}).get("by") == "hand")
     errors = [f for f in found if f.level == "error"]
 
-    for f in found:
-        print(f)
+    from report import findings
+    findings([(f.level, f.id, f.msg) for f in found])
     deep = " (re-derived)" if "--deep" in sys.argv else ""
     pins = len(doc.get("pinned") or {})
     print(f"  {len(values)} declared value(s), {hand} hand-entered{deep}"

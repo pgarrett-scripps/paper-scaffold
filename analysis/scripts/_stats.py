@@ -320,10 +320,25 @@ class Stats:
 
         clash = sorted(set(kept) & set(self._values))
         if clash:
+            owner = kept[clash[0]].get("origin", {}).get("by", "?")
+            if owner == "hand":
+                # The migration handover: the value was declared by hand while
+                # the analysis could not run, and now a generator computes it.
+                # "Rename one of them" is exactly the wrong advice there -- the
+                # ids SHOULD collide; the hand entry is the one that retires.
+                # Not automatic, because a hand entry with a note is authored
+                # data and a script must not silently overwrite it.
+                raise StatError(
+                    f"{', '.join(clash)}: declared by hand in {p.name}, and "
+                    f"this script now computes it. If the computed value "
+                    f"supersedes the hand entry (the usual migration handover), "
+                    f"delete the hand entry from {p.name} and re-run; its "
+                    f"fmt/unit/desc/expect will seed from this script's add(). "
+                    f"If both are meant to exist, rename one id.")
             raise StatError(
                 f"{', '.join(clash)} already declared in {p.name} by "
-                f"{kept[clash[0]].get('origin', {}).get('by', '?')}, and this "
-                f"script declares it too. One id, one owner: rename one of them.")
+                f"{owner}, and this script declares it too. One id, one owner: "
+                f"rename one of them.")
 
         # What an author-owned field means when the file no longer has it: the
         # author DELETED it, and a deletion is an edit like any other. Falling

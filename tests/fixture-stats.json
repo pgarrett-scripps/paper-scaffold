@@ -1,0 +1,10 @@
+{
+  "_about": "Stats the TEST FIXTURE resolves against -- owned by tests/, not by the manuscript. The fixture must outlive the paper's placeholder analysis, so its ids cannot depend on what a real gen_stats.py happens to declare. Values mirror the scaffold demo so the golden files read naturally.",
+  "values": {
+    "cohort.n_conditions": {"value": 3, "fmt": ","},
+    "cohort.total_n": {"value": 35, "fmt": ","},
+    "effect.best_condition": {"value": "Treated", "fmt": ""},
+    "effect.treated_fold": {"value": 2.068627450980392, "fmt": ".2f"},
+    "effect.treated_over_control": {"value": 1.0899999999999999, "fmt": "+.2f"}
+  }
+}

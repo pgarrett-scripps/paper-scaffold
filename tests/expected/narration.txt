@@ -36,7 +36,7 @@ Block code is exempt from the word count and skipped by the narrator:
 
 Inline code terms, by contrast, count as ordinary words.
 
-A Unicode escape denotes a character and must reach the prose as one: a subscript written log\u{2082} is a single word to a reader, not the four the raw escape tokenizes into, and the narrator needs a character it can speak.
+A Unicode escape denotes a character and must reach the prose as one: a subscript written log₂ is a single word to a reader, not the four the raw escape tokenizes into, and the narrator needs a character it can speak.
 
 = Numbers read from the analysis
 

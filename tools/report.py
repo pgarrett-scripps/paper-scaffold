@@ -34,3 +34,31 @@ def table(title: str, caption: str | None = None) -> Table:
         header_style="dim",
         pad_edge=False,
     )
+
+
+SEVERITY_STYLE = {
+    "error": "bold red",
+    "ERROR": "bold red",
+    "warn": "yellow",
+    "note": "dim",
+}
+
+
+def findings(rows) -> None:
+    """Print findings as a table: (severity, subject, message) triples.
+
+    Everything goes through Text, never markup: finding messages legitimately
+    contain brackets ("outside its declared range [500, inf]"), and rich would
+    read those as style tags and silently swallow them.
+    """
+    from rich.text import Text
+    if not rows:
+        return
+    t = Table(box=box.SIMPLE_HEAD, show_header=False, pad_edge=False)
+    t.add_column(no_wrap=True)                       # severity
+    t.add_column(style="bold", overflow="fold")      # subject
+    t.add_column()                                   # message; wraps
+    for sev, subject, msg in rows:
+        t.add_row(Text(sev, style=SEVERITY_STYLE.get(sev, "")),
+                  Text(str(subject)), msg if isinstance(msg, Text) else Text(str(msg)))
+    console.print(t)

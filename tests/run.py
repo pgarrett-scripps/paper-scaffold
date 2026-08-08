@@ -64,10 +64,28 @@ FORBIDDEN = [
 
 
 def extract(src: str) -> dict[str, str]:
-    body = readability.slice_body(src)
-    out = {"readability": readability.clean(body)}
-    if extract_prose is not None:
-        out["narration"] = extract_prose.clean(extract_prose.extract_body(src))
+    """Both extractions of the fixture, resolved against the TEST-OWNED stats.
+
+    The fixture's `#s()` ids used to resolve against the manuscript's
+    stats.json -- coupling the permanent fixture to the analysis it exists to
+    outlive, and breaking `just test` the day a real gen_stats.py stopped
+    declaring the scaffold's demo ids. tests/fixture-stats.json is owned by
+    tests/ and pins those ids for the life of the project. The fallback keeps a
+    manuscript whose fixture was adapted to its own ids (and has no
+    fixture-stats file yet) working as before.
+    """
+    import typst_prose
+    fixture_stats = HERE / "fixture-stats.json"
+    saved = typst_prose.STATS_JSON
+    if fixture_stats.is_file():
+        typst_prose.STATS_JSON = fixture_stats
+    try:
+        body = readability.slice_body(src)
+        out = {"readability": readability.clean(body)}
+        if extract_prose is not None:
+            out["narration"] = extract_prose.clean(extract_prose.extract_body(src))
+    finally:
+        typst_prose.STATS_JSON = saved
     return out
 
 

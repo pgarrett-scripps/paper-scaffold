@@ -194,8 +194,8 @@ def main() -> int:
     found += _references(values)
     found += _unclaimed(values)
 
-    for f in found:
-        print(f)
+    from report import findings
+    findings([(f.level, f.id, f.msg) for f in found])
     errors = [f for f in found if f.level == "error"]
     adopted = sum(1 for r in values.values()
                   if r.get("origin", {}).get("by") == "adopted")

@@ -104,17 +104,37 @@ def main():
     from piper import PiperVoice
     voice = PiperVoice.load(VOICE)
 
-    # 1. synthesize each chapter to its own WAV, record durations
+    # 1. synthesize each chapter to its own WAV, record durations.
+    #
+    # Synthesis dominates the runtime -- minutes for a full manuscript -- and
+    # used to run silent between chapter lines. The bar shows which chapter is
+    # being spoken and how far along the book is; it is transient (gone when
+    # done) and renders nothing when output is piped, so logs keep only the
+    # per-chapter lines they always had.
+    from rich.progress import (BarColumn, Progress, TextColumn,
+                               TimeElapsedColumn)
     wavs, starts, cur = [], [], 0.0
-    for i, (title, text) in enumerate(chapters):
-        wav = CHAPDIR / f"{i:02d}.wav"
-        with wave.open(str(wav), "wb") as wf:
-            voice.synthesize_wav(text, wf)
-        dur = wav_seconds(wav)
-        starts.append(cur)
-        cur += dur
-        wavs.append(wav)
-        print(f"  ch{i:02d} {int(cur//60):3d}:{int(cur%60):02d}  {title}")
+    with Progress(
+        TextColumn("  narrating"),
+        BarColumn(),
+        TextColumn("{task.completed}/{task.total}"),
+        TimeElapsedColumn(),
+        TextColumn("[dim]{task.fields[title]}[/]"),
+        transient=True,
+    ) as prog:
+        task = prog.add_task("", total=len(chapters), title="")
+        for i, (title, text) in enumerate(chapters):
+            prog.update(task, title=title)
+            wav = CHAPDIR / f"{i:02d}.wav"
+            with wave.open(str(wav), "wb") as wf:
+                voice.synthesize_wav(text, wf)
+            dur = wav_seconds(wav)
+            starts.append(cur)
+            cur += dur
+            wavs.append(wav)
+            prog.console.print(
+                f"  ch{i:02d} {int(cur//60):3d}:{int(cur%60):02d}  {title}")
+            prog.advance(task)
     total = cur
 
     # 2. ffmpeg concat list

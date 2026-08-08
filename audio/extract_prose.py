@@ -31,6 +31,7 @@ from typst_prose import (  # noqa: E402
     CITE,
     FOOTNOTE,
     strip_links,
+    unescape_unicode,
     ASSET,
     REFN,
     markup as _markup,
@@ -117,6 +118,13 @@ def clean(text):
     # 2. display equations are dropped rather than read; a block of notation read
     #    aloud is noise, and the surrounding prose always restates it in words.
     text = re.sub(r"(?m)^\s*\$ .*? \$\s*$", " ", text, flags=re.S)
+
+    # 2b. `\u{2082}` -> the character it names, BEFORE the symbol maps, so a
+    #     subscript written as an escape gets the same spoken form as one typed
+    #     directly. Without this the voice read "log u 2082" -- the fix landed
+    #     in the shared layer (typst_prose) for the word count and was never
+    #     wired in here, and the golden file blessed the broken narration.
+    text = unescape_unicode(text)
 
     # 3. math and symbol tokens (do multi-char keys first)
     for k in sorted(MATH, key=len, reverse=True):

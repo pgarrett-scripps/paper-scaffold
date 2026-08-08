@@ -33,6 +33,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 API = "https://api.crossref.org/works/"
 
+# Crossref registers journal articles. Software and dataset DOIs -- Zenodo,
+# figshare, Dryad -- are minted through DataCite, a different registrar, so a
+# Crossref 404 does not mean the DOI is broken. Checked second, and only on a
+# 404: any methods-heavy paper cites at least one of these, and reporting a
+# correct software DOI as "does not resolve" failed preflight over a citation
+# that was fine. (Found downstream, in the dnoise manuscript.)
+DATACITE = "https://api.datacite.org/dois/"
+
 # Crossref asks for a contact address so they can reach whoever is hammering
 # them. config.typ has one; fall back to the project URL rather than inventing an
 # address that does not exist.
@@ -69,17 +77,35 @@ def _entries():
 
 
 def _fetch(doi: str, timeout: float):
-    """Crossref metadata for a DOI, or ('missing'|'error', detail)."""
+    """Metadata for a DOI: Crossref first, DataCite on a Crossref 404.
+
+    Returns ('ok', crossref-message) | ('datacite', attributes) |
+    ('missing'|'error', detail). Only Crossref records get the retraction
+    checks -- DataCite has no equivalent relation -- so a DataCite hit means
+    "resolves, registrar has no retraction concept to consult".
+    """
     url = API + urllib.parse.quote(doi, safe="")
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as fh:
             return "ok", json.load(fh).get("message", {})
     except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return "missing", "Crossref has no record of this DOI"
-        return "error", f"HTTP {e.code}"
+        if e.code != 404:
+            return "error", f"HTTP {e.code}"
     except Exception as e:                      # timeout, DNS, TLS, offline
+        return "error", str(e)[:60]
+
+    url = DATACITE + urllib.parse.quote(doi, safe="")
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as fh:
+            attrs = (json.load(fh).get("data") or {}).get("attributes", {})
+            return "datacite", attrs
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return "missing", "neither Crossref nor DataCite has this DOI"
+        return "error", f"HTTP {e.code} (DataCite)"
+    except Exception as e:
         return "error", str(e)[:60]
 
 
@@ -89,7 +115,7 @@ def audit(timeout: float = 15.0) -> int:
         return 0
 
     withdrawn, concerns, missing, errors = [], [], [], []
-    checked = 0
+    checked = datacite = 0
 
     for e in entries:
         doi = (e.get("doi") or "").strip()
@@ -105,6 +131,8 @@ def audit(timeout: float = 15.0) -> int:
             missing.append((key, doi, msg))
         elif state == "error":
             errors.append((key, doi, msg))
+        elif state == "datacite":
+            datacite += 1                       # resolves; no retraction data
         else:
             kinds = {(u.get("type") or "").lower()
                      for u in (msg.get(UPDATED_BY) or [])}
@@ -116,7 +144,9 @@ def audit(timeout: float = 15.0) -> int:
                 concerns.append((key, doi, ", ".join(sorted(kinds & CONCERNING))))
         time.sleep(0.05)                        # be a good citizen
 
-    print(f"checked {checked} DOI(s) against Crossref\n")
+    via = (f" ({datacite} via DataCite: software/data DOIs, "
+           f"no retraction data to consult)" if datacite else "")
+    print(f"checked {checked} DOI(s) against Crossref{via}\n")
     rc = 0
     if withdrawn:
         rc = 1
