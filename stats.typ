@@ -95,3 +95,25 @@
   }
   paper-stats.values.at(id).value
 }
+
+// A literal number the author VOUCHES for, in place. Renders as plain text;
+// exists so the vouching is a statement in the source rather than an entry in
+// a config file far from the sentence.
+//
+// The contract, from weakest claim to strongest: #lit("40") says "this literal
+// is deliberate prose" and silences only the unaccounted-number warning at
+// this spot. A number that deserves an explanation belongs in stats.json as a
+// hand entry with a note. A number the analysis computes must be #s("id") --
+// and stays flagged by derivable-number even inside lit, on purpose: vouching
+// is not a bypass of the stronger rule.
+//
+// Takes a STRING ("2.2"), not a bare number: Typst's str() rounds floats its
+// own way, and the digits a reader sees should be exactly the digits typed.
+#let lit(v) = {
+  if type(v) != str {
+    panic("lit() takes a string, e.g. lit(\"2.2\"): Typst renders bare "
+      + "numbers with its own rounding, and a vouched literal should read "
+      + "exactly as typed.")
+  }
+  v
+}

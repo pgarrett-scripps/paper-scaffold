@@ -42,6 +42,19 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.10.0
+
+`#lit("40")`: vouch for a deliberate prose literal in place, instead of a
+value-level exception in prose-check.toml far from the sentence. Renders as
+the text typed (string argument required -- Typst rounds bare floats its own
+way), silences unaccounted-number at that spot only, and deliberately does
+NOT silence derivable-number: a computed value wrapped in lit() still gets
+flagged, because vouching must not bypass the stronger rule. prose-check
+reports how many literals are vouched inline, so the count cannot grow
+silently. The four tiers, weakest claim to strongest: #lit() -> hand entry
+with a note -> #s(). Recognized by both extractors with fixture coverage,
+reflowed form included.
+
 ## 3.9.2
 
 `just --list` is the first thing a newcomer sees, and ten of its descriptions

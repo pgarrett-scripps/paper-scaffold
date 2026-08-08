@@ -46,6 +46,8 @@ This paragraph exists mainly for the reflow: just fmt with --wrap-text breaks a 
 
 The raw-value helper resolves too, to the unrounded value rather than the display string: 35 participants and 3 conditions. It is rarer in prose than s, and went unhandled for exactly that reason until it leaked verbatim.
 
+A vouched literal resolves to exactly what was typed: the column ran at 40 degrees with a pooled mean of 2.2, and the exploded form survives a reflow the same way the stats calls do: 12,345 events in total.
+
 = Figures and tables
 
 Whole figures, including their captions, are excluded from the word count and are never narrated.

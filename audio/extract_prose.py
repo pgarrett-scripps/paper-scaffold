@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 from typst_prose import (  # noqa: E402
     CITE,
     FOOTNOTE,
+    resolve_lit,
     strip_links,
     unescape_unicode,
     ASSET,
@@ -104,8 +105,10 @@ def clean(text):
 
     # 1a. generated numbers -> their value. Resolved, never stripped: a stripped
     #     call loses the figure from the spoken sentence, an unstripped one has
-    #     the narrator read the lookup call aloud.
+    #     the narrator read the lookup call aloud. Vouched literals unwrap the
+    #     same way, for the same reason.
     text = resolve_stats(text)
+    text = resolve_lit(text)
 
     # 1b. An explicitly signed number, which `fmt="+.2f"` in gen_stats.py is
     #     meant to produce, reaches the voice as a bare "+". Spell it, or a

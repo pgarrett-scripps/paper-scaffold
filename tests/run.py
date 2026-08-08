@@ -60,6 +60,7 @@ FORBIDDEN = [
     "typst.app",       # a link URL leaked
     "#s(",             # a generated number was left as a call instead of resolved
     "#n(",             # ditto for the raw-value helper
+    "#lit(",           # a vouched literal must resolve to its text, not leak
 ]
 
 
@@ -717,6 +718,11 @@ def stats_cases() -> bool:
             ("too common to flag", "there were 3 conditions.", 0),
             ("inside a larger number", "the id was 184.25 exactly.", 0),
             ("inline code is not a result", "pass `--threshold 84.2` to it.", 0),
+            # lit() must NOT silence this rule: a value the analysis computes
+            # belongs in #s(), and vouching for it as prose is the bypass the
+            # two checks exist to be on opposite sides of.
+            ("lit does not bypass derivable",
+             'recovery reached #lit("84.2")% overall.', 1),
         ]
         for name, src, want in cases:
             got = len(pc.check_derivable_numbers({"t": src}, p))
@@ -750,6 +756,13 @@ def stats_cases() -> bool:
             ("digits inside an identifier",
              "deposited at accession PXD070049 for review.", 0),
             ("repeated value reports once", "it was 84.7 then 84.7 again.", 1),
+            # #lit() is the inline vouch: the wrapped occurrence is accounted
+            # for, a bare occurrence of the same value elsewhere is not.
+            ("lit-wrapped is vouched", 'ran at #lit("40.5") degrees.', 0),
+            ("lit vouches the spot, not the value",
+             'ran at #lit("40.5") degrees, later 40.5 again.', 1),
+            ("reflowed lit is vouched too",
+             'in total #lit(\n  "12,345",\n) events.', 0),
         ]
         for name, src, want in unaccounted:
             got = len(pc.check_unaccounted_numbers({"t": src}, p))

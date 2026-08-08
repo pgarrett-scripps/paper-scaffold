@@ -30,6 +30,7 @@ from typst_prose import (
     ASSET,
     REFN,
     markup as _markup,
+    resolve_lit,
     resolve_stats,
     strip_balanced as _strip_balanced,
     unescape_unicode,
@@ -126,6 +127,8 @@ def clean(text: str, gap: str = " ") -> str:
     # generated numbers -> their value. Resolved, never stripped: this text is
     # what gets counted and scored, and a reader sees the number, not the call.
     text = resolve_stats(text)
+    # vouched literals -> the literal, for the same reason.
+    text = resolve_lit(text)
     # math: DROP entirely (exempt), including any leftover $...$
     text = re.sub(r"#sym\.[A-Za-z0-9.]+", gap, text)
     text = re.sub(r"\$[^$]*\$", gap, text)

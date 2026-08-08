@@ -54,6 +54,14 @@ Seed the guard from `gen_stats.py` for a new value; edit `expect` in
 `stats.json` for an existing one. If a number is worth stating, it is worth
 being traceable.
 
+Four tiers, weakest claim to strongest: a number the analysis computes is
+`#s("id")`; one no script can compute but that deserves an audit trail is a
+hand entry in `stats.json` with a note; a deliberate prose literal ("40 °C")
+is vouched in place with `#lit("40")`, which silences only the
+unaccounted-number warning at that spot; a global value-level exception goes
+in `prose-check.toml` with a written reason. `lit()` never silences
+`derivable-number` — a computed value wrapped in it still gets flagged.
+
 **Never delete the `// >>> BODY START` / `// <<< BODY END` markers** in
 `paper.typ`. The word counter, the readability report, and the narrator all slice
 the prose at them, and each hard-fails without them. Moving them changes what

@@ -225,9 +225,13 @@ Three things make it hold:
 - **`just prose-check` flags a typed numeral** — one that matches a declared
   value (use `#s()` instead), and one that matches *nothing* declared, which is
   worse: mistyped, stale from an earlier draft, or from a source nobody
-  recorded. The paths out are compute it, declare it by hand with a note, or
-  suppress it in `prose-check.toml` with a comment — all three leave a trail.
-  Years and short counts are skipped, so the warnings stay worth reading.
+  recorded. Four ways out, each leaving a trail: compute it (`#s()`), declare
+  it by hand with a note, vouch for it in place with `#lit("40")` when it is
+  genuinely just prose, or suppress the value in `prose-check.toml` with a
+  written reason. `lit()` deliberately does not silence the first rule — a
+  computed value wrapped in it is still flagged. Years and short counts are
+  skipped, and prose-check reports how many literals are vouched inline, so
+  the count cannot grow silently.
 - **`just check-stats` re-checks the committed file, without running anything.**
   Every guard is re-run against the values as they sit in `stats.json`; each
   generated value is compared to the checksum its generator recorded, so a

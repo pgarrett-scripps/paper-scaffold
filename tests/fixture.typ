@@ -128,6 +128,12 @@ string: #n("cohort.total_n") participants and #n("cohort.n_conditions")
 conditions. It is rarer in prose than `s`, and went unhandled for exactly that
 reason until it leaked verbatim.
 
+A vouched literal resolves to exactly what was typed: the column ran at
+#lit("40") degrees with a pooled mean of #lit("2.2"), and the exploded form
+survives a reflow the same way the stats calls do: #lit(
+  "12,345",
+) events in total.
+
 = Figures and tables
 
 Whole figures, including their captions, are excluded from the word count and are

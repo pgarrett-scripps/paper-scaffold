@@ -98,11 +98,12 @@ and `#import "assets.typ": fig, tbl` in `paper.typ` **and in `si-body.typ`**
 Then replace every direct `#image("figures/...")` / `#include "si/..."` with
 `fig("...")` / `tbl("...")` — `just prose-check` reports the ones you miss.
 
-**4. Numbers.** Every number stated in a sentence, one of three ways: the
+**4. Numbers.** Every number stated in a sentence, one of four ways: the
 analysis computes it → declare in `gen_stats.py`, read back as `#s("id")`; no
-script can → a hand entry in `stats.json` with `origin.by = "hand"` and a
-note; genuinely just prose → leave it, and suppress the warning with a
-comment when it appears. Guard what the sentences assume (`sign`, bounds) —
+script can, but it deserves an audit trail → a hand entry in `stats.json`
+with `origin.by = "hand"` and a note; genuinely just prose → vouch for it in
+place with `#lit("40")`; a value to exempt everywhere → `prose-check.toml`
+with a written reason. Guard what the sentences assume (`sign`, bounds) —
 migration is exactly when a stale number is most likely to be sitting in the
 prose.
 

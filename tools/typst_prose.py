@@ -45,6 +45,21 @@ STATS = r'#s\(\s*"([^"]+)"\s*,?\s*\)'
 # direct call only.
 STATS_N = r'#n\(\s*"([^"]+)"\s*,?\s*\)'
 
+# A literal the author vouched for in place: `#lit("2.2")` renders as 2.2 and
+# says "deliberate prose, not an unaccounted number". Resolved to its inner
+# string like the stats helpers, and for the same reason: stripped, the number
+# vanishes from the count and the narration; unresolved, the call text leaks
+# into both. The value is a quoted string by contract (lit() panics otherwise),
+# so the pattern needs only the direct-call form -- and the reflowed one, where
+# typstyle has broken the call across lines.
+LIT = r'#lit\(\s*"([^"]*)"\s*,?\s*\)'
+
+
+def resolve_lit(text: str) -> str:
+    """Substitute `#lit("...")` with the literal it wraps."""
+    return re.sub(LIT, lambda m: m.group(1), text)
+
+
 # Written by analysis/scripts/gen_stats.py, beside the generated SI tables.
 # .parent.parent because this file lives in tools/; si/ is at the root.
 STATS_JSON = Path(__file__).resolve().parent.parent / "stats.json"

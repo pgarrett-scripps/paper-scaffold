@@ -964,6 +964,13 @@ def check_unaccounted_numbers(sources: dict[str, str],
     for name, src in sources.items():
         stripped = re.sub(typst_prose.STATS, " ", src)
         stripped = re.sub(typst_prose.STATS_N, " ", stripped)
+        # #lit("...") is the author vouching for the literal AT THIS SPOT, so
+        # the wrapped occurrence is removed before the scan -- the fourth way
+        # out, and the only inline one. A bare occurrence of the same value
+        # elsewhere is still unvouched and still reports. Deliberately NOT
+        # done in check_derivable_numbers: a value the analysis computes must
+        # be #s(), and wrapping it in lit() must not silence that rule.
+        stripped = re.sub(typst_prose.LIT, " ", stripped)
         prose = readability.clean(no_code(stripped))
         hits: list[Finding] = []
         seen: set[str] = set()
@@ -982,8 +989,9 @@ def check_unaccounted_numbers(sources: dict[str, str],
                 "unaccounted-number", "warn",
                 f"'{bare}' matches nothing in stats.json. If the analysis "
                 f"computes it, declare it in gen_stats.py; if no script can, "
-                f"add it by hand with an origin note; if it is genuinely just "
-                f"prose, suppress it in prose-check.toml",
+                f"add it by hand with an origin note; if it is deliberate "
+                f'prose, vouch for it in place with #lit("{bare}") or '
+                f"suppress the value in prose-check.toml",
                 subject=bare, where=name, context=_ctx(prose, m.start())))
         out += hits[:SHOW]
         if len(hits) > SHOW:
@@ -1087,9 +1095,17 @@ def main() -> int:
     findings += check_table_size(cfg=cfg)
     findings += check_bibliography(cfg=cfg)
 
-    return report(findings, cfg,
-                  show_suppressed="--show-suppressed" in sys.argv,
-                  strict="--strict" in sys.argv)
+    rc = report(findings, cfg,
+                show_suppressed="--show-suppressed" in sys.argv,
+                strict="--strict" in sys.argv)
+    # Inline vouches carry no written reason, so at least the COUNT stays
+    # visible: a number that quietly grows here is the same smell as a
+    # suppression list nobody re-reads.
+    lit_n = sum(len(re.findall(typst_prose.LIT, src))
+                for src in targets.values())
+    if lit_n:
+        print(f'  {lit_n} numeral(s) vouched inline with #lit("...")')
+    return rc
 
 
 if __name__ == "__main__":
