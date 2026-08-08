@@ -42,6 +42,15 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.8.2
+
+`unaccounted-number` met its first real manuscript and produced 189 warnings.
+Three fixes from the encounter: a clause comma is no longer part of the number
+("median 1, mean 2.67" reported '1,'), digits inside an identifier are not a
+result ("PXD070049" reported '070049'), and each document now shows eight
+findings plus a count of the rest -- one value reported once, because a
+189-line wall is read by nobody. On the same manuscript: 19 lines.
+
 ## 3.8.1
 
 Two fixes found downstream, in the dnoise manuscript, and taken upstream:

@@ -724,14 +724,30 @@ def stats_cases() -> bool:
             ("too short to flag", "there were 3 conditions.", 0),
             ("derived is not typed", 'reached #s("a.pct")% overall.', 0),
             ("inline code is not prose", "pass `--cutoff 84.7` to it.", 0),
+            # The two false positives the first real manuscript produced: a
+            # clause comma is not a thousands separator, and digits inside an
+            # identifier are not a result.
+            ("clause comma is not part of the number",
+             "isolated across frames (median 1, mean 2.67, up to 10).", 1),
+            ("digits inside an identifier",
+             "deposited at accession PXD070049 for review.", 0),
+            ("repeated value reports once", "it was 84.7 then 84.7 again.", 1),
         ]
         for name, src, want in unaccounted:
             got = len(pc.check_unaccounted_numbers({"t": src}, p))
             if got != want:
-                print(f"  unaccounted-number [{name}]: expected {want}, got {got}")
+                print(f"  unaccounted-number [{name}]: expected {want}, got {got}"
+                      + f" -- {[f.subject for f in pc.check_unaccounted_numbers({'t': src}, p)]}")
                 ok = False
         if pc.check_unaccounted_numbers({"t": "84.7"}, Path(d) / "absent.json"):
             print("  unaccounted-number: reported findings with no stats.json")
+            ok = False
+        # A Results section can owe dozens at once; the report shows a capped
+        # sample plus a count, because a 189-line wall is read by nobody.
+        many = " ".join(f"value {i}.{i} appears." for i in range(1, 15))
+        found = pc.check_unaccounted_numbers({"t": many}, p)
+        if len(found) != 9 or "more distinctive numerals" not in found[-1].message:
+            print(f"  unaccounted-number cap: expected 8 + summary, got {len(found)}")
             ok = False
 
     # 5. guards. Shape errors (a guard on a label, a misspelt sign) fail at

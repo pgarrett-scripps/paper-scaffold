@@ -947,12 +947,27 @@ def check_unaccounted_numbers(sources: dict[str, str],
             pass
         declared.add(str(rec.get("value")).lstrip("+-"))
 
+    # The numeral itself. Two constraints learned from the first real
+    # manuscript this ran against (dnoise, 189 findings on the first pass):
+    # a letter on either side means the digits are part of an identifier
+    # ("PXD070049" is an accession, not six typed results), and a comma only
+    # continues the number as a thousands group -- greedy [\d,]* ate the
+    # clause comma in "median 1, mean 2.67" and reported '1,'. A comma AFTER
+    # the match is therefore ordinary punctuation, not a reason to reject it.
+    NUM = re.compile(r"(?<![\w.,])\d+(?:,\d{3})*(?:\.\d+)?(?![\w.])")
+    # A real Results section can owe dozens of numbers at once. Show enough to
+    # act on and say how many more there are; a 189-line wall is a report
+    # nobody reads, which this repository has written down more than once.
+    SHOW = 8
+
     out: list[Finding] = []
     for name, src in sources.items():
         stripped = re.sub(typst_prose.STATS, " ", src)
         stripped = re.sub(typst_prose.STATS_N, " ", stripped)
         prose = readability.clean(no_code(stripped))
-        for m in re.finditer(r"(?<![\d.,])\d[\d,]*(?:\.\d+)?(?![\d.,])", prose):
+        hits: list[Finding] = []
+        seen: set[str] = set()
+        for m in NUM.finditer(prose):
             bare = m.group(0)
             if not ("." in bare or "," in bare or len(bare) >= 4):
                 continue                  # too common to flag without noise
@@ -960,13 +975,25 @@ def check_unaccounted_numbers(sources: dict[str, str],
                 continue                  # probably a year
             if bare in declared:
                 continue                  # derivable-number's case, not ours
-            out.append(Finding(
+            if bare in seen:
+                continue                  # one report per value per document
+            seen.add(bare)
+            hits.append(Finding(
                 "unaccounted-number", "warn",
                 f"'{bare}' matches nothing in stats.json. If the analysis "
                 f"computes it, declare it in gen_stats.py; if no script can, "
                 f"add it by hand with an origin note; if it is genuinely just "
                 f"prose, suppress it in prose-check.toml",
                 subject=bare, where=name, context=_ctx(prose, m.start())))
+        out += hits[:SHOW]
+        if len(hits) > SHOW:
+            rest = ", ".join(f.subject for f in hits[SHOW:][:12])
+            out.append(Finding(
+                "unaccounted-number", "warn",
+                f"...and {len(hits) - SHOW} more distinctive numerals match "
+                f"nothing in stats.json ({rest}{', ...' if len(hits) - SHOW > 12 else ''}). "
+                f"Same three ways out for each.",
+                subject=f"({len(hits) - SHOW} more)", where=name))
     return out
 
 
