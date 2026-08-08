@@ -42,6 +42,16 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.9.2
+
+`just --list` is the first thing a newcomer sees, and ten of its descriptions
+were sentence fragments -- "watch means restarting it.", "and the one uv knows
+nothing about." -- because just shows the LAST comment line before a recipe,
+and rationale appended after the description line decapitated it. The
+convention is now stated at the top of the justfile and every block ends with
+its one-liner. Four plumbing recipes (default, render-stats, check-declared,
+check-build) went [private]: callable and documented, off the front page.
+
 ## 3.9.1
 
 `check-stats-deep`'s summary said "(re-derived)" whether or not anything was:
