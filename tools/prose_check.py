@@ -1005,6 +1005,23 @@ def check_unaccounted_numbers(sources: dict[str, str],
     return out
 
 
+def check_todos(sources: dict[str, str]) -> list[Finding]:
+    """Unresolved #todo() notes, surfaced by the gate rather than only by the
+    build. `just paper` PANICS on one -- that is the enforcement -- but verify
+    rebuilds nothing, so without this a note is invisible until the next real
+    build fails on it. A warning, because the draft workflow lives with open
+    notes on purpose; the panic is what stops one from shipping."""
+    out: list[Finding] = []
+    for name, src in sources.items():
+        for m in re.finditer(typst_prose.TODO, src):
+            out.append(Finding(
+                "unresolved-todo", "warn",
+                f"#todo({m.group(1)!r}) is unresolved -- `just paper` will "
+                f"refuse to build until it is deleted",
+                subject=m.group(1)[:40], where=name))
+    return out
+
+
 def check_structure(sources: dict[str, str]) -> list[Finding]:
     """Checks that need the Typst source rather than the extracted prose.
 
@@ -1089,6 +1106,7 @@ def main() -> int:
     findings += check_structure(targets)
     findings += check_derivable_numbers(targets)
     findings += check_unaccounted_numbers(targets)
+    findings += check_todos(targets)
     findings += check_bypassed_assets(targets)
     findings += check_orphaned_assets()
     findings += check_figure_resolution(cfg=cfg)

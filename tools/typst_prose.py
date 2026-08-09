@@ -60,6 +60,13 @@ def resolve_lit(text: str) -> str:
     return re.sub(LIT, lambda m: m.group(1), text)
 
 
+# A note to self that cannot ship: `#todo("check this")` renders a marker in
+# draft mode and panics the real build. STRIPPED here, never resolved -- a note
+# is not prose, so it must not reach the word count, the readability score, or
+# the narrator's mouth even while drafting.
+TODO = r'#todo\(\s*"([^"]*)"\s*,?\s*\)'
+
+
 # Written by analysis/scripts/gen_stats.py, beside the generated SI tables.
 # .parent.parent because this file lives in tools/; si/ is at the root.
 STATS_JSON = Path(__file__).resolve().parent.parent / "stats.json"

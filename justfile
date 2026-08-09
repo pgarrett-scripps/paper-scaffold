@@ -443,6 +443,22 @@ readability:
 # meaningful only against the paper.pdf on this machine.
 # ---------------------------------------------------------------------------
 
+# The copy-edit twin of text-diff. text-diff proves the WORDS did not move
+# through a machinery refactor; this proves everything BUT the words survived
+# an editing pass -- every number, label, reference, figure and heading.
+# STYLE.md permits dropping a number during a rewrite and never permits
+# editing one; these are mechanical properties, so they are checked
+# mechanically instead of eyeballed. Snapshot before handing the prose to a
+# co-author or an agent, check after. Numbers may be dropped (a note), never
+# invented (fatal); references, floats and headings must survive exactly.
+# Snapshot the manuscript's numbers/refs/floats/headings before an editing pass
+edit-baseline tag="default":
+  @uv run --quiet python tools/prose_edit_guard.py snapshot {{tag}}
+
+# Prove an editing pass changed only wording: nothing invented, nothing lost
+edit-check tag="default":
+  @uv run --quiet python tools/prose_edit_guard.py check {{tag}}
+
 # Snapshot the current paper.pdf's extracted text as the baseline for text-diff
 text-baseline:
   #!/usr/bin/env bash

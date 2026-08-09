@@ -87,6 +87,15 @@ names the recipe that clears it.
 Quote the word count and readability numbers `just paper` prints. Do not
 estimate them.
 
+Before a wording-only pass (yours or an agent's): `just edit-baseline`, edit,
+`just edit-check`. It proves nothing but wording changed -- a number may be
+dropped, never invented; references, floats and headings must survive exactly.
+
+Leave a note to self as `#todo("...")`, never as a comment. It renders as a
+loud marker in `just draft` and REFUSES to build in `just paper`, so an
+unresolved note cannot ship; a `// FIXME` comment survives to submission
+silently. `just prose-check` lists open ones.
+
 What `verify` runs, and what each one is for:
 
 - **`just fmt-check`** -- the hand-written sources are reflowed to 80 columns.

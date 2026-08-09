@@ -42,6 +42,32 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.11.0
+
+Two additions in the #lit() spirit -- inline, self-enforcing, each closing a
+gap between what the pipeline checks and what authors actually do:
+
+- **`just edit-baseline` / `just edit-check`**: prove a copy-edit pass changed
+  only wording. Snapshots every number, label, reference, figure and heading;
+  afterwards a number may be DROPPED (a note -- STYLE.md permits thinning) but
+  never INVENTED (fatal), and references, floats and headings must survive
+  exactly. Judged manuscript-wide, because content legitimately moves between
+  main text and SI. Upstreamed from the koth manuscript, which wrote it for
+  exactly this and ran it in anger first. Snapshots live in .edit-guard/,
+  local state like .build-stamp.
+- **`#todo("...")`: a note that cannot ship.** Renders as a loud marker in
+  draft mode; PANICS `just paper` and `just docx`, so a final PDF with an
+  unresolved note is not producible -- where a `// FIXME` comment survives to
+  submission silently. Stripped by the extractors (a note is not prose), a
+  no-op in the word count, and surfaced by `just prose-check` as
+  unresolved-todo so the gate shows open notes without a build.
+
+Found while wiring it: paper.typ had never received the `lit` import -- the
+3.10.0 sed missed its exact line and the placeholder never calls lit, so
+nothing noticed. The import list is now `lit, n, s, todo` in all three files,
+and the failure it would have caused is the include-scope gotcha CLAUDE.md
+already documents.
+
 ## 3.10.0
 
 `#lit("40")`: vouch for a deliberate prose literal in place, instead of a

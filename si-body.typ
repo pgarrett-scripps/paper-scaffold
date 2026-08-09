@@ -22,7 +22,7 @@
 //
 // Delete this import along with stats.typ, stats.json and analysis/scripts/
 // gen_stats.py if the project states no computed numbers in its prose.
-#import "stats.typ": lit, n, s
+#import "stats.typ": lit, n, s, todo
 #import "assets.typ": fig, tbl
 
 Replace this with a summary of what the Supporting Information contains. Text

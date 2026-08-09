@@ -117,3 +117,21 @@
   }
   v
 }
+
+// A note to self that CANNOT ship. In draft mode it renders as a loud inline
+// marker; in a real build (`just paper`, `just docx`) it PANICS, so a final
+// PDF with an unresolved note in it is not producible. A `// FIXME` comment
+// makes the opposite trade: silent everywhere, it survives to submission.
+//
+// The extractors strip it -- a note is not prose, so it is not counted,
+// scored, or narrated even while drafting.
+#let todo(msg) = {
+  if draft-mode {
+    box(fill: orange, inset: (x: 3pt, y: 1pt),
+      text(fill: white, weight: "bold", size: 0.8em, "TODO: " + msg))
+  } else {
+    panic("unresolved #todo: \"" + msg + "\". Resolve it and delete the call, "
+      + "or keep working with `just draft`. A note that could ship silently "
+      + "is the reason this is not a comment.")
+  }
+}

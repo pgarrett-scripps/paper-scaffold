@@ -17,6 +17,9 @@ paper-draft.pdf
 # Snapshot of paper.pdf's extracted text, for `just text-diff` around a
 # structural refactor. Local and disposable, like the build stamp.
 .text-baseline
+# Snapshots of the manuscript's mechanical properties (numbers, refs, floats,
+# headings), for `just edit-check` around a copy-edit pass. Same contract.
+.edit-guard/
 
 # Rendered from stats.json by tools/render_stats.py: the display strings Typst
 # reads. Derived, not source -- stats.json holds the value and the format spec,

@@ -128,6 +128,12 @@ string: #n("cohort.total_n") participants and #n("cohort.n_conditions")
 conditions. It is rarer in prose than `s`, and went unhandled for exactly that
 reason until it leaked verbatim.
 
+A note to self must vanish from the count and the narration
+alike#todo("verify the buffer batch against the lab notebook"), including the
+reflowed form#todo(
+  "and this one arrives pre-exploded",
+), while the prose around it survives.
+
 A vouched literal resolves to exactly what was typed: the column ran at
 #lit("40") degrees with a pooled mean of #lit("2.2"), and the exploded form
 survives a reflow the same way the stats calls do: #lit(

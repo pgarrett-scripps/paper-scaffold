@@ -30,6 +30,7 @@ from typst_prose import (
     ASSET,
     REFN,
     markup as _markup,
+    TODO,
     resolve_lit,
     resolve_stats,
     strip_balanced as _strip_balanced,
@@ -129,6 +130,8 @@ def clean(text: str, gap: str = " ") -> str:
     text = resolve_stats(text)
     # vouched literals -> the literal, for the same reason.
     text = resolve_lit(text)
+    # notes to self are not prose: dropped whole, draft or not.
+    text = re.sub(TODO, gap, text)
     # math: DROP entirely (exempt), including any leftover $...$
     text = re.sub(r"#sym\.[A-Za-z0-9.]+", gap, text)
     text = re.sub(r"\$[^$]*\$", gap, text)

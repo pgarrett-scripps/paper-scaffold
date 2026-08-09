@@ -61,6 +61,8 @@ FORBIDDEN = [
     "#s(",             # a generated number was left as a call instead of resolved
     "#n(",             # ditto for the raw-value helper
     "#lit(",           # a vouched literal must resolve to its text, not leak
+    "#todo(",          # a note to self must be stripped, not counted or spoken
+    "lab notebook",    # nor may the note's TEXT leak into count or narration
 ]
 
 

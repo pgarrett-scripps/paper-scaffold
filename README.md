@@ -76,6 +76,7 @@ have to drop their import. The exact edits are under
 | `just check` | Report every artifact that has fallen behind its source |
 | `just pin` | Record hashes for the files listed under `pinned` in `stats.json` |
 | `just text-baseline` / `text-diff` | Snapshot the PDF's words; word-level diff after a structural refactor |
+| `just edit-baseline` / `edit-check` | Prove a copy-edit pass changed only wording: numbers, refs, floats, headings survive |
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
 | `just prose-check` | Check the prose, plus figure resolution and table shape, against STYLE.md |
 | `just prose-check --list-rules` | Every rule, its severity, and how to configure it |
