@@ -91,6 +91,12 @@ Before a wording-only pass (yours or an agent's): `just edit-baseline`, edit,
 `just edit-check`. It proves nothing but wording changed -- a number may be
 dropped, never invented; references, floats and headings must survive exactly.
 
+Four packaged workflows ship as skills in `.claude/skills/` — `/copy-edit`
+(a wording pass bracketed by the edit guard), `/fix-verify` (clear a failing
+gate the intended way), `/declare-number` (route a typed numeral through the
+four tiers), `/new-figure` (all four steps, including the wordcount scope).
+Prefer invoking one over improvising the same workflow.
+
 Leave a note to self as `#todo("...")`, never as a comment. It renders as a
 loud marker in `just draft` and REFUSES to build in `just paper`, so an
 unresolved note cannot ship; a `// FIXME` comment survives to submission

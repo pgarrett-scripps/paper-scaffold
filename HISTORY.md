@@ -42,6 +42,18 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.12.0
+
+Four packaged AI workflows, as skills in `.claude/skills/` that travel with
+new-paper.sh: `/copy-edit` (a wording pass bracketed by the edit guard),
+`/fix-verify` (the intended fix per finding class, as a table -- never
+weakening a check), `/declare-number` (the four-tier ladder as a procedure),
+`/new-figure` (all four steps, wordcount scope included). The design rule:
+each skill encodes the pipeline's contracts and ENDS by running the check
+that proves it behaved, so an agent cannot report success without the
+pipeline agreeing. A generic prompt does not know it must never edit a
+number; a shipped one does.
+
 ## 3.11.0
 
 Two additions in the #lit() spirit -- inline, self-enforcing, each closing a

@@ -89,6 +89,24 @@ have to drop their import. The exact edits are under
 | `just audiobook` | Chaptered `.m4b` of the main text |
 | `just all` | PDF + Word + both audiobooks, then `just check` |
 
+## Working with an AI
+
+CLAUDE.md is the standing brief for any agent editing the manuscript, and the
+gates are what make delegation safe: `edit-check` makes an invented numeral
+fatal, `#lit()`/`#s()` make numbers tamper-evident, `verify` makes "done"
+machine-checkable. On top of that, four packaged workflows ship as skills in
+`.claude/skills/` and travel with `new-paper.sh` into every derived paper:
+
+| Skill | Does |
+|---|---|
+| `/copy-edit` | Wording-only pass (grammar, tighten, de-hedge), bracketed by `edit-baseline`/`edit-check` |
+| `/fix-verify` | Clear a failing gate with the intended fix per finding class — never by weakening a check |
+| `/declare-number` | Route a typed numeral through the four tiers, prove nothing rendered differently |
+| `/new-figure` | Generator, `record()`, id reference, wordcount scope — all four steps, proven by the gate |
+
+Each ends by running the check that proves it behaved, so an agent cannot
+report success without the pipeline agreeing.
+
 ## The ideas
 
 ```
