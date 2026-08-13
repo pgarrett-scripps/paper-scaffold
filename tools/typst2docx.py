@@ -39,6 +39,23 @@ from PIL import Image
 # when printed; the <img> is then sized back down to the glyph's natural size.
 SCALE = 4
 
+# What pandoc's default reference document sets as the Word body size
+# (docDefaults, measured from the produced file). Typst frames carry their own
+# em -- an 11pt manuscript emits 11pt-per-em frames -- so without rescaling,
+# every equation lands ~9% smaller than the Word text around it. Each frame's
+# em is read from its own style attribute, so a project that changes its text
+# size stays correctly scaled.
+WORD_BODY_PT = 12.0
+
+
+def _em_pt(svg: str) -> float:
+    """pt per em for this frame, from its width in pt vs its width in em."""
+    pt = _pt(svg, "width")
+    em = re.search(r'width:\s*([0-9.]+)em', svg)
+    if pt and em and float(em.group(1)):
+        return pt / float(em.group(1))
+    return WORD_BODY_PT                      # no ratio available: no rescale
+
 # Only stitch a frame back into the surrounding paragraph if it is glyph-sized.
 # Inline math runs ~7-15pt tall; a display equation is taller and deserves to stay
 # its own block. Raise this if a tall inline construct (a fraction, a stacked
@@ -117,10 +134,12 @@ def rasterize_frames(html: str) -> tuple[str, int]:
         svg = m.group(0)
         png, ink_pt = _render(svg)
         b64 = base64.b64encode(png).decode()
-        # pt -> CSS px so Word lays the glyph out at the size Typst intended.
-        # Measured off the cropped image rather than the declared width, since
-        # the declared box understates glyphs that overhang it.
-        w = ink_pt * 96 / 72
+        # pt -> CSS px so Word lays the glyph out at the size Typst intended,
+        # rescaled from the manuscript's em to Word's, so an 11pt paper's math
+        # is not 9% small beside 12pt Word text. Measured off the cropped image
+        # rather than the declared width, since the declared box understates
+        # glyphs that overhang it.
+        w = ink_pt * (WORD_BODY_PT / _em_pt(svg)) * 96 / 72
         size = f' width="{w:.1f}"' if w else ""
         return f'<img src="data:image/png;base64,{b64}"{size} alt="equation" />'
 

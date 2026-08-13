@@ -42,6 +42,20 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.12.1
+
+Math in the Word export rendered ~9% smaller than the text around it: frames
+carry the manuscript's em (11pt, typically) and pandoc's Word body is 12pt,
+and the rasterizer sized images by raw ink points. Each frame's em is now
+read from its own style attribute and rescaled to Word's.
+
+Found while chasing a report from dnoise that $m/z$ arrived in Word as "a
+weird small artifact". The dominant cause there was notation, not pipeline:
+in Typst math, `/` builds a stacked fraction, so $m/z$ was a tiny m-over-z
+in the PDF too, and crop-to-ink turned it into a 5px image in Word. The
+slash the field convention wants is written `$m\/z$`. Worth knowing before
+writing any inline ratio.
+
 ## 3.12.0
 
 Four packaged AI workflows, as skills in `.claude/skills/` that travel with
