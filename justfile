@@ -451,6 +451,18 @@ readability:
 # mechanically instead of eyeballed. Snapshot before handing the prose to a
 # co-author or an agent, check after. Numbers may be dropped (a note), never
 # invented (fatal); references, floats and headings must survive exactly.
+# The manuscript as plain Typst, with every project helper resolved: #s() and
+# #lit() become their values, fig()/tbl() become real image()/table content,
+# @fig:x becomes #ref(<fig:x>). Pandoc can read Typst but not our helpers, so
+# this is the one step between the manuscript and any pandoc-based export --
+# a Word file with NATIVE equations, or LaTeX for a journal that wants source.
+#
+# A build artifact, like stats-rendered.json: gitignored, rewritten on demand,
+# never edited. Read it when an export looks wrong; it is what pandoc was fed.
+# Resolve the manuscript into plain Typst -> paper.resolved.typ (for pandoc)
+resolve: render-stats
+  @uv run --quiet python tools/resolve_typst.py
+
 # Snapshot the manuscript's numbers/refs/floats/headings before an editing pass
 edit-baseline tag="default":
   @uv run --quiet python tools/prose_edit_guard.py snapshot {{tag}}

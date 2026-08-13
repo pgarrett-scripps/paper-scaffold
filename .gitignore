@@ -57,3 +57,7 @@ __pycache__/
 analysis/data/
 analysis/results/
 analysis/.venv/
+
+# The manuscript resolved to plain Typst for pandoc-based exports.
+# Derived from paper.typ + stats.json + assets.json on demand.
+paper.resolved.typ

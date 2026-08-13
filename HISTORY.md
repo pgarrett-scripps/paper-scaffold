@@ -42,6 +42,46 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.13.0
+
+`just resolve` -> `paper.resolved.typ`: the manuscript as plain Typst, with
+every project helper replaced by what it produces. Groundwork, not yet an
+export path.
+
+WHY IT IS WORTH HAVING. Pandoc reads Typst -- a real evaluator, not a regex --
+which means a Word file with NATIVE editable equations, and LaTeX for a
+journal that demands source. It cannot evaluate OUR helpers, and those are
+ours to resolve. One resolution step feeds every export; the alternative is
+each exporter growing its own copy of `#s()`, which is how the word count,
+the readability report and the narrator each grew one.
+
+Measured on a real 3,259-line manuscript: 195 native Word equations, 36 real
+Word tables, 19 images, 40 headings; in LaTeX, 221 math spans, 45 citation
+commands, 215 cross-references, 34 tables. Zero raw-Typst leaks.
+
+Four bugs found building it, all now regression cases -- three of which only
+a real manuscript exposed:
+
+- `#refn(\n  <tbl:x>,\n)`: the trailing comma typstyle leaves after breaking
+  a long call. Every shared pattern in typst_prose.py ends `,?\s*\)` for this
+  exact reason; the first draft's did not. Fourth time in this repository.
+- si-body.typ documents its own usage with a literal `#s("id")` IN A COMMENT,
+  so the resolver asked stats.json for a value named "id". Comments are
+  stripped first now, whole-line only, as readability.clean does.
+- The SI vanished: paper.typ `#include`s it OUTSIDE the BODY markers (back
+  matter does, by this scaffold's convention), so slicing the body dropped it
+  and with it every table. Read as its own file now, as readability.py does.
+- An inlined table put `#table(` into `#figure(...)`'s argument list -- code
+  mode, where a leading `#` is a syntax error. Wrapped in content brackets,
+  which is what `include` meant semantically.
+
+KNOWN GAP, measured rather than assumed: the resolved export is 2,029 words
+short of the PDF, and 489 of the 700 missing vocabulary items are the
+bibliography, which the resolver does not yet emit. Most of the rest are
+pdftotext hyphenation artifacts. No evidence the reader loses prose -- the
+gaps are things this tool does not write yet, and they must be closed before
+any export path is built on it.
+
 ## 3.12.1
 
 Math in the Word export rendered ~9% smaller than the text around it: frames

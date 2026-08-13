@@ -362,6 +362,7 @@ def structural_cases() -> bool:
     ok &= stats_cases()
     ok &= check_stats_cases()
     ok &= stats_ownership_cases()
+    ok &= resolver_cases()
     ok &= adoption_cases()
     ok &= check_assets_cases()
     ok &= suppression_cases()
@@ -1324,6 +1325,79 @@ def stats_ownership_cases() -> bool:
     finally:
         _assets.OUT = saved
 
+    return ok
+
+
+def resolver_cases() -> bool:
+    """tools/resolve_typst.py: the manuscript as plain Typst, for pandoc.
+
+    Every case here is a bug this resolver actually had. Three of them only
+    appeared on a real manuscript, which is the argument for the fixture: the
+    scaffold's placeholder prose contains none of these shapes.
+    """
+    import resolve_typst as rt
+    import typst_prose
+    ok = True
+    assets = {"fig.x": {"path": "figures/example_figure.png"},
+              "tbl.x": {"path": "si/example_table.typ"}}
+    # Against the TEST-owned stats, like extract(): the fixture must not
+    # depend on which ids the manuscript's analysis currently declares.
+    saved = typst_prose.STATS_JSON
+    fixture_stats = HERE / "fixture-stats.json"
+    if fixture_stats.is_file():
+        typst_prose.STATS_JSON = fixture_stats
+
+    cases = [
+        # (name, source, must appear, must NOT appear)
+        ("stats resolve", '#s("cohort.total_n")', None, "#s("),
+        ("lit unwraps", '#lit("2.2")', "2.2", "#lit("),
+        ("figure keeps its arguments", '#fig("fig.x", width: 70%)',
+         'image("figures/example_figure.png", width: 70%)', "fig("),
+        # pandoc reads @fig as a CITATION KEY and orphans the label, so a
+        # cross-reference silently becomes the words "[fig]:x".
+        ("crossref becomes a ref", "see @fig:demo here",
+         "#ref(<fig:demo>)", "@fig:"),
+        ("citation is NOT a crossref", "as shown @lovelace1843 here",
+         "@lovelace1843", "#ref(<lovelace"),
+        # typstyle breaks a long call and leaves a trailing comma; the first
+        # draft's pattern had no `,?` and died on a real manuscript.
+        ("reflowed refn with trailing comma", "#refn(\n  <tbl:x>,\n)",
+         "#ref(<tbl:x>)", "refn("),
+        # si-body.typ documents its own usage with a literal #s("id") in a
+        # comment, which the resolver then asked stats.json to resolve.
+        ("comments are stripped first", '// example: #s("id")\nreal text',
+         "real text", "#s("),
+    ]
+    for name, src, want, forbid in cases:
+        try:
+            got = rt.resolve_notation(src, assets, "t")
+        except Exception as e:
+            print(f"  resolver [{name}]: raised {type(e).__name__}: {e}")
+            ok = False
+            continue
+        if want and want not in got:
+            print(f"  resolver [{name}]: expected {want!r} in {got!r}")
+            ok = False
+        if forbid and forbid in got:
+            print(f"  resolver [{name}]: {forbid!r} survived in {got!r}")
+            ok = False
+
+    # A note that cannot ship must not ship through an export either.
+    try:
+        rt.resolve_notation('#todo("check")', assets, "t")
+        print("  resolver: an unresolved #todo was exported anyway")
+        ok = False
+    except rt.ResolveError:
+        pass
+
+    # An id the manifest does not declare must name itself, not vanish.
+    try:
+        rt.resolve_notation('#fig("fig.nope")', assets, "t")
+        print("  resolver: an undeclared asset id was accepted")
+        ok = False
+    except rt.ResolveError:
+        pass
+    typst_prose.STATS_JSON = saved
     return ok
 
 

@@ -127,6 +127,16 @@ FOOTNOTE = r"#footnote\s*\["
 # named values like `width: 70%`.
 ASSET = r'#?(?:fig|tbl)\(\s*"[^"]*"[^()]*\)'
 
+# The same call, but with the pieces captured, for a consumer that RESOLVES it
+# rather than stripping it: (1) the helper name, (2) the id, (3) any trailing
+# arguments (`width: 70%`) that must survive the substitution.
+# tools/resolve_typst.py uses this to turn fig("id", width: 70%) into a real
+# image() call. It lives here, beside the stripping pattern, because this
+# repository has fixed the same construct in two extractors separately three
+# times; a second regex for the same syntax in another file is how the fourth
+# happens.
+ASSET_CALL = re.compile(r'#?(fig|tbl)\(\s*"([^"]+)"((?:\s*,[^()]*)?)\s*\)')
+
 
 def display_of(rec: dict) -> str:
     """The string a reader sees, from a stats.json entry's `value` and `fmt`.
