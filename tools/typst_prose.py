@@ -128,14 +128,21 @@ FOOTNOTE = r"#footnote\s*\["
 ASSET = r'#?(?:fig|tbl)\(\s*"[^"]*"[^()]*\)'
 
 # The same call, but with the pieces captured, for a consumer that RESOLVES it
-# rather than stripping it: (1) the helper name, (2) the id, (3) any trailing
-# arguments (`width: 70%`) that must survive the substitution.
-# tools/resolve_typst.py uses this to turn fig("id", width: 70%) into a real
-# image() call. It lives here, beside the stripping pattern, because this
-# repository has fixed the same construct in two extractors separately three
-# times; a second regex for the same syntax in another file is how the fourth
-# happens.
-ASSET_CALL = re.compile(r'#?(fig|tbl)\(\s*"([^"]+)"((?:\s*,[^()]*)?)\s*\)')
+# rather than stripping it: (1) the leading `#`, or empty in code mode -- the
+# replacement must re-emit it, or a markup-mode call resolves to literal prose;
+# (2) the helper name, (3) the id, (4) any trailing arguments (`width: 70%`)
+# that must survive the substitution. tools/resolve_typst.py uses this to turn
+# fig("id", width: 70%) into a real image() call. It lives here, beside the
+# stripping pattern, because this repository has fixed the same construct in
+# two extractors separately three times; a second regex for the same syntax in
+# another file is how the fourth happens.
+#
+# The lookbehind is a left word boundary: without it, a manuscript's own
+# #subfig() helper -- or any identifier ending in fig/tbl, like config( --
+# matches on its suffix, and the resolver either rejects a valid manuscript or
+# silently rewrites a call that was never ours.
+ASSET_CALL = re.compile(
+    r'(?<![A-Za-z0-9_-])(#?)(fig|tbl)\(\s*"([^"]+)"((?:\s*,[^()]*)?)\s*\)')
 
 
 def display_of(rec: dict) -> str:

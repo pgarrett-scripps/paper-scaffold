@@ -1341,63 +1341,112 @@ def resolver_cases() -> bool:
     assets = {"fig.x": {"path": "figures/example_figure.png"},
               "tbl.x": {"path": "si/example_table.typ"}}
     # Against the TEST-owned stats, like extract(): the fixture must not
-    # depend on which ids the manuscript's analysis currently declares.
+    # depend on which ids the manuscript's analysis currently declares. The
+    # swap is try/finally-guarded, also like extract(): a case that escapes
+    # the loop must not leave the module pointing at the fixture.
     saved = typst_prose.STATS_JSON
     fixture_stats = HERE / "fixture-stats.json"
     if fixture_stats.is_file():
         typst_prose.STATS_JSON = fixture_stats
+    try:
+        cases = [
+            # (name, source, must appear, must NOT appear)
+            ("stats resolve", '#s("cohort.total_n")', None, "#s("),
+            ("lit unwraps", '#lit("2.2")', "2.2", "#lit("),
+            ("figure keeps its arguments", '#fig("fig.x", width: 70%)',
+             'image("figures/example_figure.png", width: 70%)', "fig("),
+            # The matched `#` must be re-emitted: without it, a markup-mode
+            # call resolved to the literal words image("...") in the export.
+            ("markup figure keeps its hash", 'See #fig("fig.x") here.',
+             '#image("figures/example_figure.png")', None),
+            # A markup-mode table needs `#[...]`; bare brackets in markup are
+            # literal text, not a content block.
+            ("markup table gains a content block", '#tbl("tbl.x")',
+             "#[", None),
+            # No left boundary matched any identifier ending in fig/tbl, so a
+            # manuscript's own #subfig() helper was rejected -- or, on an id
+            # collision, silently rewritten.
+            ("a subfig helper is not fig", '#subfig("panel-a")',
+             '#subfig("panel-a")', "image("),
+            # pandoc reads @fig as a CITATION KEY and orphans the label, so a
+            # cross-reference silently becomes the words "[fig]:x".
+            ("crossref becomes a ref", "see @fig:demo here",
+             "#ref(<fig:demo>)", "@fig:"),
+            # Labels may be multi-segment, exactly as typst_prose.CITE allows;
+            # capturing one segment resolved @fig:panel:a to a nonexistent
+            # label plus stray ':a' prose.
+            ("multi-segment crossref label", "see @fig:panel:a here",
+             "#ref(<fig:panel:a>)", "@fig:"),
+            ("citation is NOT a crossref", "as shown @lovelace1843 here",
+             "@lovelace1843", "#ref(<lovelace"),
+            # typstyle breaks a long call and leaves a trailing comma; the
+            # first draft's pattern had no `,?` and died on a real manuscript.
+            # The helper's `#let` is stripped, so the rewrite must write out
+            # its definition: plain #ref() rendered "Table Table S1".
+            ("reflowed refn keeps its supplement", "#refn(\n  <tbl:x>,\n)",
+             "#ref(<tbl:x>, supplement: none)", "refn("),
+            # A code-mode refn (inside a larger expression) must not gain an
+            # invalid `#`.
+            ("code-mode refn stays code", "#figure(refn(<tbl:x>))",
+             "(ref(<tbl:x>, supplement: none))", "(#ref"),
+            # si-body.typ documents its own usage with a literal #s("id") in a
+            # comment, which the resolver then asked stats.json to resolve.
+            ("comments are stripped first", '// example: #s("id")\nreal text',
+             "real text", "#s("),
+            # ...and the #todo refusal runs AFTER the strip: a note mentioned
+            # in a comment builds clean under `just paper` and must export.
+            ("a commented todo does not refuse", '// old: #todo("was fixed")\nreal text',
+             "real text", "#todo"),
+            # Directive lines are stripped, as readability.clean strips them:
+            # left in place, the "self-contained" output still imported the
+            # project helpers and gitignored stats-rendered.json.
+            ("directive lines are dropped",
+             '#import "stats.typ": s, n\n#let refn(l) = ref(l, supplement: none)\nprose stays',
+             "prose stays", "#import"),
+            # Raw spans are verbatim in the PDF and must be verbatim in the
+            # export: a documented `#s("id")` in backticks was either rejected
+            # (undeclared id) or silently replaced by the number.
+            ("inline code is verbatim", 'use `#s("id")` here',
+             '`#s("id")`', None),
+            ("a fence is verbatim", 'before\n```\n#fig("fig.nope")\n```\nafter',
+             '#fig("fig.nope")', "image("),
+            ("a todo in a fence does not refuse", '```\n#todo("example")\n```',
+             '#todo("example")', None),
+        ]
+        for name, src, want, forbid in cases:
+            try:
+                got = rt.resolve_notation(src, assets, "t")
+            # SystemExit too: resolve_stats raises it for an unknown id, and
+            # `except Exception` let it abort the whole run mid-suite instead
+            # of printing this case's diagnostic.
+            except (Exception, SystemExit) as e:
+                print(f"  resolver [{name}]: raised {type(e).__name__}: {e}")
+                ok = False
+                continue
+            if want and want not in got:
+                print(f"  resolver [{name}]: expected {want!r} in {got!r}")
+                ok = False
+            if forbid and forbid in got:
+                print(f"  resolver [{name}]: {forbid!r} survived in {got!r}")
+                ok = False
 
-    cases = [
-        # (name, source, must appear, must NOT appear)
-        ("stats resolve", '#s("cohort.total_n")', None, "#s("),
-        ("lit unwraps", '#lit("2.2")', "2.2", "#lit("),
-        ("figure keeps its arguments", '#fig("fig.x", width: 70%)',
-         'image("figures/example_figure.png", width: 70%)', "fig("),
-        # pandoc reads @fig as a CITATION KEY and orphans the label, so a
-        # cross-reference silently becomes the words "[fig]:x".
-        ("crossref becomes a ref", "see @fig:demo here",
-         "#ref(<fig:demo>)", "@fig:"),
-        ("citation is NOT a crossref", "as shown @lovelace1843 here",
-         "@lovelace1843", "#ref(<lovelace"),
-        # typstyle breaks a long call and leaves a trailing comma; the first
-        # draft's pattern had no `,?` and died on a real manuscript.
-        ("reflowed refn with trailing comma", "#refn(\n  <tbl:x>,\n)",
-         "#ref(<tbl:x>)", "refn("),
-        # si-body.typ documents its own usage with a literal #s("id") in a
-        # comment, which the resolver then asked stats.json to resolve.
-        ("comments are stripped first", '// example: #s("id")\nreal text',
-         "real text", "#s("),
-    ]
-    for name, src, want, forbid in cases:
+        # A note that cannot ship must not ship through an export either.
         try:
-            got = rt.resolve_notation(src, assets, "t")
-        except Exception as e:
-            print(f"  resolver [{name}]: raised {type(e).__name__}: {e}")
+            rt.resolve_notation('#todo("check")', assets, "t")
+            print("  resolver: an unresolved #todo was exported anyway")
             ok = False
-            continue
-        if want and want not in got:
-            print(f"  resolver [{name}]: expected {want!r} in {got!r}")
-            ok = False
-        if forbid and forbid in got:
-            print(f"  resolver [{name}]: {forbid!r} survived in {got!r}")
-            ok = False
+        except rt.ResolveError:
+            pass
 
-    # A note that cannot ship must not ship through an export either.
-    try:
-        rt.resolve_notation('#todo("check")', assets, "t")
-        print("  resolver: an unresolved #todo was exported anyway")
-        ok = False
-    except rt.ResolveError:
-        pass
-
-    # An id the manifest does not declare must name itself, not vanish.
-    try:
-        rt.resolve_notation('#fig("fig.nope")', assets, "t")
-        print("  resolver: an undeclared asset id was accepted")
-        ok = False
-    except rt.ResolveError:
-        pass
-    typst_prose.STATS_JSON = saved
+        # An id the manifest does not declare must name itself, not vanish.
+        try:
+            rt.resolve_notation('#fig("fig.nope")', assets, "t")
+            print("  resolver: an undeclared asset id was accepted")
+            ok = False
+        except rt.ResolveError:
+            pass
+    finally:
+        typst_prose.STATS_JSON = saved
     return ok
 
 

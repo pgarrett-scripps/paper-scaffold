@@ -31,8 +31,9 @@ WHAT IT RESOLVES, and why each one has to go:
                           quietly cleaner file.
     fig("id", width: 70%) image("figures/x.png", width: 70%), from assets.json
     tbl("id")             the generated table's source, inlined
-    #refn(<x>)            ref(<x>): the project helper is a `#let` in the
-                          preamble this file replaces
+    #refn(<x>)            ref(<x>, supplement: none) -- the helper's own
+                          definition, written out because its `#let` is
+                          stripped along with the other directive lines
     @fig:x  @sec:x        #ref(<fig:x>). THIS ONE IS NOT COSMETIC: pandoc
                           reads `@fig` as a CITATION KEY and leaves `:x` as
                           stray text, so a cross-reference silently becomes
@@ -93,6 +94,42 @@ def _strip_comments(src: str) -> str:
     return re.sub(r"(?m)^\s*//.*$", "", src)
 
 
+_RAW_BACK = re.compile("\x00R(\\d+)\x00")
+
+
+def _protect_raw(src: str) -> tuple[str, list[str]]:
+    """Set aside raw spans -- ``` fences and `inline code` -- as opaque tokens.
+
+    Typst treats raw content as inert, so a documentation example like
+    `#s("id")` inside backticks is VERBATIM in the PDF -- and must stay
+    verbatim in the export. Without this, the notation passes below either
+    rejected such an example (undeclared id) or silently replaced it with the
+    number. readability.clean has the same problem and strips raw spans
+    entirely; here they are deliverable content, so they are stashed before
+    any pass runs and restored, untouched, at the end.
+
+    Fences first, so a backtick inside one is not paired as inline code.
+    Inline spans are single-line on purpose: a lone backtick in prose must not
+    pair across lines with one in a comment, or the comment's text would ride
+    back in through the restore. A token stashed FROM a comment line dies with
+    the line in _strip_comments, which is the order that makes both safe.
+    """
+    spans: list[str] = []
+
+    def stash(m: re.Match) -> str:
+        spans.append(m.group(0))
+        return f"\x00R{len(spans) - 1}\x00"
+
+    src = re.sub(r"```.*?```", stash, src, flags=re.S)
+    src = re.sub(r"`[^`\n]*`", stash, src)
+    return src, spans
+
+
+def _restore_raw(src: str, spans: list[str]) -> str:
+    """Put the stashed raw spans back where their tokens stand."""
+    return _RAW_BACK.sub(lambda m: spans[int(m.group(1))], src)
+
+
 def _query_front_matter() -> dict:
     """Title, authors and affiliations, evaluated by Typst itself.
 
@@ -129,11 +166,22 @@ def _abstract() -> str:
     Content, not a string, so it cannot come back through `typst query` as
     metadata. Taken as source text and handed on unresolved -- it is prose,
     and the notation pass below resolves whatever it contains.
+
+    Fails LOUD, like _query_front_matter beside it. Returning "" on a
+    manuscript whose abstract is a string, built from variables, or renamed
+    ships an export with an empty Abstract section at exit 0 -- on the one
+    output nobody re-reads before sending. Comments are stripped before the
+    bracket count for the same reason: a `]` inside a `//` comment closed the
+    count early and truncated the abstract mid-sentence, silently.
     """
-    raw = (ROOT / "config.typ").read_text()
+    raw = _strip_comments((ROOT / "config.typ").read_text())
     m = re.search(r"#let\s+paper-abstract\s*=\s*\[", raw)
     if not m:
-        return ""
+        raise ResolveError(
+            "config.typ has no `#let paper-abstract = [...]` this resolver "
+            "can read. If the abstract is a string or built from variables, "
+            "rewrite it as a plain content block -- otherwise the export "
+            "would ship with an empty Abstract section and no error.")
     depth, start = 0, m.end() - 1
     for i in range(start, len(raw)):
         if raw[i] == "[":
@@ -142,11 +190,24 @@ def _abstract() -> str:
             depth -= 1
             if depth == 0:
                 return raw[start + 1:i].strip()
-    return ""
+    raise ResolveError(
+        "config.typ: the paper-abstract content block never closes -- "
+        "unbalanced brackets in the abstract.")
 
 
 def resolve_notation(src: str, assets: dict, where: str) -> str:
     """Replace every project helper with what Typst would render for it."""
+    # Raw spans go FIRST: a `#s()` or `#todo()` inside backticks is verbatim
+    # content in the PDF, not a call, and no pass below may touch it.
+    src, raw_spans = _protect_raw(src)
+
+    # Comments next, and BEFORE the #todo refusal. si-body.typ documents its
+    # own usage with a literal `#s("id")` in a comment block, and resolving
+    # that asked stats.json for a value named "id"; a `#todo` mentioned in a
+    # comment is the same case -- Typst never evaluates it, `just paper`
+    # builds clean, and refusing the export over it was a false alarm.
+    src = _strip_comments(src)
+
     # A note that cannot ship must not ship through a side door either.
     todo = re.search(typst_prose.TODO, src)
     if todo:
@@ -155,23 +216,30 @@ def resolve_notation(src: str, assets: dict, where: str) -> str:
             f"deliverable: resolve the note and delete the call, exactly as "
             f"`just paper` requires.")
 
-    # Comments go FIRST. si-body.typ documents its own usage with a literal
-    # `#s("id")` in a comment block, and resolving that asked stats.json for a
-    # value named "id".
-    src = _strip_comments(src)
+    # Standalone directive lines -- the same pattern readability.clean uses.
+    # si-body.typ carries `#import "stats.typ"`, `#import "assets.typ"` and
+    # `#let refn(...)`; left in place they make the "self-contained" output
+    # depend on the project helpers and on gitignored stats-rendered.json, so
+    # pandoc run from any other directory fails inside the very files this
+    # resolver exists to eliminate. Every call they served is resolved below.
+    src = re.sub(r"(?m)^\s*#(?:import|let|set|show)\b.*$", "", src)
 
     src = typst_prose.resolve_stats(src)
     src = typst_prose.resolve_lit(src)
 
     def asset(m: re.Match) -> str:
-        kind, id, args = m.group(1), m.group(2), m.group(3) or ""
+        hash, kind, id, args = (m.group(1), m.group(2), m.group(3),
+                                m.group(4) or "")
         if id not in assets:
             raise ResolveError(
                 f"{where} references {kind}(\"{id}\"), which assets.json does "
                 f"not declare -- run: just assets")
         path = assets[id]["path"]
+        # The matched `#` is re-emitted: it is what distinguishes a markup-mode
+        # call from a code-mode one, and dropping it turned `#fig("id")` in
+        # running prose into the literal words image("...") in the deliverable.
         if kind == "fig":
-            return f'image("{path}"{args})'
+            return f'{hash}image("{path}"{args})'
         # A table is inlined rather than left as `include`: the generated file
         # is small, it is ours, and one fewer path for the converter to
         # resolve is one fewer way for the export to lose a table silently.
@@ -183,27 +251,36 @@ def resolve_notation(src: str, assets: dict, where: str) -> str:
         # MARKUP -- where a generated table's leading `#table(` is correct.
         # Pasting that text straight into `#figure(...)`'s argument list drops
         # it into CODE mode, where a leading `#` is a syntax error. The
-        # brackets put it back in markup, which is what include meant.
-        return "[\n" + _strip_comments(target.read_text()).strip() + "\n]"
+        # brackets put it back in markup, which is what include meant. In
+        # markup mode (`#tbl(...)`), the re-emitted hash makes it `#[...]`,
+        # the content block markup requires.
+        return hash + "[\n" + _strip_comments(target.read_text()).strip() + "\n]"
 
     src = typst_prose.ASSET_CALL.sub(asset, src)
 
-    # The project's own bare-number reference helper, defined in the preamble
-    # this file replaces.
+    # The project's own bare-number reference helper. Its `#let` was stripped
+    # above, so the definition -- `ref(l, supplement: none)` -- is written out
+    # here; plain `#ref(\1)` shipped exports reading "Table Table S1". The
+    # matched hash is carried through, so a code-mode `refn(...)` does not
+    # gain an invalid `#`.
     #
     # The `,?` is load-bearing and was missing from the first draft, which
     # then died on a real manuscript at `#refn(\n  <tbl:x>,\n)`. typstyle
     # breaks a long line INSIDE the call and leaves a trailing comma; every
     # shared pattern in typst_prose.py ends `,?\s*\)` for exactly this reason,
     # and this is the fourth time this repository has been bitten by it.
-    src = re.sub(r"#?refn\(\s*(<[^>]+>)\s*,?\s*\)", r"#ref(\1)", src)
+    src = re.sub(r"(?<![A-Za-z0-9_-])(#?)refn\(\s*(<[^>]+>)\s*,?\s*\)",
+                 r"\1ref(\2, supplement: none)", src)
 
     # @fig:x -> #ref(<fig:x>). See the module docstring: pandoc reads the @ as
     # citation syntax, so leaving these alone turns every cross-reference into
-    # stray prose. Citations (@lovelace1843) are deliberately untouched.
-    src = re.sub(rf"@({'|'.join(FLOAT_PREFIX)}):([A-Za-z0-9_-]+)",
+    # stray prose. Citations (@lovelace1843) are deliberately untouched. The
+    # label part repeats typst_prose.CITE's segment class because labels may
+    # be multi-segment (@fig:panel:a); capturing one segment truncated them.
+    src = re.sub(rf"@({'|'.join(FLOAT_PREFIX)}):"
+                 rf"([A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*)",
                  r"#ref(<\1:\2>)", src)
-    return src
+    return _restore_raw(src, raw_spans)
 
 
 def build() -> str:
@@ -222,8 +299,13 @@ def build() -> str:
     # convention -- so slicing the body drops it. Following the include from
     # inside the body instead silently produced a manuscript with no SI and
     # therefore no tables, which is how this was found.
+    #
+    # UNLESS the include survived the slice: on a migrated manuscript the
+    # markers are new and nothing enforces which side of them the include
+    # landed on. Appending anyway would put the entire SI in twice -- once
+    # here, once through the inliner below -- silently.
     si = ROOT / "si-body.typ"
-    if si.is_file():
+    if si.is_file() and not re.search(r'#include\s+"/?si-body\.typ"', body):
         body += "\n\n" + resolve_notation(si.read_text(), assets, "si-body.typ")
 
     # Any OTHER include inside the body is inlined where it stands.

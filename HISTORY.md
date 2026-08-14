@@ -42,6 +42,43 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.13.1
+
+Ten resolver fixes out of a code review, every one a way `paper.resolved.typ`
+could differ silently from the PDF. The reviewed surface was small -- the
+resolver, one shared regex, the tests -- but each bug shipped wrong output
+without an error, which is the failure mode this scaffold exists to close.
+
+- Raw spans are stashed before every pass and restored after: a documented
+  `#s("id")` in backticks was being resolved or rejected, and a `#todo` in a
+  fence refused an export the PDF builds clean.
+- The `#todo` refusal now runs after the comment strip, so a note mentioned
+  in a comment no longer blocks the export.
+- Standalone `#import`/`#let`/`#set`/`#show` lines are stripped, exactly as
+  readability.clean strips them. Left in, the "self-contained" output still
+  imported the project helpers and the gitignored stats-rendered.json.
+  Consequence: `refn()` is rewritten to its full definition,
+  `ref(<x>, supplement: none)` -- plain `#ref()` rendered "Table Table S1".
+- The matched leading `#` is captured and re-emitted for `fig`/`tbl`/`refn`:
+  a markup-mode `#fig()` resolved to the literal words `image("...")`, and a
+  markup-mode `#tbl()` now gains `#[...]`, since bare brackets in markup are
+  text, not a content block.
+- `ASSET_CALL` (typst_prose.py) gained a left word boundary, so a
+  manuscript's own `#subfig()` is no longer matched on its `fig(` suffix.
+  Its groups shifted by one; resolve_typst.py is the only consumer.
+- Cross-reference labels may be multi-segment (`@fig:panel:a`), matching
+  what typst_prose.CITE always allowed.
+- si-body.typ is appended only when its `#include` did not survive the body
+  slice, closing a double-SI path on manuscripts that include it inside the
+  markers.
+- `_abstract()` fails loud: a config.typ whose abstract the resolver cannot
+  read is a ResolveError, not a silently empty Abstract section, and
+  comments are stripped before the bracket count so a `]` in a comment
+  cannot truncate it.
+- tests/run.py: the fixture-stats swap is try/finally-guarded, SystemExit is
+  caught per case (resolve_stats raises it for unknown ids), and each fix
+  above carries a regression case.
+
 ## 3.13.0
 
 `just resolve` -> `paper.resolved.typ`: the manuscript as plain Typst, with
