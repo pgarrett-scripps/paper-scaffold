@@ -42,6 +42,47 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.15.0
+
+The Word export carries the whole paper, in the paper's order. Found by
+actually reading a real manuscript's export: no figure numbers anywhere, no
+SI title page, the reference list after the entire SI, and the back matter
+missing outright. Each was a structural gap in the resolve -> pandoc route,
+not a conversion bug, so each fix lives in the resolver or the exporter and
+carries a regression case.
+
+- Captions and headings now carry the PDF's numbers as literal text
+  ("Figure 3: ", "2.1.", SI "S1"): pandoc numbers nothing, so every
+  cross-reference the 3.14.0 pass resolved pointed at a number no caption or
+  heading showed. The same event scan that numbers the refs writes the
+  definitions.
+- The back matter travels: the prose between BODY END and `#bibliography`
+  (data availability, author information, acknowledgment) was dropped with
+  the template, though a journal reads those sections from the Word file.
+  The slice refuses the SI-appendix machinery (page break, counter surgery)
+  when a manuscript has no bibliography to stop at.
+- The bibliography stays in the PDF's position -- after the back matter,
+  BEFORE the SI -- instead of being appended last. The exporter anchors the
+  reference list there with a `#block[]<refs>` under the References heading,
+  promoted to a Div by the new tools/refs_div.lua: citeproc fills a Div with
+  id "refs", and without one appends the list at the very end of the
+  document, under the SI.
+- The SI gets its title block (heading, paper title, author line),
+  synthesized from config.typ: the PDF builds it from layout primitives
+  inside a docx-mode conditional, neither of which travels. A `#heading`
+  CALL rather than `= ` markup, so it cannot tick Section S1 away from the
+  SI's first real section.
+- Keywords, and the `toc-graphic` / `toc-caption` bindings when the front
+  matter has them, land under the abstract as plain content -- the same
+  pieces the docx-mode front matter emits on the HTML route.
+- check_citations no longer reads an email's `@` as a citation key: escaped
+  (`\@scripps`) or mid-word (`"mailto:pgarrett@scripps.edu"`) is not
+  citation syntax to Typst, and each briefly refused a build as "@scripps
+  not in the bibliography" once the back matter traveled.
+
+Upgrade: copy tools/resolve_typst.py, tools/export_docx.py, tests/run.py,
+and the new tools/refs_div.lua.
+
 ## 3.14.1
 
 The resolver test suite carries its own table fixture. The

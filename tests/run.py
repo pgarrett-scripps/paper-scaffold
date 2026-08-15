@@ -1479,13 +1479,13 @@ def export_cases() -> bool:
     body = (
         "= Intro <sec:i>\n"
         "prose\n"
-        '#figure(image("a.png")) <fig:a>\n'
+        '#figure(image("a.png"), caption: [First light.]) <fig:a>\n'
         "== Deep\n<sec:d>\n"  # label wrapped onto its own line, as typstyle may
         "#figure(table()) <tbl:t>\n"
         "#figure(table()) <tab:u>\n"
         "$ x $ <eq:e>\n"
         "\x00SI\x00\n= SI Methods <sec:s>\n"
-        '#figure(image("b.png")) <fig:b>\n'
+        '#figure(image("b.png"), caption: [Appendix view.]) <fig:b>\n'
         "see #ref(<fig:a>), #ref(<tbl:t>), #ref(<tab:u>), #ref(<eq:e>), "
         "#ref(<sec:d>), #ref(<sec:s>), #ref(<fig:b>), "
         "figure(ref(<fig:b>, supplement: none)) and "
@@ -1502,7 +1502,16 @@ def export_cases() -> bool:
                  "figure([S1])",        # code mode: a content block, not bare words
                  "and SS1 and",         # supplement: none -> the bare number
                  "`#ref(<fig:a>)` verbatim",   # raw spans stay verbatim
-                 "also Figure 1 in the abstract"):  # replaced in head too
+                 "also Figure 1 in the abstract",   # replaced in head too
+                 # The count is written into the definitions too: pandoc
+                 # numbers nothing, so captions and headings carry the PDF's
+                 # numbers as literal text. Main-text headings use arkheion's
+                 # "1." pattern (trailing dot); the SI's own function has none.
+                 "caption: [Figure 1: First light.]",
+                 "caption: [Figure S1: Appendix view.]",
+                 "= 1. Intro",
+                 "== 1.1. Deep",
+                 "= S1 SI Methods"):
         if want not in got:
             print(f"  crossrefs: expected {want!r} in the resolved text")
             ok = False
@@ -1557,6 +1566,13 @@ def export_cases() -> bool:
     if paths != ["references.bib"] or style != "acs":
         print(f"  split_bibliography: got paths {paths!r}, style {style!r}")
         ok = False
+    # Citeproc puts the reference list inside a Div with id "refs" and
+    # otherwise appends it at the very END -- after the entire SI. The
+    # heading must carry the anchor refs_div.lua promotes into that Div.
+    if "#block[]<refs>" not in src:
+        print("  split_bibliography: the <refs> anchor is missing -- the "
+              "reference list would land after the SI")
+        ok = False
 
     # A cited key with no entry is the failure citeproc ships at exit 0.
     with tempfile.NamedTemporaryFile("w", suffix=".bib") as bib:
@@ -1568,6 +1584,58 @@ def export_cases() -> bool:
         if missing != ["ghost2020"]:
             print(f"  check_citations: expected ['ghost2020'], got {missing!r}")
             ok = False
+        # An author email's @, both as Typst escapes it in prose and inside a
+        # mailto: string -- neither is citation syntax to Typst, and each
+        # briefly failed the export as "@scripps not in the bibliography".
+        missing = ex.check_citations(
+            'write to #link("mailto:pgarrett@scripps.edu")'
+            "[pgarrett\\@scripps.edu] today", [p])
+        if missing:
+            print(f"  check_citations: an email's @ was read as a citation "
+                  f"key: {missing!r}")
+            ok = False
+
+    # The back matter travels: sliced from BODY END to the bibliography,
+    # never into the SI-appendix machinery (page break, counter surgery).
+    fake = ("// >>> BODY START -- t\nbody prose\n// <<< BODY END -- t\n"
+            "#heading(numbering: none)[Associated Content]\n\n"
+            "Data are available.\n\n"
+            '#bibliography("r.bib")\n#pagebreak()\n#counter(heading).update(0)\n')
+    back = rt._back_matter(fake, {})
+    if "Associated Content" not in back or "Data are available." not in back:
+        print(f"  back matter: the sections were dropped: {back!r}")
+        ok = False
+    if "#bibliography" in back or "#pagebreak" in back or "#counter" in back:
+        print(f"  back matter: appendix machinery leaked in: {back!r}")
+        ok = False
+
+    # The TOC graphic and its caption, from the front-matter bindings; the
+    # caption's bracket walk must survive a nested pair.
+    assets = {"fig.x": {"path": "figures/example_figure.png"}}
+    fake = ("#let toc-caption = [At a [nested] glance.]\n"
+            '#let toc-graphic = fig("fig.x", width: 92%)\n'
+            "// >>> BODY START -- t\nbody\n// <<< BODY END -- t\n")
+    blk = rt._toc_block(fake, assets)
+    if 'image("figures/example_figure.png", width: 92%)' not in blk:
+        print(f"  toc block: the graphic did not resolve: {blk!r}")
+        ok = False
+    if "_At a [nested] glance._" not in blk:
+        print(f"  toc block: the caption was truncated or dropped: {blk!r}")
+        ok = False
+    if rt._toc_block("// >>> BODY START -- t\nb\n// <<< BODY END -- t\n", {}):
+        print("  toc block: a manuscript without one produced content")
+        ok = False
+
+    # The SI title block is a #heading CALL on purpose: `= ` markup would
+    # tick the crossref pass's counter and number the SI's first real
+    # section S2.
+    si_title = rt._si_title({"title": "T", "authors": ["A. Uthor"]})
+    if "[Supporting Information]" not in si_title or "_A. Uthor_" not in si_title:
+        print(f"  si title: missing pieces: {si_title!r}")
+        ok = False
+    if re.search(r"(?m)^=+ ", si_title):
+        print("  si title: a markup heading would steal the SI's S1")
+        ok = False
     return ok
 
 

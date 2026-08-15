@@ -50,11 +50,23 @@ WHAT IT RESOLVES, and why each one has to go:
                           the `style:` identifier resolved to its literal
                           from config.typ. Left behind with the rest of the
                           back matter, every citation in the export dangled.
+                          Placed in the PDF's position -- after the back
+                          matter, BEFORE the SI -- not appended at the end,
+                          where the reference list landed under the SI.
+
+The count that numbers cross-references is also written into the definitions:
+"Figure 3: " onto each caption, "2.1." onto each heading. Pandoc numbers
+nothing, so the Word file showed prose saying "Figure 3" above captions that
+carried no number at all.
 
 Front matter is queried out of `config.typ` with `typst query` -- real Typst
 evaluating the real file -- rather than parsed with a regex here. The template
 itself is dropped: a converter cannot use Typst layout primitives, and a
-journal supplies its own class file anyway.
+journal supplies its own class file anyway. What the template SHOWS is not:
+the back matter between BODY END and the bibliography (data availability,
+authors, acknowledgment), the keywords and TOC graphic, and the SI's title
+block all travel, rebuilt as plain content -- see _back_matter, _toc_block
+and _si_title.
 
 Usage:  just resolve            # -> paper.resolved.typ
 """
@@ -164,10 +176,11 @@ def _query_front_matter() -> dict:
     surname-of), so only Typst knows what it comes to. This asks Typst.
     """
     probe = ('#import "/config.typ": paper-title, paper-authors, '
-             'paper-affiliations, paper-date\n'
+             'paper-affiliations, paper-date, paper-keywords\n'
              "#metadata((title: paper-title, "
              "authors: paper-authors.map(a => a.name), "
-             "affils: paper-affiliations, date: paper-date)) <rmeta>\n")
+             "affils: paper-affiliations, date: paper-date, "
+             "keywords: paper-keywords)) <rmeta>\n")
     with tempfile.NamedTemporaryFile("w", suffix=".typ", dir=ROOT,
                                      delete=False) as fh:
         fh.write(probe)
@@ -317,6 +330,8 @@ _DEF = re.compile(rf"(?<!\()<({'|'.join(FLOAT_PREFIX)}):"
 _HEADING = re.compile(r"(?m)^(=+)\s+\S[^\n]*$")
 _REF = re.compile(r"(#?)ref\(\s*(<[^>]+>)\s*"
                   r"(,\s*supplement:\s*none\s*)?,?\s*\)")
+_FIGURE_OPEN = re.compile(r"#?figure\(")
+_CAPTION = re.compile(r"caption:\s*\[")
 
 
 def resolve_crossrefs(head: str, body: str) -> str:
@@ -329,6 +344,15 @@ def resolve_crossrefs(head: str, body: str) -> str:
     count per kind in document order, headings nest, and the SI resets both
     with an "S" prefix (the #counter(...).update(0) block in paper.typ's back
     matter). This reimplements that count and writes the text in.
+
+    The same count is written into the DEFINITIONS, not just the references:
+    "Figure 3: " ahead of each caption, "2.1." (SI: "S2.1") ahead of each
+    heading. Typst supplies those numbers at layout time and pandoc supplies
+    nothing, so the Word file showed unnumbered captions under prose saying
+    "Figure 3" -- every cross-reference pointed at a number no caption
+    carried. Heading numbers follow the PDF's styles: arkheion's "1."
+    pattern (trailing dot) for the main text, the back matter's "S1"
+    function (no trailing dot) for the SI.
 
     `head` (title, authors, abstract) and `body` arrive separately because
     only the body is scanned for numbering -- the manuscript does not number
@@ -345,9 +369,36 @@ def resolve_crossrefs(head: str, body: str) -> str:
     counters = {"fig": 0, "tbl": 0, "eq": 0}
     levels: list[int] = []
     si = False
+    # (position, text) pairs written into `body` after the scan -- inserting
+    # during it would shift every position the events were sorted on.
+    inserts: list[tuple[int, str]] = []
 
     def number(n: int) -> str:
         return f"S{n}" if si else str(n)
+
+    # Every #figure(...) call's span, so a def label can find the caption it
+    # belongs to. Computed on the raw-protected body: a `#figure(` quoted in
+    # backticks is prose, not a float.
+    fig_spans = []
+    for fm in _FIGURE_OPEN.finditer(body):
+        end = _paren_end(body, fm.end() - 1)
+        if end is not None:
+            fig_spans.append((fm.start(), end))
+
+    def caption_insert(label_at: int, prefix: str, num: str) -> None:
+        """Queue "Figure 3: " onto the caption of the float labeled here.
+
+        The label follows its #figure(...) call across whitespace only; a
+        float without a caption (or an equation, which has none) is left
+        alone -- the PDF shows no caption text to number there either.
+        """
+        span = next((s for s in fig_spans if s[1] <= label_at
+                     and not body[s[1]:label_at].strip()), None)
+        if span is None:
+            return
+        cap = _CAPTION.search(body, span[0], span[1])
+        if cap:
+            inserts.append((cap.end(), f"{SUPPLEMENT[prefix]} {num}: "))
 
     events = (
         [(m.start(), "def", m) for m in _DEF.finditer(body)]
@@ -362,6 +413,9 @@ def resolve_crossrefs(head: str, body: str) -> str:
             depth = len(m.group(1))
             levels = levels[:depth] + [0] * (depth - len(levels))
             levels[depth - 1] += 1
+            joined = ".".join(str(n) for n in levels)
+            inserts.append((m.end(1),
+                            f" S{joined}" if si else f" {joined}."))
         else:
             prefix = m.group(1)
             # A sec label names the heading it follows -- usually on the same
@@ -375,6 +429,12 @@ def resolve_crossrefs(head: str, body: str) -> str:
                 continue
             counters[COUNTER[prefix]] += 1
             numbered[m.group(0)] = number(counters[COUNTER[prefix]])
+            if prefix != "eq":
+                caption_insert(m.start(), prefix,
+                               numbered[m.group(0)])
+
+    for at, text in sorted(inserts, reverse=True):
+        body = body[:at] + text + body[at:]
 
     def ref(m: re.Match) -> str:
         hash, label, bare = m.group(1), m.group(2), bool(m.group(3))
@@ -397,20 +457,26 @@ def resolve_crossrefs(head: str, body: str) -> str:
     return (head + body).replace(_SI_MARK, "")
 
 
-def _call_span(src: str, opener: str) -> str | None:
-    """The full text of `opener ... )` with balanced parentheses, or None."""
-    at = src.find(opener)
-    if at < 0:
-        return None
+def _paren_end(src: str, at: int) -> int | None:
+    """Index just past the `)` matching the `(` at `at`, or None."""
     depth = 0
-    for i in range(at + len(opener) - 1, len(src)):
+    for i in range(at, len(src)):
         if src[i] == "(":
             depth += 1
         elif src[i] == ")":
             depth -= 1
             if depth == 0:
-                return src[at:i + 1]
+                return i + 1
     return None
+
+
+def _call_span(src: str, opener: str) -> str | None:
+    """The full text of `opener ... )` with balanced parentheses, or None."""
+    at = src.find(opener)
+    if at < 0:
+        return None
+    end = _paren_end(src, at + len(opener) - 1)
+    return None if end is None else src[at:end]
 
 
 def bibliography_line(paper_src: str, config_src: str) -> str:
@@ -442,6 +508,84 @@ def bibliography_line(paper_src: str, config_src: str) -> str:
     return call
 
 
+def _back_matter(paper_src: str, assets: dict) -> str:
+    """The prose between BODY END and the bibliography, resolved.
+
+    Associated Content, Author Information, Acknowledgment: it is back matter
+    by the word-count's definition, but it is CONTENT -- a journal reads the
+    data-availability statement and the author list from the Word file -- and
+    dropping it with the template shipped exports missing all three sections.
+    The slice ends at the #bibliography call; failing that, at the first
+    piece of SI-appendix machinery (page break, si-body include), which is
+    layout and counter surgery no converter can use.
+    """
+    m = readability.BODY_END.search(paper_src)
+    if not m:
+        return ""
+    tail = paper_src[m.end():]
+    cut = len(tail)
+    for anchor in ("#bibliography(", "#pagebreak()",
+                   '#include "si-body.typ"'):
+        at = tail.find(anchor)
+        if 0 <= at < cut:
+            cut = at
+    return resolve_notation(tail[:cut], assets,
+                            "paper.typ (back matter)").strip()
+
+
+def _si_title(meta: dict) -> str:
+    """The SI's title block: what the PDF centers ahead of the appendix.
+
+    paper.typ builds it from align/text primitives inside a docx-mode
+    conditional, neither of which travels (the conditional's `docx-mode` is a
+    stripped #let), so it is synthesized here from the same front matter.
+    A #heading CALL rather than `= ` markup, for the same reason the PDF
+    passes `numbering: none`: the crossref pass numbers markup headings, and
+    this one must not tick Section S1 away from the SI's first real section.
+    """
+    authors = ", ".join(meta.get("authors", []))
+    return ("#heading(level: 1, numbering: none, outlined: false)"
+            "[Supporting Information]\n\n"
+            f"{meta.get('title', '')}\n\n"
+            + (f"_{authors}_\n\n" if authors else ""))
+
+
+def _toc_block(paper_src: str, assets: dict) -> str:
+    """The abstract/TOC graphic and its caption, when the front matter has one.
+
+    The convention is paper.typ's own: `#let toc-graphic = ...` (usually a
+    fig() call) with an optional `#let toc-caption = [...]` beside it. Both
+    sit in layout wrappers the export cannot use, so the bindings are read
+    directly and emitted as plain content -- image, then italic caption --
+    exactly as paper.typ's docx-mode branch lays them out. A manuscript
+    without the binding gets "" and no TOC graphic, which is legal.
+    """
+    m = readability.BODY_START.search(paper_src)
+    front = _strip_comments(paper_src[:m.start()] if m else paper_src)
+    g = re.search(r"(?m)^#let\s+toc-graphic\s*=\s*(\S.*)$", front)
+    if not g:
+        return ""
+    expr = g.group(1).strip()
+    block = resolve_notation(expr if expr.startswith("#") else "#" + expr,
+                             assets, "paper.typ (toc-graphic)").strip()
+    c = re.search(r"#let\s+toc-caption\s*=\s*\[", front)
+    if c:
+        # The same bracket walk as the abstract: a regex to `]` truncates the
+        # caption at the first nested bracket.
+        depth = 0
+        for i in range(c.end() - 1, len(front)):
+            if front[i] == "[":
+                depth += 1
+            elif front[i] == "]":
+                depth -= 1
+                if depth == 0:
+                    cap = resolve_notation(front[c.end():i].strip(), assets,
+                                           "paper.typ (toc-caption)")
+                    block += f"\n\n_{cap}_"
+                    break
+    return block
+
+
 def build() -> str:
     if not ASSETS.is_file():
         assets = {}
@@ -449,8 +593,21 @@ def build() -> str:
         assets = json.loads(ASSETS.read_text()).get("values", {})
 
     meta = _query_front_matter()
-    body = readability.slice_body((ROOT / "paper.typ").read_text())
+    paper_src = (ROOT / "paper.typ").read_text()
+    body = readability.slice_body(paper_src)
     body = resolve_notation(body, assets, "paper.typ")
+
+    # Back matter and the bibliography, IN THE PDF'S ORDER: main text, then
+    # Associated Content / Author Information / Acknowledgment, then the
+    # references, then the SI. The bibliography used to be appended after
+    # everything, which citeproc read literally -- the reference list landed
+    # at the very bottom of the Word file, underneath the entire SI.
+    back = _back_matter(paper_src, assets)
+    if back:
+        body += "\n\n" + back
+    bib = bibliography_line(paper_src, (ROOT / "config.typ").read_text())
+    if bib:
+        body += "\n\n" + bib
 
     # The SI is read as its own file, exactly as readability.py and the
     # narrator read it. paper.typ DOES `#include "si-body.typ"`, but that line
@@ -467,7 +624,7 @@ def build() -> str:
     if si.is_file() and not re.search(r'#include\s+"/?si-body\.typ"', body):
         # The marker sits on its own line so the SI's first heading still
         # starts a line, which is what the heading scan anchors on.
-        body += ("\n\n" + _SI_MARK + "\n"
+        body += ("\n\n" + _SI_MARK + "\n" + _si_title(meta)
                  + resolve_notation(si.read_text(), assets, "si-body.typ"))
 
     # Any OTHER include inside the body is inlined where it stands. The SI,
@@ -478,7 +635,7 @@ def build() -> str:
         target = ROOT / m.group(1).lstrip("/")
         if not target.is_file():
             raise ResolveError(f"paper.typ includes {m.group(1)}, which is missing")
-        mark = _SI_MARK + "\n" if target == si else ""
+        mark = _SI_MARK + "\n" + _si_title(meta) if target == si else ""
         return mark + resolve_notation(target.read_text(), assets, m.group(1))
 
     body = re.sub(r'#include\s+"([^"]+)"', inline, body)
@@ -487,6 +644,8 @@ def build() -> str:
     affils = "\n".join(f"{i + 1}. {a}" for i, a in
                        enumerate(meta.get("affils", [])))
     abstract = resolve_notation(_abstract(), assets, "config.typ (abstract)")
+    keywords = ", ".join(meta.get("keywords") or [])
+    toc = _toc_block(paper_src, assets)
 
     head = (
         f"{ABOUT}\n"
@@ -494,12 +653,10 @@ def build() -> str:
         f"{authors}\n\n"
         f"{affils}\n\n"
         f"== Abstract\n\n{abstract}\n\n"
+        + (f"*Keywords:* {keywords}\n\n" if keywords else "")
+        + (toc + "\n\n" if toc else "")
     )
-    out = resolve_crossrefs(head, body)
-
-    bib = bibliography_line((ROOT / "paper.typ").read_text(),
-                            (ROOT / "config.typ").read_text())
-    return out + "\n" + (bib + "\n" if bib else "")
+    return resolve_crossrefs(head, body) + "\n"
 
 
 def main() -> int:

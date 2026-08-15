@@ -50,6 +50,13 @@ OUT = ROOT / "paper.docx"
 def split_bibliography(src: str) -> tuple[str, list[str], str | None]:
     """Swap the #bibliography call for its heading; return (src, paths, style).
 
+    The heading is followed by a `#block[]<refs>` anchor: citeproc sets the
+    reference list inside a Div with id "refs", and WITHOUT one it appends
+    the list at the very end of the document -- which, now that the resolver
+    keeps the call in the PDF's position, would strand the references after
+    the entire SI. Pandoc's Typst reader turns the anchor into a Span, and
+    tools/refs_div.lua promotes it to the Div citeproc looks for.
+
     Pure and separate from the pandoc run so the tests can hold it still.
     A resolved file without a bibliography passes through unchanged.
     """
@@ -59,7 +66,8 @@ def split_bibliography(src: str) -> tuple[str, list[str], str | None]:
     paths = re.findall(r'"([^"]+\.(?:bib|yml|yaml|json))"', call)
     style = re.search(r'style:\s*"([^"]+)"', call)
     title = re.search(r"title:\s*\[([^\]]*)\]", call)
-    heading = f"= {title.group(1) if title else 'Bibliography'}"
+    heading = (f"= {title.group(1) if title else 'Bibliography'}"
+               "\n\n#block[]<refs>")
     return (src.replace(call, heading), paths,
             style.group(1) if style else None)
 
@@ -71,9 +79,14 @@ def check_citations(src: str, bib_paths: list[Path]) -> list[str]:
     literal text by the resolver; anything else surviving as `@key` is a
     citation and must have an entry, or citeproc ships it as bold prose.
     typst_prose.CITE decides what a key looks like -- one authority, so a
-    trailing period is prose here exactly as it is everywhere else.
+    trailing period is prose here exactly as it is everywhere else. One
+    guard on top of it: an `@` that is escaped (`\\@scripps` in the author
+    email) or mid-word (`"mailto:pgarrett@scripps.edu"`) is not citation
+    syntax to Typst and must not be one here -- both live in the back
+    matter, and each briefly failed this check as "@scripps not in the
+    bibliography".
     """
-    cited = {m.group(0)[1:] for m in re.finditer(CITE, src)
+    cited = {m.group(0)[1:] for m in re.finditer(r"(?<![\w\\:./-])" + CITE, src)
              if m.group(0)[1:].split(":", 1)[0] not in FLOAT_PREFIX}
     known: set[str] = set()
     for p in bib_paths:
@@ -99,6 +112,10 @@ def main() -> int:
                   + " -- citeproc would ship each as bold prose and exit 0.",
                   file=sys.stderr)
             return 1
+        # The Lua filter must precede --citeproc: pandoc applies filters in
+        # command-line order, and the refs anchor has to be a Div before
+        # citeproc goes looking for one.
+        args += ["--lua-filter", str(ROOT / "tools" / "refs_div.lua")]
         args += ["--citeproc"]
         args += [f"--bibliography={ROOT / b}" for b in bib]
         csl = next((p for p in (ROOT / f"{style}.csl",
