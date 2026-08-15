@@ -42,6 +42,20 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.15.1
+
+The Word export's author line carries the affiliation superscripts. The head
+printed a bare name list above a numbered affiliation list nothing pointed
+into: the front-matter probe flattened each author to a.name. It now returns
+(name, affils) records, the numbers computed by Typst itself as positions in
+paper-affiliations -- the same list the head prints, so the markers cannot
+disagree with it -- and the resolver emits them as `#super[...]`, which
+pandoc reads natively into real Word superscripts. Both config shapes
+normalize in the probe (`affiliation: "..."` and `affiliations: (...)`); an
+author with no resolvable affiliation gets no marker; the SI title block
+keeps plain names, exactly as si-authors shows. Upgrade: copy
+tools/resolve_typst.py and tests/run.py.
+
 ## 3.15.0
 
 The Word export carries the whole paper, in the paper's order. Found by

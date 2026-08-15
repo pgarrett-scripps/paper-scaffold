@@ -1626,9 +1626,27 @@ def export_cases() -> bool:
         print("  toc block: a manuscript without one produced content")
         ok = False
 
+    # The author line carries affiliation superscripts -- the numbers Typst
+    # derived, joined for a shared appointment, absent when an author has
+    # none to point at. Without them the export showed a bare name list
+    # above a numbered affiliation list nothing pointed into.
+    line = rt._author_line({"authors": [
+        {"name": "A. Uthor", "affils": [1]},
+        {"name": "B. Oth", "affils": [1, 2]},
+        {"name": "C. Lone", "affils": []}]})
+    if line != "A. Uthor#super[1], B. Oth#super[1,2], C. Lone":
+        print(f"  author line: got {line!r}")
+        ok = False
+
     # The SI title block is a #heading CALL on purpose: `= ` markup would
     # tick the crossref pass's counter and number the SI's first real
-    # section S2.
+    # section S2. Its author line is the PLAIN names (si-authors), and the
+    # probe's records must feed it as cleanly as a test's bare strings.
+    si_title = rt._si_title(
+        {"title": "T", "authors": [{"name": "A. Uthor", "affils": [1]}]})
+    if "_A. Uthor_" not in si_title or "#super" in si_title:
+        print(f"  si title: author records leaked markers: {si_title!r}")
+        ok = False
     si_title = rt._si_title({"title": "T", "authors": ["A. Uthor"]})
     if "[Supporting Information]" not in si_title or "_A. Uthor_" not in si_title:
         print(f"  si title: missing pieces: {si_title!r}")

@@ -175,10 +175,20 @@ def _query_front_matter() -> dict:
     the author line is BUILT there (initials, suffixes, particles -- see
     surname-of), so only Typst knows what it comes to. This asks Typst.
     """
+    # Each author comes back as (name, affils), where affils is the author's
+    # affiliation NUMBERS -- positions in paper-affiliations, the same list
+    # the head prints below the author line, so the superscripts cannot
+    # disagree with it. Both config shapes are normalized here in Typst:
+    # `affiliation: "..."` (one string) and `affiliations: (...)` (a tuple).
     probe = ('#import "/config.typ": paper-title, paper-authors, '
              'paper-affiliations, paper-date, paper-keywords\n'
              "#metadata((title: paper-title, "
-             "authors: paper-authors.map(a => a.name), "
+             "authors: paper-authors.map(a => (name: a.name, "
+             'affils: a.at("affiliations", default: '
+             '(a.at("affiliation", default: none),))'
+             ".filter(x => x != none)"
+             ".map(af => paper-affiliations.position(x => x == af))"
+             ".filter(p => p != none).map(p => p + 1))), "
              "affils: paper-affiliations, date: paper-date, "
              "keywords: paper-keywords)) <rmeta>\n")
     with tempfile.NamedTemporaryFile("w", suffix=".typ", dir=ROOT,
@@ -533,6 +543,36 @@ def _back_matter(paper_src: str, assets: dict) -> str:
                             "paper.typ (back matter)").strip()
 
 
+def _names(meta: dict) -> str:
+    """The plain author names, comma-joined -- si-authors, rebuilt.
+
+    Tolerates both the probe's (name, affils) records and bare strings, so
+    a test can hand in names without inventing affiliations.
+    """
+    return ", ".join(a["name"] if isinstance(a, dict) else a
+                     for a in meta.get("authors", []))
+
+
+def _author_line(meta: dict) -> str:
+    """The author line with affiliation superscripts, as the PDF prints it.
+
+    "Patrick Garrett#super[1], Jolene K. Diedrich#super[1,2]": the numbers
+    are Typst's own (the probe maps each affiliation to its position in
+    paper-affiliations), and pandoc reads #super natively. Without them the
+    export showed a bare name list above a numbered affiliation list that
+    nothing pointed into. An author with no resolvable affiliation gets no
+    marker rather than an empty superscript.
+    """
+    parts = []
+    for a in meta.get("authors", []):
+        if isinstance(a, str):
+            parts.append(a)
+            continue
+        nums = ",".join(str(n) for n in a.get("affils", []))
+        parts.append(a.get("name", "") + (f"#super[{nums}]" if nums else ""))
+    return ", ".join(parts)
+
+
 def _si_title(meta: dict) -> str:
     """The SI's title block: what the PDF centers ahead of the appendix.
 
@@ -542,8 +582,9 @@ def _si_title(meta: dict) -> str:
     A #heading CALL rather than `= ` markup, for the same reason the PDF
     passes `numbering: none`: the crossref pass numbers markup headings, and
     this one must not tick Section S1 away from the SI's first real section.
+    Plain names, no affiliation markers -- exactly what si-authors shows.
     """
-    authors = ", ".join(meta.get("authors", []))
+    authors = _names(meta)
     return ("#heading(level: 1, numbering: none, outlined: false)"
             "[Supporting Information]\n\n"
             f"{meta.get('title', '')}\n\n"
@@ -640,7 +681,7 @@ def build() -> str:
 
     body = re.sub(r'#include\s+"([^"]+)"', inline, body)
 
-    authors = ", ".join(meta.get("authors", []))
+    authors = _author_line(meta)
     affils = "\n".join(f"{i + 1}. {a}" for i, a in
                        enumerate(meta.get("affils", [])))
     abstract = resolve_notation(_abstract(), assets, "config.typ (abstract)")
