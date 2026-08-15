@@ -534,18 +534,25 @@ always present and almost never acted on.
 
 ### The Word export is more delicate than it looks
 
-`just docx` goes Typst → HTML → pandoc, and three things make it work:
+`just docx` goes `just resolve` → pandoc's native Typst reader. The resolver
+replaces every project helper (`#s()`, `fig()`, cross-references, the
+bibliography's style variable) with plain Typst in `paper.resolved.typ`, and
+pandoc — a real evaluator, from `uv` (`pypandoc-binary`), no system install —
+turns that into **native, editable Word equations**, real tables, and a
+reference list set by citeproc from `references.bib`. Citations follow
+`<style>.csl` in the manuscript root when present (the scaffold ships
+`american-chemical-society.csl`, matching the default `paper-bib-style`);
+otherwise pandoc's default applies, with a printed note. Every citation key is
+checked against the `.bib` before converting, because citeproc renders a
+missing one as bold prose and still exits 0. When the output looks wrong, read
+`paper.resolved.typ` — it is exactly what pandoc was fed.
 
-1. `--input docx=true` bypasses the arkheion template, whose front matter and
-   heading styling are layout-only primitives that Typst's HTML export silently
-   discards. Without the bypass you lose every section heading and the abstract.
-2. `paper.typ` wraps equations in `html.frame()` under that same flag, because
-   HTML export drops math outright. `tools/typst2docx.py` rasterizes them back inline
-   and stitches the paragraphs Typst split around them.
-3. pandoc comes from `uv` (`pypandoc-binary`), so no system install is needed.
-
-Typst's HTML export prints "ignored during HTML export" warnings for layout-only
-constructs. Those are expected. The PDF path is entirely unaffected by the flag.
+`just docx-html` is the old route, kept as a fallback: Typst → HTML → pandoc,
+with `--input docx=true` bypassing the arkheion template (HTML export silently
+discards its front matter and headings) and `html.frame()` +
+`tools/typst2docx.py` rasterizing equations into images — which is exactly why
+it is no longer the default. Its "ignored during HTML export" warnings are
+expected. The PDF path is entirely unaffected by either route.
 
 ### Formatting: the editor and the CLI must agree
 
@@ -707,7 +714,7 @@ whether the ones you have are new enough.
   PDF build (the `arkheion` template)
 
 The Typst floor is 0.14, and it is not where you would guess. `--features html`
-and `html.frame()`, which `just docx` is built on, both arrived in 0.13 — but on
+and `html.frame()`, which `just docx-html` is built on, both arrived in 0.13 — but on
 0.13 the Word export runs, exits 0, and silently contains **no figures**: that
 version's HTML export emits no `<img>` for an `image()` call, while tables and
 rasterized math survive. The result is a .docx that looks finished and has lost

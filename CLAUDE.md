@@ -200,11 +200,15 @@ of those are tracked.
 
 ## Editing the Typst preamble
 
-The `docx-mode` block in `paper.typ` is load-bearing for `just docx` and inert on
-the PDF path. It exists because Typst's HTML export silently discards the
-template's front matter, all section headings, and every equation. If you change
-it, verify with `just docx` and confirm the headings and abstract survive, not
-just that the command exits 0.
+`just docx` goes through `just resolve` and pandoc's native Typst reader:
+real, editable Word equations, and a reference list set by citeproc from
+`references.bib` (matching `<style>.csl` in the root if present). The
+`docx-mode` block in `paper.typ` is load-bearing only for `just docx-html`,
+the old rasterizing route kept as a fallback, and inert on the PDF path. It
+exists because Typst's HTML export silently discards the template's front
+matter, all section headings, and every equation. If you change either path,
+verify with the corresponding recipe and confirm the headings, abstract, and
+equations survive, not just that the command exits 0.
 
 Typst gotcha worth knowing: a method chain broken across lines after `#let x =`
 or inside `[...]` ends at the first newline, and the continuation is parsed as

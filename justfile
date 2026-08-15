@@ -603,19 +603,32 @@ fmt:
 fmt-check:
   typstyle --check --line-width {{fmt_width}} --wrap-text {{typst_sources}}
 
-# Route: Typst HTML export -> pandoc. Three things make it work:
-#   1. --input docx=true bypasses the arkheion template. Its front matter and heading
-#      styling are layout-only primitives that Typst's HTML export silently discards,
-#      which would otherwise cost every section heading and the abstract.
-#   2. paper.typ wraps equations in html.frame() under that same flag, because HTML
-#      export drops math outright; tools/typst2docx.py rasterizes them back inline.
-#   3. pandoc comes from uv (pypandoc-binary), so no system install is needed.
-# Figures embed as images, tables stay real Word tables, and `=` sections map onto
-# Word's Heading 1. Typst's HTML export is experimental and prints "ignored during
-# HTML export" warnings for layout-only constructs; those are expected and cost
-# nothing in the prose. The PDF build is entirely unaffected by the docx flag.
-# Compile paper.typ -> paper.docx (Word), for journals/co-authors that want .docx
-docx: render-stats
+# Route: resolve -> pandoc's native Typst reader. The resolver replaces every
+# project helper with plain Typst, then pandoc (from uv, pypandoc-binary; no
+# system install) evaluates it for real: NATIVE editable Word equations, real
+# tables, and a reference list set by citeproc from references.bib. Every
+# citation key is checked against the .bib before converting; a missing one
+# fails the build instead of shipping as bold prose. Citations follow
+# <style>.csl in the manuscript root if present, else pandoc's default, with
+# a printed note. Read paper.resolved.typ when the output looks wrong -- it
+# is exactly what pandoc was fed.
+# Export paper.docx (Word, native equations), for journals/co-authors
+docx: resolve
+  #!/usr/bin/env bash
+  set -euo pipefail
+  stamp=$(just _stamp-manuscript)
+  uv run --quiet python tools/export_docx.py
+  just _record-build paper.docx "$stamp"
+
+# The old docx route, kept as a fallback while the pandoc one earns trust.
+# Typst HTML export -> pandoc: --input docx=true bypasses the arkheion
+# template (HTML export silently discards its front matter and headings), and
+# paper.typ wraps equations in html.frame() under that flag because HTML
+# export drops math outright; tools/typst2docx.py rasterizes them back inline
+# as images -- which is exactly why this is no longer the default. Typst's
+# "ignored during HTML export" warnings are expected and cost nothing.
+# Export paper.docx via the old HTML route (equations become images)
+docx-html: render-stats
   #!/usr/bin/env bash
   set -euo pipefail
   stamp=$(just _stamp-manuscript)
@@ -780,11 +793,12 @@ check-build:
 # were missing from the git-based check they replace, so editing either one used
 # to leave the PDF looking current.
 #
-# The three tools that SHAPE the output are in the list too: render_stats.py and
-# typst_prose.py decide what every number looks like, typst2docx.py builds the
-# Word file. A change to any of them changes what a build produces, which is the
-# definition of stale this stamp exists to catch. The rest of tools/ only
-# measures or checks, so it stays out.
+# The tools that SHAPE the output are in the list too: render_stats.py and
+# typst_prose.py decide what every number looks like; resolve_typst.py and
+# export_docx.py build the Word file, typst2docx.py its fallback. A change to
+# any of them changes what a build produces, which is the definition of stale
+# this stamp exists to catch. The rest of tools/ only measures or checks, so
+# it stays out.
 #
 # stats.json is hashed WITHOUT its `pinned` block, through python3 rather than
 # find. The pins are bookkeeping about external files; nothing a build renders
@@ -795,8 +809,9 @@ _stamp-manuscript:
   #!/usr/bin/env bash
   set -uo pipefail
   { find paper.typ config.typ si-body.typ stats.typ assets.typ \
-      assets.json wordcount.typ references.bib si figures \
+      assets.json wordcount.typ references.bib si figures *.csl \
       tools/render_stats.py tools/typst_prose.py tools/typst2docx.py \
+      tools/resolve_typst.py tools/export_docx.py \
       -type f -not -name '*.pyc' \
       -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum
     python3 - 2>/dev/null <<'PY' || true

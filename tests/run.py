@@ -363,6 +363,7 @@ def structural_cases() -> bool:
     ok &= check_stats_cases()
     ok &= stats_ownership_cases()
     ok &= resolver_cases()
+    ok &= export_cases()
     ok &= adoption_cases()
     ok &= check_assets_cases()
     ok &= suppression_cases()
@@ -1447,6 +1448,117 @@ def resolver_cases() -> bool:
             pass
     finally:
         typst_prose.STATS_JSON = saved
+    return ok
+
+
+def export_cases() -> bool:
+    """The pandoc export path: crossref numbering, bibliography, key checks.
+
+    Pandoc renders a Typst ref as an EMPTY link, so a wrong number here is a
+    cross-reference that silently reads wrong in the Word file -- and a
+    missing citation key ships as bold prose at exit 0. Both get exact cases.
+    """
+    import tempfile
+
+    import export_docx as ex
+    import resolve_typst as rt
+    ok = True
+
+    # The numbering the PDF shows, reimplemented: floats per kind in document
+    # order (tbl and tab share the Table counter), headings nest, the SI
+    # marker resets everything with an "S" prefix.
+    body = (
+        "= Intro <sec:i>\n"
+        "prose\n"
+        '#figure(image("a.png")) <fig:a>\n'
+        "== Deep\n<sec:d>\n"  # label wrapped onto its own line, as typstyle may
+        "#figure(table()) <tbl:t>\n"
+        "#figure(table()) <tab:u>\n"
+        "$ x $ <eq:e>\n"
+        "\x00SI\x00\n= SI Methods <sec:s>\n"
+        '#figure(image("b.png")) <fig:b>\n'
+        "see #ref(<fig:a>), #ref(<tbl:t>), #ref(<tab:u>), #ref(<eq:e>), "
+        "#ref(<sec:d>), #ref(<sec:s>), #ref(<fig:b>), "
+        "figure(ref(<fig:b>, supplement: none)) and "
+        "S#ref(<fig:b>, supplement: none) and `#ref(<fig:a>)` verbatim\n")
+    try:
+        got = rt.resolve_crossrefs("also #ref(<fig:a>) in the abstract\n\n",
+                                   body)
+    except (Exception, SystemExit) as e:
+        print(f"  crossrefs: raised {type(e).__name__}: {e}")
+        got = ""
+        ok = False
+    for want in ("see Figure 1,", " Table 1,", " Table 2,", " Equation 1,",
+                 " Section 1.1,", " Section S1,", " Figure S1,",
+                 "figure([S1])",        # code mode: a content block, not bare words
+                 "and SS1 and",         # supplement: none -> the bare number
+                 "`#ref(<fig:a>)` verbatim",   # raw spans stay verbatim
+                 "also Figure 1 in the abstract"):  # replaced in head too
+        if want not in got:
+            print(f"  crossrefs: expected {want!r} in the resolved text")
+            ok = False
+    if "\x00" in got:
+        print("  crossrefs: the SI marker leaked into the output")
+        ok = False
+    try:
+        rt.resolve_crossrefs("", "see #ref(<fig:ghost>)\n")
+        print("  crossrefs: a ref to a nonexistent label was accepted")
+        ok = False
+    except rt.ResolveError:
+        pass
+
+    # The bibliography call is carried through with its style identifier
+    # resolved from config.typ; commented-out calls are not calls.
+    cases = [
+        ("style identifier resolves",
+         '#bibliography("r.bib", style: paper-bib-style)',
+         '#let paper-bib-style = "acs"',
+         '#bibliography("r.bib", style: "acs")'),
+        ("literal style passes through",
+         '#bibliography("r.bib", style: "nature")', "",
+         '#bibliography("r.bib", style: "nature")'),
+        ("no bibliography is legal", "just prose", "", ""),
+        ("a commented call is not a call",
+         '// #bibliography("r.bib")', "", ""),
+    ]
+    for name, paper, config, want in cases:
+        try:
+            got = rt.bibliography_line(paper, config)
+        except (Exception, SystemExit) as e:
+            print(f"  bibliography [{name}]: raised {type(e).__name__}: {e}")
+            ok = False
+            continue
+        if got != want:
+            print(f"  bibliography [{name}]: expected {want!r}, got {got!r}")
+            ok = False
+    try:
+        rt.bibliography_line('#bibliography("r.bib", style: mystery)', "")
+        print("  bibliography: an unresolvable style identifier was accepted")
+        ok = False
+    except rt.ResolveError:
+        pass
+
+    # The exporter swaps the call for its own heading and hands the paths on.
+    src, paths, style = ex.split_bibliography(
+        'prose\n#bibliography("references.bib", title: [References], '
+        'style: "acs")\n')
+    if "= References" not in src or "#bibliography" in src:
+        print("  split_bibliography: the call did not become its heading")
+        ok = False
+    if paths != ["references.bib"] or style != "acs":
+        print(f"  split_bibliography: got paths {paths!r}, style {style!r}")
+        ok = False
+
+    # A cited key with no entry is the failure citeproc ships at exit 0.
+    with tempfile.NamedTemporaryFile("w", suffix=".bib") as bib:
+        bib.write("@article{real2020,\n  title={x}\n}\n")
+        bib.flush()
+        p = Path(bib.name)
+        missing = ex.check_citations("cite @real2020. and @ghost2020 here",
+                                     [p])
+        if missing != ["ghost2020"]:
+            print(f"  check_citations: expected ['ghost2020'], got {missing!r}")
+            ok = False
     return ok
 
 

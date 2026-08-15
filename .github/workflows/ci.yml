@@ -154,16 +154,22 @@ jobs:
           doc = z.read("word/document.xml").decode("utf8", "replace")
           media = [n for n in z.namelist() if n.startswith("word/media/")]
           checks = {
-              "abstract survived the template bypass": "working skeleton" in doc,
+              "abstract survived": "working skeleton" in doc,
               "section headings survived": "Introduction" in doc and "Methods" in doc,
-              "equations were rasterized back in": len(media) > 0,
+              "equations are native Word math": "<m:oMath>" in doc,
+              "figures embedded": len(media) > 0,
               "the SI came along": "Supporting Information" in doc,
+              "references were set": "Analytical Engine" in doc,
           }
           for name, ok in checks.items():
               print(("  ok   " if ok else "  FAIL ") + name)
           print(f"  ({len(media)} embedded image(s))")
           sys.exit(0 if all(checks.values()) else 1)
           PY
+
+      # The fallback route still has to build -- it is the one html.frame()
+      # and the typst floor exist for, and the matrix is what holds that floor.
+      - run: just docx-html
 
       - run: just verify
 

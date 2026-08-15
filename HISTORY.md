@@ -42,6 +42,42 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.14.0
+
+`just docx` now goes resolve -> pandoc: NATIVE editable Word equations, real
+tables, and a reference list set by citeproc. The HTML route -- equations
+rasterized into images -- is `just docx-html`, kept as a fallback while this
+one earns trust. The 3.13.0 known gap is closed, plus one nobody had
+measured:
+
+- The bibliography: `#bibliography(...)` sits in back matter, which the body
+  slice drops, so every citation in the export dangled. The resolver now
+  carries the call through with its `style:` identifier resolved to the
+  string literal in config.typ -- the resolved file compiles standalone,
+  references and all. The exporter (tools/export_docx.py) swaps the call for
+  its title as a heading and hands the .bib paths to citeproc, because
+  pandoc's reader parses the call without wiring it in.
+- Cross-references: pandoc renders a Typst ref as an EMPTY link -- no pages
+  to point at -- so every "see Figure 3" silently became "see " in the Word
+  file. The resolver now resolves each ref to the literal text the PDF
+  shows, reimplementing the deterministic numbering: floats count per kind
+  in document order (tbl/tab share the Table counter), headings nest, and
+  the SI resets both with the "S" prefix, exactly as paper.typ's back-matter
+  counter block does. A ref whose label no exported float or heading carries
+  is an error, not a link left to vanish.
+- Citation keys are checked against the .bib BEFORE converting: citeproc
+  renders a missing key as bold prose and exits 0, which is a shipped-anyway
+  failure this pipeline exists to refuse.
+- Citations follow `<style>.csl` in the manuscript root when present; the
+  scaffold ships american-chemical-society.csl to match the default
+  paper-bib-style. Without one, pandoc's default applies, with a printed
+  note -- visibly different, not silently wrong.
+
+The docx-mode block in paper.typ is now load-bearing only for docx-html.
+Upgrade: copy tools/resolve_typst.py, tools/export_docx.py,
+tools/typst_prose.py, the justfile docx/docx-html/resolve/_stamp-manuscript
+recipes, and your style's .csl; the tests gained export_cases().
+
 ## 3.13.1
 
 Ten resolver fixes out of a code review, every one a way `paper.resolved.typ`
