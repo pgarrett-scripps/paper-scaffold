@@ -42,6 +42,16 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.14.1
+
+The resolver test suite carries its own table fixture. The
+`markup table gains a content block` case inlines its target file, and it
+pointed at `si/example_table.typ` -- which exists here, and not in a derived
+manuscript that deleted the example generators. Found porting 3.13.1 into a
+real paper: the suite failed on a file the manuscript's analysis has every
+right not to declare. The case now writes a temp table and resolves it by
+absolute path. Upgrade: copy tests/run.py.
+
 ## 3.14.0
 
 `just docx` now goes resolve -> pandoc: NATIVE editable Word equations, real

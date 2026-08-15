@@ -1339,8 +1339,16 @@ def resolver_cases() -> bool:
     import resolve_typst as rt
     import typst_prose
     ok = True
+    # The table case INLINES the target file, so it must exist on disk. A
+    # temp file rather than the scaffold's si/example_table.typ: a derived
+    # manuscript may have deleted the example generator, and this suite must
+    # not depend on which assets the manuscript's analysis declares. The
+    # absolute path wins the resolver's `ROOT / path` join.
+    tbl_tmp = tempfile.TemporaryDirectory()
+    tbl_file = Path(tbl_tmp.name) / "example_table.typ"
+    tbl_file.write_text("#table(columns: 2, [a], [b])\n")
     assets = {"fig.x": {"path": "figures/example_figure.png"},
-              "tbl.x": {"path": "si/example_table.typ"}}
+              "tbl.x": {"path": str(tbl_file)}}
     # Against the TEST-owned stats, like extract(): the fixture must not
     # depend on which ids the manuscript's analysis currently declares. The
     # swap is try/finally-guarded, also like extract(): a case that escapes
@@ -1448,6 +1456,7 @@ def resolver_cases() -> bool:
             pass
     finally:
         typst_prose.STATS_JSON = saved
+        tbl_tmp.cleanup()
     return ok
 
 
