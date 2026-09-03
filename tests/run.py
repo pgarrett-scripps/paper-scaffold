@@ -555,6 +555,98 @@ def bibliography_cases() -> bool:
     if "retraction" not in ba.WITHDRAWN:
         print("  bib-audit does not treat a retraction as withdrawn")
         ok = False
+
+    # A resolving DOI is not proof that the fields beside it describe that
+    # work. These cases stay pure and offline so the ordinary test suite catches
+    # a metadata check that is weakened or accidentally removed.
+    entry = {
+        "_key": "curie2020",
+        "_type": "article",
+        "doi": "10.1/example",
+        "title": "{An} Example: Results & Methods",
+        "author": "Curie, M. and Einstein, Albert",
+        "year": "2020",
+        "journal": "Journal of Examples",
+        "volume": "12",
+        "issue": "3",
+        "pages": "10--20",
+    }
+    metadata = {
+        "title": ["<i>An</i> example: results &amp; methods"],
+        "author": [
+            {"family": "Curie", "given": "Marie"},
+            {"family": "Einstein", "given": "A."},
+        ],
+        "published-print": {"date-parts": [[2020]]},
+        "published-online": {"date-parts": [[2019]]},
+        "container-title": ["Journal of Examples: Annual Proceedings"],
+        "volume": "12",
+        "issue": "3",
+        "page": "10-20",
+    }
+    if ba._metadata_issues(entry, "ok", metadata):
+        print("  bib-audit metadata: formatting-only differences were reported")
+        ok = False
+
+    tex_entry = dict(entry,
+                     author=("Dan{\\v{c}}{\\'i}k, V. and "
+                             "Weilnb{\\\"o}ck, Lisa and others"))
+    tex_metadata = dict(metadata, author=[
+        {"family": "Dančík", "given": "Vlado"},
+        {"family": "Weilnböck", "given": "Lisa"},
+        {"family": "Someone", "given": "Else"},
+    ])
+    if ba._metadata_issues(tex_entry, "ok", tex_metadata):
+        print("  bib-audit metadata: TeX accents or 'and others' were reported")
+        ok = False
+
+    short_title = dict(metadata, title=["An Example"])
+    issues = ba._metadata_issues(entry, "ok", short_title)
+    if [(item.field, item.fatal) for item in issues] != [("title", False)]:
+        print("  bib-audit metadata: an incomplete registered title was not "
+              "reported as a non-fatal review item")
+        ok = False
+
+    wrong = dict(entry, title="A Different Paper",
+                 author="Curie, Pierre and Einstein, Albert", year="2021")
+    issues = ba._metadata_issues(wrong, "ok", metadata)
+    fatal = {item.field for item in issues if item.fatal}
+    if fatal != {"title", "author", "year"}:
+        print("  bib-audit metadata: wrong core fields produced "
+              f"{sorted(fatal)}, expected author/title/year")
+        ok = False
+
+    wrong_details = dict(entry, journal="Other Journal", volume="99",
+                         issue="", number="8", pages="200--220")
+    issues = ba._metadata_issues(wrong_details, "ok", metadata)
+    warnings = {item.field for item in issues if not item.fatal}
+    if warnings != {"venue", "volume", "issue", "pages"}:
+        print("  bib-audit metadata: wrong detail fields produced "
+              f"{sorted(warnings)}, expected issue/pages/venue/volume")
+        ok = False
+
+    datacite = {
+        "titles": [{"title": "A Dataset"}],
+        "creators": [{"familyName": "Curie", "givenName": "Marie"}],
+        "publicationYear": 2020,
+        "container": {"title": "Example Repository"},
+    }
+    data_entry = dict(entry, title="A Dataset", author="Curie, Marie",
+                      journal="Example Repository")
+    if ba._metadata_issues(data_entry, "datacite", datacite):
+        print("  bib-audit metadata: matching DataCite fields were reported")
+        ok = False
+
+    # Exercise the command-level contract too: a mismatched title must make
+    # preflight fail, not merely print an advisory that can scroll past.
+    import contextlib
+    import io
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc = ba.audit(entries=[wrong],
+                      fetch=lambda doi, timeout: ("ok", metadata), pause=False)
+    if rc != 1:
+        print("  bib-audit metadata: a core mismatch did not fail the audit")
+        ok = False
     return ok
 
 
@@ -1421,6 +1513,20 @@ def resolver_cases() -> bool:
              '#fig("fig.nope")', "image("),
             ("a todo in a fence does not refuse", '```\n#todo("example")\n```',
              '#todo("example")', None),
+            # The 80-column reflow splits a long citation cluster across a
+            # soft line break. Typst groups citations across it, so the PDF
+            # collapsed six keys into one range; pandoc's Typst reader only
+            # groups citations on one LINE, and the Word export shipped
+            # reading "10-12 13-15" where the PDF read "10-15".
+            ("a line-split citation cluster is rejoined",
+             "natively @lovelace1843 @hopper1952\n@turing1936, but each",
+             "@lovelace1843 @hopper1952 @turing1936, but each",
+             "@hopper1952\n"),
+            # ...but only a single newline: a blank line is a paragraph break,
+            # and two citations either side of one are separate sentences.
+            ("citations across a paragraph break stay put",
+             "ends here @lovelace1843\n\n@hopper1952 opens the next",
+             "@lovelace1843\n\n@hopper1952", None),
         ]
         for name, src, want, forbid in cases:
             try:

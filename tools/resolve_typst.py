@@ -329,6 +329,16 @@ def resolve_notation(src: str, assets: dict, where: str) -> str:
     src = re.sub(rf"@({'|'.join(FLOAT_PREFIX)}):"
                  rf"([A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*)",
                  r"#ref(<\1:\2>)", src)
+
+    # Rejoin citation clusters the 80-column reflow split across lines. Typst
+    # groups adjacent citations across a soft line break, so the PDF collapses
+    # `@a @b @c\n@d @e @f` into one range (10-15); pandoc's Typst reader only
+    # groups citations on ONE line, so the same source shipped a Word export
+    # reading "10-12 13-15". Only a single newline is joined -- a blank line is
+    # a paragraph break and never sits inside a citation cluster. Runs after
+    # the @fig:/@tbl: rewrite above, so every surviving `@` is a citation.
+    src = re.sub(rf"({typst_prose.CITE})\n[ \t]*(?={typst_prose.CITE})",
+                 r"\1 ", src)
     return _restore_raw(src, raw_spans)
 
 

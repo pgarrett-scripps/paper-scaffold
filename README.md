@@ -80,7 +80,7 @@ have to drop their import. The exact edits are under
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
 | `just prose-check` | Check the prose, plus figure resolution and table shape, against STYLE.md |
 | `just prose-check --list-rules` | Every rule, its severity, and how to configure it |
-| `just bib-audit` | Check every DOI against Crossref for retractions and dead links (network) |
+| `just bib-audit` | Check DOI metadata, retractions and dead links against Crossref/DataCite (network) |
 | `just viz` | Diagnostics about the draft -> `viz/`: nine plots plus `report.json` for tools |
 | `just density` | Numerals, parentheticals, acronyms, passives per 1,000 words, and section outliers |
 | `just setup` | Build the Python environment (uv, locked) |
@@ -513,10 +513,20 @@ that actually happen:
 
 `just preflight` is the day-of-submission command: fresh builds of both
 outputs, the whole `verify` gate, `check-stats-deep` (re-derives every
-generated number from the analysis and diffs), and `bib-audit` (every DOI
-against Crossref for retractions and dead links). Those last two are too slow
-and too network-bound for `verify`, and "run them before submitting" scattered
-across the docs is a ritual — this is the ritual as one command.
+generated number from the analysis and diffs), and `bib-audit` (every DOI's
+title, authors and publication details against Crossref or DataCite, plus
+retractions and dead links). Those last two are too slow and too network-bound
+for `verify`, and "run them before submitting" scattered across the docs is a
+ritual — this is the ritual as one command.
+
+The DOI audit does not mistake a resolving link for a verified citation. It
+compares each entry with the metadata registered by the publisher: title,
+author order, and year mismatches fail; venue, volume, issue, and page
+differences are printed for review because online-first and print records often
+differ there. Comparisons ignore capitalization, punctuation, markup, initials
+versus full given names, and the different dashes used for BibTeX page ranges.
+If a registrar omitted a field, the audit says nothing about that field rather
+than pretending it verified information it never received.
 
 **Neither output is tracked in git**, and neither is `.build-stamp`. Git keeps
 every version of a binary forever, a clone pays for all of them, and removing one

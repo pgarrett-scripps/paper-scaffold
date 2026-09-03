@@ -237,7 +237,7 @@ verify:
 # What it runs, in order: fresh builds of both outputs (as dependencies), the
 # whole verify gate, the deep stats check (re-runs the analysis behind the
 # numbers and diffs -- as slow as your gen_stats.py), and the bibliography audit
-# (network: every DOI checked against Crossref for retractions). Every stage
+# (network: registered metadata, dead links and retractions). Every stage
 # runs even after one fails, same as verify: the full list beats four rounds of
 # fix-and-rerun on submission day.
 #
@@ -560,8 +560,9 @@ prose-check:
 viz:
   @uv run --quiet python tools/viz.py
 
-# Every DOI in the bibliography, checked against Crossref: does it resolve, and
-# has the work been retracted?
+# Every DOI in the bibliography, checked against Crossref or DataCite: do the
+# title, authors and publication details match, does it resolve, and has the
+# work been retracted?
 #
 # NOT part of `just verify`, deliberately. It needs the network, and a gate that
 # can fail because an API was slow is a gate people learn to skip. Run it before
@@ -570,7 +571,7 @@ viz:
 #
 # Being offline is reported, not failed. That is a fact about your connection,
 # not a defect in the bibliography.
-# Check every DOI against Crossref for retractions and dead links (needs network)
+# Verify DOI metadata, retractions and dead links (needs network)
 bib-audit:
   @uv run --quiet python tools/bib_audit.py
 

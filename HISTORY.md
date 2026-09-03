@@ -42,6 +42,27 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.16.0
+
+`just bib-audit` verifies the citation attached to each DOI, not only the DOI
+itself. A resolving DOI used to pass even when an AI or a bad copy supplied the
+wrong title, authors, or year beside it. Crossref and DataCite responses now
+normalize into the same record shape and are compared with `references.bib`.
+Wrong identity fields fail preflight; venue, volume, issue, and pages are review
+warnings because registrars commonly disagree across online and print versions.
+The offline suite covers false title, author, year, venue, volume, issue, and
+page data, harmless formatting differences, DataCite records, and the command's
+failure status. Upgrade: copy tools/bib_audit.py, tests/run.py, justfile, and the
+README bibliography-audit description.
+
+The resolver rejoins citation clusters the 80-column reflow split across
+lines. Typst groups adjacent citations across a soft line break, so the PDF
+collapsed `@a @b @c\n@d @e @f` into one range; pandoc's Typst reader only
+groups citations on one line, and a real manuscript's Word export shipped
+reading "10-12 13-15" where the PDF read "10-15". Found by an author reading
+their own export. Only a single newline is joined -- a blank line is a
+paragraph break. Upgrade: copy tools/resolve_typst.py and tests/run.py.
+
 ## 3.15.1
 
 The Word export's author line carries the affiliation superscripts. The head
