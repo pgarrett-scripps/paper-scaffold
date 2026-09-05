@@ -42,6 +42,8 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 from resolve_typst import FLOAT_PREFIX, _call_span  # noqa: E402
 from typst_prose import CITE  # noqa: E402
+from bibliography import entries
+from manuscript_sources import mask
 
 SRC = ROOT / "paper.resolved.typ"
 OUT = ROOT / "paper.docx"
@@ -86,13 +88,11 @@ def check_citations(src: str, bib_paths: list[Path]) -> list[str]:
     matter, and each briefly failed this check as "@scripps not in the
     bibliography".
     """
-    cited = {m.group(0)[1:] for m in re.finditer(r"(?<![\w\\:./-])" + CITE, src)
+    cited = {m.group(0)[1:] for m in re.finditer(r"(?<![\w\\:./-])" + CITE, mask(src, strings=True))
              if m.group(0)[1:].split(":", 1)[0] not in FLOAT_PREFIX}
     known: set[str] = set()
     for p in bib_paths:
-        known |= {m.group(1) for m in
-                  re.finditer(r"(?m)^@\w+\{([^,\s]+)\s*,",
-                              p.read_text(errors="replace"))}
+        known.update(e["_key"] for e in entries(p))
     return sorted(cited - known)
 
 
@@ -105,7 +105,11 @@ def main() -> int:
 
     args = ["--resource-path", str(ROOT)]
     if bib:
-        missing = check_citations(src, [ROOT / b for b in bib])
+        try:
+            missing = check_citations(src, [ROOT / b for b in bib])
+        except (OSError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
         if missing:
             print("error: cited but not in the bibliography: "
                   + ", ".join(f"@{k}" for k in missing)
@@ -146,4 +150,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=OUT)
+    OUT = parser.parse_args().output
     raise SystemExit(main())

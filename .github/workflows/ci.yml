@@ -28,6 +28,9 @@ env:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      UV_LOCKED: "true"
+      UV_PYTHON: ${{ matrix.python }}
     strategy:
       fail-fast: false
       matrix:
@@ -36,6 +39,7 @@ jobs:
         # figures from the Word export (see the justfile comment), and a new one
         # changes HTML export in ways typst2docx.py has to keep up with.
         typst: ["0.14.2", "0.15.1"]
+        python: ["3.10", "3.12"]
 
     steps:
       # A shallow checkout is fine: no check reads git history any more. Staleness
@@ -94,7 +98,7 @@ jobs:
 
       # Build before verifying, exactly as CLAUDE.md tells a human to. Neither
       # output is tracked, so a fresh clone has neither and `just check` correctly
-      # asks for both. Building also writes the .build-stamp that check-build
+      # asks for both. Building also writes the .build-state/ that check-build
       # compares against.
       - run: just paper
       - run: just docx

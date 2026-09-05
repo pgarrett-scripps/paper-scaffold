@@ -88,14 +88,19 @@ Quote the word count and readability numbers `just paper` prints. Do not
 estimate them.
 
 Before a wording-only pass (yours or an agent's): `just edit-baseline`, edit,
-`just edit-check`. It proves nothing but wording changed -- a number may be
-dropped, never invented; references, floats and headings must survive exactly.
+`just edit-check`. It checks mechanical invariants -- a number may be dropped,
+never invented; references, floats and headings must survive exactly. Read the
+edited sentences for meaning even when the guard passes.
 
 Four packaged workflows ship as skills in `.claude/skills/` — `/copy-edit`
 (a wording pass bracketed by the edit guard), `/fix-verify` (clear a failing
 gate the intended way), `/declare-number` (route a typed numeral through the
 four tiers), `/new-figure` (all four steps, including the wordcount scope).
-Prefer invoking one over improvising the same workflow.
+Codex discovers the same files through `.agents/skills`, a relative symlink to
+`.claude/skills`. Use `/copy-edit` in Claude Code or `$copy-edit` in Codex
+(likewise for the other names), or select the skill from a matching request.
+Maintain one copy of the instructions under `.claude/skills`; do not duplicate
+them into the Codex path. Prefer the relevant skill over improvising its steps.
 
 Leave a note to self as `#todo("...")`, never as a comment. It renders as a
 loud marker in `just draft` and REFUSES to build in `just paper`, so an
@@ -130,7 +135,7 @@ What `verify` runs, and what each one is for:
 - **`just check`** -- a `paper.pdf` or `paper.docx` built from sources that have
   since changed, and `figures/` and `si/` older than the `analysis/` code behind
   them. Neither output is tracked in git; `just paper` and `just docx` record what
-  they rendered in `.build-stamp` and `just check-build` recompares it. No check
+  they rendered in `.build-state/` and `just check-build` recompares it. No check
   reads git history, so they all work outside a repository.
 
 `just check` deliberately does not check the audiobooks, and there is no upstream
@@ -146,6 +151,22 @@ Do not silence a prose-check finding by editing `tools/prose_check.py`. Add it t
 `prose-check.toml` with a comment saying why, so the exception is reviewable, and
 run `just prose-check --show-suppressed` occasionally to see what has
 accumulated.
+
+## Inspecting declarations
+
+Before changing a claim, use `just trace <id> --json` to find its source sites,
+value or asset, guards, inputs, and recorded consistency checks. Inspect the
+`status` field: `incomplete` means a check could not be established. Trace does
+not re-run analysis and cannot establish scientific correctness. Its usage
+index covers literal calls and literal Typst includes/imports.
+
+The edit guard now also checks statistic/asset calls, repeated citations,
+declarations, and the abstract. Old snapshots must be renewed before a new
+pass. It checks mechanical invariants; read the edited sentences for meaning.
+
+Build state lives under `.build-state/`, one record per output. Upgrading from
+`.build-stamp` requires fresh PDF and Word builds. A concurrent build or source
+edit during compilation is a failed build, not permission to weaken the check.
 
 ## Numbers about the draft
 

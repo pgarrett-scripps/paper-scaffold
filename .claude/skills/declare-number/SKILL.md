@@ -1,48 +1,61 @@
 ---
 name: declare-number
-description: Take a number typed in the prose (or about to be) and route it through the right tier — computed #s(), hand entry with a note, inline #lit() vouch, or a toml exception — then make the edit and prove nothing rendered differently.
+description: Connect a manuscript number to a computed statistic, documented hand entry, inline literal, or justified exception. Use when adding a number or resolving numerical provenance warnings.
 ---
 
-# Declare a number properly
+# Declare a manuscript number
 
-Input: one or more numerals the user names, or the current
-`unaccounted-number` / `derivable-number` warnings from `just prose-check`.
-For each, decide the tier by asking the questions IN THIS ORDER — each tier is
-a stronger claim than the one below it, and a number takes the strongest tier
-it can honestly hold.
+Work from the manuscript root and follow AGENTS.md/CLAUDE.md. Scope this to
+the numbers the user names or the numerical warnings being fixed. Inspect
+stats.json and use `just trace <id> --json` for candidate existing entries.
+Matching digits alone do not establish identity: check quantity, units,
+population, and context. Reuse the right existing ID rather than duplicate it.
 
-## The decision ladder
+When converting an existing literal without changing its meaning, run
+`just paper` then `just text-baseline` before editing. Preserve displayed
+numbers, units, and punctuation. Adding a requested result intentionally
+changes the text and does not require an unchanged-text comparison. The
+wording-only edit guard is unsuitable for intentional declaration changes.
 
-1. **Does the analysis compute it (or could `gen_stats.py` derive it from
-   data that exists)?** → Declare it in `analysis/scripts/gen_stats.py` with
-   `st.add("group.name", value, fmt=..., desc=...)`, seed a guard for whatever
-   the sentence assumes (`sign=`, `between=`), run `just assets`, and replace
-   the typed numeral with `#s("group.name")`.
-   **Check the rendering first**: the declared display (`value` + `fmt`) must
-   equal the typed string exactly, or the swap changes the paper — if it
-   differs, tell the user which digits would change and let them choose.
+## Choose the appropriate tier
 
-2. **No script can compute it, but it deserves an audit trail** (a protocol
-   figure, a vendor spec, a value from a cited paper)? → Add a hand entry to
-   `stats.json`: `value`, `fmt`, `origin.by = "hand"`, and an `origin.note`
-   naming the actual source ("Bruker timsTOF spec sheet", "protocol v3,
-   Table 1"). Guard it if the prose assumes a direction or range. Reference
-   it as `#s("id")`.
+1. **Computed result:** use real analysis and its inputs. Add a new entry
+   through gen_stats.py with `st.add(...)`, and declare the data read in
+   `st.write(inputs=[...])`. Seed fmt, desc, unit, and justified sign/range
+   guards for a new ID. Run `just assets`. Never turn a prose literal into a
+   generator constant and call that a reproducible calculation.
+2. **Externally sourced number:** when no project script computes it, add a
+   hand entry to stats.json with value, fmt, origin.by = "hand", and an
+   origin.note identifying the actual source and location. Include unit,
+   desc, and expect where useful. Reference it with `#s("id")`.
+3. **Deliberate prose literal:** use `#lit("40")` with the original digits.
+   This vouches only for that occurrence and only suppresses unaccounted-number.
+   It cannot suppress derivable-number. If a computed result shares the digits
+   but represents another quantity, investigate the collision rather than
+   assigning the wrong statistic.
+4. **Global value exception:** use prose-check.toml with a written reason only
+   when justified across the manuscript. Prefer a local declaration when other
+   occurrences of the same digits still need checking.
 
-3. **It is deliberate prose** — a temperature, a fold-range, a count nobody
-   computed? → Wrap it where it stands: `#lit("40")`. String argument, exact
-   digits as typed. This silences `unaccounted-number` at that spot only and
-   never silences `derivable-number` — if the wrapped value matches a
-   declared one, tier 1 was the right answer.
+For an existing computed entry, the generator owns value, checksum, and origin.
+Edit fmt, unit, desc, and expect in stats.json; changing generator seeds will
+not update them. Trace's display field shows the formatted statistic. Inspect
+all affected uses before changing a shared format or guard.
 
-4. **A value that recurs legitimately everywhere** (a year-like code, an
-   instrument model number)? → `[allow].unaccounted-number` in
-   `prose-check.toml`, with a comment giving the reason.
+For a literal conversion, compare that display and surrounding prose with the
+original. Do not silently substitute different digits. If the user already
+requested a numerical correction, make and report it; otherwise explain the
+discrepancy and obtain the missing author decision. Do not invent data or
+provenance when the source is unavailable.
 
-## Prove it
+## Validate
 
-`just render-stats && just paper` must build; the printed word count must not
-move for tier-3 wraps; `just prose-check` must show the warning gone (and the
-vouched-inline count up by exactly the wraps made); `just verify` clean. For
-tier 1–2, quote the new stats.json entry back to the user. If several numbers
-were routed, report the tier chosen per number in one table.
+Run `just fmt`, `just paper`, and `just prose-check`. For a conversion that
+should preserve the text, also run `just text-diff` and inspect its output;
+unchanged word counts alone cannot establish unchanged wording. If generated
+analysis changed, run `just check-stats-deep` to check re-derivation.
+
+Rebuild any other deliverable named stale, then finish with `just paper` and
+`just verify`. Report the ID or literal/exception chosen, deliberate display
+changes, check results, and exact word count/readability. If a comparison or
+re-derivation could not run, report that limit explicitly.

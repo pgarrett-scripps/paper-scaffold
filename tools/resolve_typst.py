@@ -85,6 +85,8 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import readability  # noqa: E402
 import typst_prose  # noqa: E402
+from manuscript_sources import mask
+from atomic_io import write_text
 
 OUT = ROOT / "paper.resolved.typ"
 ASSETS = ROOT / "assets.json"
@@ -420,8 +422,18 @@ def resolve_crossrefs(head: str, body: str) -> str:
         if cap:
             inserts.append((cap.end(), f"{SUPPLEMENT[prefix]} {num}: "))
 
+    # Ref options outside this resolver's supported subset must fail visibly;
+    # leaving them to pandoc can turn a reference into an empty link.
+    for part in (head, body):
+        for call in re.finditer(r"(?<![\w-])#?refn?\(", mask(part, strings=True)):
+            if _REF.match(part, call.start()) is None:
+                raise ResolveError("unsupported reference syntax; use ref(<label>) "
+                                   "or refn(<label>) with optional supplement: none")
+    definitions = mask(body, strings=True)
+    definitions = _REF.sub(lambda m: "".join("\n" if c == "\n" else " "
+                                            for c in m.group()), definitions)
     events = (
-        [(m.start(), "def", m) for m in _DEF.finditer(body)]
+        [(m.start(), "def", m) for m in _DEF.finditer(definitions)]
         + [(m.start(), "head", m) for m in _HEADING.finditer(body)])
     if _SI_MARK in body:
         events.append((body.index(_SI_MARK), "si", None))
@@ -712,7 +724,7 @@ def build() -> str:
 
 def main() -> int:
     try:
-        OUT.write_text(build())
+        write_text(OUT, build())
     except ResolveError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

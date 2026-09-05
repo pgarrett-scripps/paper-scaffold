@@ -96,7 +96,7 @@ echo "paper-scaffold: new manuscript"
 echo "  scaffold: $SCAFFOLD"
 echo ""
 
-ask DEST        "Destination directory"  "./my-paper"
+ask DEST        "Destination directory"  "../my-paper"
 ask TITLE       "Paper title"            "Untitled Manuscript"
 ask AUTHOR      "First author"           "$(git config user.name  2>/dev/null || echo 'Your Name')"
 ask EMAIL       "  their email"          "$(git config user.email 2>/dev/null || echo 'you@example.edu')"
@@ -115,7 +115,9 @@ if [ -e "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null)" ]; then
 fi
 mkdir -p "$DEST"
 DEST="$(cd "$DEST" && pwd)"
-[ "$DEST" != "$SCAFFOLD" ] || die "destination is the scaffold itself"
+case "$DEST/" in
+  "$SCAFFOLD/"*) die "destination must be outside the scaffold directory" ;;
+esac
 
 # ---------------------------------------------------------------------------
 # Copy. tar rather than cp so the AGENTS.md -> CLAUDE.md symlink survives as a
@@ -156,6 +158,17 @@ tar -C "$SCAFFOLD" -cf - \
     --exclude='./viz' \
     --exclude='./paper.docx' \
     --exclude='./paper.docx.html' \
+    --exclude='./paper.resolved.typ' \
+    --exclude='./.text-baseline' \
+    --exclude='./.edit-guard' \
+    --exclude='./.build-state' \
+    --exclude='./audio/*.m4b' \
+    --exclude='./audio/*.wav' \
+    --exclude='./audio/*.mp3' \
+    --exclude='./audio/*.opus' \
+    --exclude='./audio/paper_prose.txt' \
+    --exclude='./audio/cover_*.png' \
+    --exclude='./REVIEW.md' \
     --exclude='./MIGRATING.md' \
     . | tar -C "$DEST" -xf -
 
@@ -231,7 +244,8 @@ sub_let("paper-institution", tstr(env["INSTITUTION"]))
 sub_let("paper-bib-style", tstr(env["BIBSTYLE"]))
 
 kws = [k.strip() for k in env["KEYWORDS"].split(",") if k.strip()]
-sub_block("paper-keywords", "(" + ", ".join(tstr(k) for k in kws) + ")")
+sub_block("paper-keywords", "(" + ", ".join(tstr(k) for k in kws)
+          + ("," if len(kws) == 1 else "") + ")")
 
 # One author. A paper with more adds them here by hand, which is a two-line
 # edit against a worked example; guessing a delimiter for a list of
@@ -271,7 +285,7 @@ PY
 # manuscript does is fail its own gate over files the author never asked for,
 # which teaches them on day one that the gate is noise.
 #
-# Building also writes .build-stamp, which is what makes that gate pass. The stamp
+# Building also writes .build-state/, which is what makes that gate pass. The stamp
 # is untracked, so a collaborator who clones the new repository builds their own.
 #
 # The build is best-effort. It needs the network the first time (the arkheion

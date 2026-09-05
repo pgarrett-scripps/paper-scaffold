@@ -652,22 +652,8 @@ DOI_ERA = 2000
 
 
 def _bib_entries(path: Path) -> list[dict]:
-    """Every entry as {key, type, fields...}, or [] if the file cannot be read."""
-    try:
-        import bibtexparser
-    except ImportError:
-        return []
-    try:
-        db = bibtexparser.parse_file(str(path))
-    except Exception:
-        return []
-    out = []
-    for e in db.entries:
-        rec = {f.key.lower(): (f.value or "").strip("{} ") for f in e.fields}
-        rec["_key"] = e.key
-        rec["_type"] = (e.entry_type or "").lower()
-        out.append(rec)
-    return out
+    from bibliography import entries
+    return entries(path)
 
 
 def _normalize_doi(doi: str) -> str:
@@ -701,7 +687,10 @@ def check_bibliography(root: Path | None = None,
     bibs = sorted(r.glob("*.bib"))
     if not bibs:
         return []
-    entries = [e for b in bibs for e in _bib_entries(b)]
+    try:
+        entries = [e for b in bibs for e in _bib_entries(b)]
+    except (OSError, ValueError) as exc:
+        return [Finding("bibliography-parse", "error", str(exc))]
     if not entries:
         return []
 

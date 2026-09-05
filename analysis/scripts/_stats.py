@@ -65,10 +65,15 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 from _provenance import PAPER, caller_script, code_inputs, declared_inputs
+
+sys.path.insert(0, str(PAPER / "tools"))
+from manifest_validation import guard_errors, validate, ManifestError
+from atomic_io import write_text
 
 # At the manuscript root, not under si/, because this is no longer purely
 # generated output: `origin.by = "hand"` entries, and the fmt/unit/desc/expect
@@ -207,51 +212,9 @@ class Stats:
         each must fail loudly, because a guard that is silently not enforced is
         worse than no guard at all.
         """
-        if not expect:
-            return
-        unknown = set(expect) - {"sign", "min", "max"}
-        if unknown:
-            raise StatError(
-                f"{id!r}: expect in stats.json has unknown key(s) "
-                f"{', '.join(sorted(unknown))} -- only sign, min and max are "
-                f"understood, so this guard would never be enforced.")
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise StatError(
-                f"{id!r} has a guard in stats.json but the analysis now "
-                f"produces {value!r}, which is not numeric. Remove the guard "
-                f"from the file, or fix the analysis.")
-        v = float(value)
-        if v != v:
-            raise StatError(
-                f"{id!r} is NaN, which no guard can pass. The analysis "
-                f"produced a non-number; fix it before it reaches the prose.")
-        sign = expect.get("sign")
-        if sign is not None:
-            ok = {"+": v > 0, "-": v < 0, "nonzero": v != 0}
-            if sign not in ok:
-                raise StatError(
-                    f"{id!r}: expect.sign in stats.json must be '+', '-' or "
-                    f"'nonzero', got {sign!r}")
-            if not ok[sign]:
-                raise StatError(
-                    f"{id!r} is {v}, which violates sign '{sign}'.\n"
-                    f"  The prose is written assuming this number is "
-                    f"{ {'+': 'positive', '-': 'negative', 'nonzero': 'nonzero'}[sign] }. "
-                    f"Either the analysis changed meaning, or the sentence that "
-                    f"reads it needs rewording -- the guard lives in stats.json.")
-        lo, hi = expect.get("min"), expect.get("max")
-        for name, bound in (("min", lo), ("max", hi)):
-            if bound is not None and (isinstance(bound, bool)
-                                      or not isinstance(bound, (int, float))):
-                raise StatError(
-                    f"{id!r}: expect.{name} in stats.json is {bound!r}, not a "
-                    f"number -- a quoted bound is never compared, only refused.")
-        if (lo is not None and v < lo) or (hi is not None and v > hi):
-            band = f"[{lo if lo is not None else '-inf'}, {hi if hi is not None else 'inf'}]"
-            raise StatError(
-                f"{id!r} is {v}, outside the expected range {band}.\n"
-                f"  Usually a unit error or a changed denominator. Widen the "
-                f"band in stats.json if the new value is genuinely right.")
+        errors = guard_errors(value, expect)
+        if errors:
+            raise StatError(f"{id!r}: " + "; ".join(errors))
 
     def write(self, out: Path | None = None, *, inputs: list[str] = ()) -> int:
         """Merge these values into stats.json and report what is unguarded.
@@ -281,7 +244,7 @@ class Stats:
         # opt-in (`--deep`), because `just verify` must rebuild nothing: a project
         # whose gen_stats.py takes an hour cannot pay that on every run of the
         # gate, and the first version of this made it do exactly that.
-        p = out or Path(os.environ.get("PAPER_STATS_OUT") or OUT)
+        p = Path(os.environ["PAPER_STATS_OUT"]) if os.environ.get("PAPER_STATS_OUT") else (out or OUT)
         p.parent.mkdir(parents=True, exist_ok=True)
         mine = _caller_script()
 
@@ -294,6 +257,11 @@ class Stats:
                     f"{p.name} is not valid JSON ({e}), so this script cannot "
                     f"merge into it without losing whatever is there. Fix or "
                     f"delete the file.") from None
+        try:
+            if p.is_file():
+                validate(existing_doc, "stats")
+        except ManifestError as exc:
+            raise StatError(str(exc)) from None
         existing = existing_doc.get("values", {})
         if not isinstance(existing, dict):
             # Refuse, exactly like the invalid-JSON case above: treating a
@@ -307,7 +275,7 @@ class Stats:
         kept: dict[str, dict] = {}
         prior: dict[str, dict] = {}
         for id, rec in existing.items():
-            by = rec.get("origin", {}).get("by")
+            by = (rec.get("origin") or {}).get("by")
             if by == mine:
                 prior[id] = rec
             elif by is None and id in self._values:
@@ -370,12 +338,12 @@ class Stats:
                 old_v = old.get("value")
                 unchanged = (old_v == seed["value"]
                              and type(old_v) is type(seed["value"]))
-                at = (old.get("origin", {}).get("at") or _now()) if unchanged \
+                at = ((old.get("origin") or {}).get("at") or _now()) if unchanged \
                     else _now()
 
             # Enforced against the guard that governs this entry NOW -- the
             # file's for an existing one, the seed's for a new one.
-            self._enforce(id, entry["value"], entry.get("expect") or {})
+            self._enforce(id, entry["value"], entry.get("expect", {}))
             if entry.get("fmt"):
                 try:
                     format(entry["value"], entry["fmt"])
@@ -410,14 +378,19 @@ class Stats:
         extra = {k: v for k, v in existing_doc.items()
                  if k not in ("_about", "sources", "values")}
 
-        p.write_text(json.dumps(
+        write_text(p, json.dumps(
             {"_about": ABOUT,
              **extra,
              "sources": dict(sorted(sources.items())),
              "values": dict(sorted(merged.items()))},
             indent=2, sort_keys=False) + "\n")
+        receipt = os.environ.get("PAPER_STATS_RECEIPT")
+        if receipt:
+            write_text(Path(receipt), json.dumps({"token": os.environ.get("PAPER_STATS_TOKEN"),
+                       "by": mine, "ids": sorted(final), "output": str(p.resolve()),
+                       "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}))
         hand = sum(1 for v in merged.values()
-                   if v.get("origin", {}).get("by") == "hand")
+                   if (v.get("origin") or {}).get("by") == "hand")
 
         if overridden:
             ids = sorted({id for id, _ in overridden})

@@ -30,7 +30,9 @@ call ended the outer parenthetical early.
 An ordinary reference to @sec:second keeps its supplement. A bare-number one
 prints as Section #refn(<sec:second>) through the helper.
 
-Typst's own #ref(<sec:second>) form has to be stripped too, and is the more
+Typst's own #ref(
+  <sec:second>,
+) form has to be stripped too, and is the more
 natural thing for an author to write. A pattern that knew only the helper left a
 bare "ref" in the word count, the reading-level score and the narration, and went
 unnoticed because the PDF was correct throughout.

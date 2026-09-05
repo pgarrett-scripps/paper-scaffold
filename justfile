@@ -1,3 +1,5 @@
+set positional-arguments
+
 # Manuscript build (Typst). See README.md for the tour.
 #
 # CONVENTION: `just --list` shows the LAST comment line before each recipe as
@@ -255,7 +257,7 @@ preflight: paper docx
   just check-stats-deep || rc=1
   echo ""
   echo "=== bibliography (just bib-audit) ==="
-  just bib-audit || rc=1
+  just bib-audit --require-complete || rc=1
   echo ""
   if [ $rc -eq 0 ]; then
     echo "PREFLIGHT OK -- fresh builds, the full gate, re-derived numbers and the"
@@ -328,8 +330,8 @@ check-declared:
 # 0.02s and looked free, and on a real analysis would make the gate cost the
 # analysis.
 # Check stats.json: guards, provenance, checksums, and the hashes behind them
-check-stats:
-  @uv run --quiet python tools/check_stats.py
+check-stats *args:
+  @uv run --quiet python tools/check_stats.py "$@"
 
 # The strong check, and the expensive one: re-runs gen_stats.py and diffs every
 # value it owns against what the analysis produces now. Run it before submitting,
@@ -338,6 +340,10 @@ check-stats:
 # Re-run the analysis and diff every generated number against it
 check-stats-deep:
   @uv run --quiet python tools/check_stats.py --deep
+
+# Inspect a statistic/asset, its uses and checks; --json is the agent interface
+trace +args:
+  @uv run --quiet python tools/trace.py "$@"
 
 # Files the author declares worth watching, beyond what any generator knows it
 # read: a raw export, a protocol document, an upstream config. Declared by hand
@@ -370,8 +376,8 @@ adopt note="":
 # is now invisible. record() warns when a generator declares no inputs at all,
 # which is the nudge that replaces it.
 # Check assets.json: output hashes, generators, declared inputs, and references
-check-assets:
-  @uv run --quiet python tools/check_assets.py
+check-assets *args:
+  @uv run --quiet python tools/check_assets.py "$@"
 
 # The SI is included from si-body.typ as an appendix, so this single PDF holds the
 # whole manuscript; there is no separate supplementary.pdf. si-body.typ is
@@ -408,16 +414,12 @@ draft: render-stats
 # outlier list tripled the build output into a wall nobody read. The two
 # numbers a build should surface (how long, how readable) fit on nine lines.
 # Compile paper.typ -> paper.pdf, then print word counts and readability
-paper: render-stats
-  #!/usr/bin/env bash
-  set -euo pipefail
-  stamp=$(just _stamp-manuscript)
-  typst compile paper.typ
-  just _record-build paper.pdf "$stamp"
-  bash tools/wordcount.sh
-  echo ""
-  uv run --quiet python tools/readability.py
-  echo "  density and per-section outliers: just density"
+paper:
+  @uv run --quiet python tools/build_state.py paper
+  @bash tools/wordcount.sh
+  @echo ""
+  @uv run --quiet python tools/readability.py
+  @echo "  density and per-section outliers: just density"
 
 # See wordcount.typ for exactly what is excluded (refs, figures/tables, captions,
 # math, code) vs. included (headings, inline code).
@@ -439,7 +441,7 @@ readability:
 # after, diff. Word-level, because a reflow rewraps every line and a line diff
 # would report the whole paper changed.
 #
-# The baseline is local state like .build-stamp: untracked, disposable, and
+# The baseline is local state like .build-state/: untracked, disposable, and
 # meaningful only against the paper.pdf on this machine.
 # ---------------------------------------------------------------------------
 
@@ -465,11 +467,11 @@ resolve: render-stats
 
 # Snapshot the manuscript's numbers/refs/floats/headings before an editing pass
 edit-baseline tag="default":
-  @uv run --quiet python tools/prose_edit_guard.py snapshot {{tag}}
+  @uv run --quiet python tools/prose_edit_guard.py snapshot "$1"
 
 # Prove an editing pass changed only wording: nothing invented, nothing lost
 edit-check tag="default":
-  @uv run --quiet python tools/prose_edit_guard.py check {{tag}}
+  @uv run --quiet python tools/prose_edit_guard.py check "$1"
 
 # Snapshot the current paper.pdf's extracted text as the baseline for text-diff
 text-baseline:
@@ -543,8 +545,8 @@ watch: render-stats
 # a checker that fails the build over the word "very" gets disabled within a week.
 # Add --strict to treat warnings as failures.
 # Check the prose against the mechanical rules in STYLE.md and prose-check.toml
-prose-check:
-  @uv run --quiet python tools/prose_check.py
+prose-check *args:
+  @uv run --quiet python tools/prose_check.py "$@"
 
 # Pictures OF the manuscript, for revising it -- not pictures in it. Sentence
 # length, words per section, most-used words, a word cloud, and the age of the
@@ -572,8 +574,8 @@ viz:
 # Being offline is reported, not failed. That is a fact about your connection,
 # not a defect in the bibliography.
 # Verify DOI metadata, retractions and dead links (needs network)
-bib-audit:
-  @uv run --quiet python tools/bib_audit.py
+bib-audit *args:
+  @uv run --quiet python tools/bib_audit.py "$@"
 
 # Assert the prose extractors still handle every construct, and still do so after
 # a reflow. Runs against tests/fixture.typ, which is NOT part of the manuscript --
@@ -614,12 +616,8 @@ fmt-check:
 # a printed note. Read paper.resolved.typ when the output looks wrong -- it
 # is exactly what pandoc was fed.
 # Export paper.docx (Word, native equations), for journals/co-authors
-docx: resolve
-  #!/usr/bin/env bash
-  set -euo pipefail
-  stamp=$(just _stamp-manuscript)
-  uv run --quiet python tools/export_docx.py
-  just _record-build paper.docx "$stamp"
+docx:
+  @uv run --quiet python tools/build_state.py docx
 
 # The old docx route, kept as a fallback while the pandoc one earns trust.
 # Typst HTML export -> pandoc: --input docx=true bypasses the arkheion
@@ -629,14 +627,8 @@ docx: resolve
 # as images -- which is exactly why this is no longer the default. Typst's
 # "ignored during HTML export" warnings are expected and cost nothing.
 # Export paper.docx via the old HTML route (equations become images)
-docx-html: render-stats
-  #!/usr/bin/env bash
-  set -euo pipefail
-  stamp=$(just _stamp-manuscript)
-  typst compile --features html --input docx=true -f html paper.typ paper.docx.html
-  uv run --quiet python tools/typst2docx.py paper.docx.html paper.docx
-  rm -f paper.docx.html
-  just _record-build paper.docx "$stamp"
+docx-html:
+  @uv run --quiet python tools/build_state.py docx-html
 
 # ---------------------------------------------------------------------------
 # Generated assets. The contract: numbers and plots in the manuscript are written
@@ -743,7 +735,7 @@ audio-clean:
 # produced; this recompares both. No git, no mtimes -- mtimes are rewritten by a
 # clone or a checkout, which is why the git version existed in the first place.
 #
-# .build-stamp is itself untracked, and has to be: it describes local build output.
+# .build-state/ is itself untracked, and has to be: it describes local build output.
 # Tracking it would mean a rebuild on one machine reports every other checkout
 # stale, for a file those checkouts do not have.
 #
@@ -752,90 +744,11 @@ audio-clean:
 # Fail if paper.pdf or paper.docx no longer matches the source it was built from
 [private]
 check-build:
-  #!/usr/bin/env bash
-  set -uo pipefail
-  rc=0
-  now=$(just _stamp-manuscript)
-  for out in paper.pdf paper.docx; do
-    recipe=$([ "$out" = "paper.pdf" ] && echo "just paper" || echo "just docx")
-    was=$(grep -m1 "^$out " .build-stamp 2>/dev/null | cut -d" " -f2)
-    outwas=$(grep -m1 "^$out " .build-stamp 2>/dev/null | cut -d" " -f3)
-    if [ ! -f "$out" ]; then
-      echo "MISSING:  $out -- rebuild: $recipe"
-      rc=1
-    elif [ -z "$was" ]; then
-      # Built before this check existed, or written by something other than the
-      # recipe. Reported rather than guessed at: assuming current would hide the
-      # exact case the stamp is for.
-      echo "UNKNOWN:  $out has no entry in .build-stamp -- rebuild: $recipe"
-      rc=1
-    elif [ "$now" != "$was" ]; then
-      echo "STALE:    $out was built from different sources -- rebuild: $recipe"
-      rc=1
-    elif [ -z "$outwas" ]; then
-      # A stamp from before output hashes were recorded. One rebuild upgrades it.
-      echo "UNKNOWN:  $out predates output hashing in .build-stamp -- rebuild: $recipe"
-      rc=1
-    elif [ "$(sha256sum "$out" | cut -d" " -f1)" != "$outwas" ]; then
-      # The sources match, but the FILE is not what that build produced: it was
-      # overwritten, truncated, or restored from somewhere else after the build.
-      # Without this line, a paper.pdf copied in from Downloads passes as
-      # current -- the source stamp only proves a build happened, not that this
-      # file is its output.
-      echo "REPLACED: $out is not the file that build produced -- rebuild: $recipe"
-      rc=1
-    fi
-  done
-  [ $rc -eq 0 ] && echo "paper.pdf and paper.docx are current with the source"
-  exit $rc
+  @uv run --quiet python tools/build_state.py check
 
-# Hash of everything the manuscript renders: the hand-written sources and the
-# generated assets they pull in. stats.typ and wordcount.typ are included here and
-# were missing from the git-based check they replace, so editing either one used
-# to leave the PDF looking current.
-#
-# The tools that SHAPE the output are in the list too: render_stats.py and
-# typst_prose.py decide what every number looks like; resolve_typst.py and
-# export_docx.py build the Word file, typst2docx.py its fallback. A change to
-# any of them changes what a build produces, which is the definition of stale
-# this stamp exists to catch. The rest of tools/ only measures or checks, so
-# it stays out.
-#
-# stats.json is hashed WITHOUT its `pinned` block, through python3 rather than
-# find. The pins are bookkeeping about external files; nothing a build renders
-# reads them, and hashing them whole meant `just pin` -- a pure record-keeping
-# command -- marked both outputs STALE and demanded a rebuild that would change
-# nothing.
+# Source fingerprint for diagnosis; builds also record compiler dependencies.
 _stamp-manuscript:
-  #!/usr/bin/env bash
-  set -uo pipefail
-  { find paper.typ config.typ si-body.typ stats.typ assets.typ \
-      assets.json wordcount.typ references.bib si figures *.csl \
-      tools/render_stats.py tools/typst_prose.py tools/typst2docx.py \
-      tools/resolve_typst.py tools/export_docx.py \
-      -type f -not -name '*.pyc' \
-      -print0 2>/dev/null | sort -z | xargs -0 -r sha256sum
-    python3 - 2>/dev/null <<'PY' || true
-  import hashlib, json
-  d = json.load(open("stats.json"))
-  d.pop("pinned", None)
-  h = hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()
-  print(f"{h}  stats.json(sans pinned)")
-  PY
-  } | sha256sum | cut -d" " -f1
-
-# Record that <name> was just built from the sources hashed in <srchash>, which
-# the build recipe captured BEFORE compiling. Rewrites only its own line, so
-# building the PDF does not claim the Word export is current too. The line also
-# records the hash of the output itself, so check-build can tell "this file is
-# that build's product" from "a build happened once".
-_record-build name srchash:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  touch .build-stamp
-  { grep -v "^{{name}} " .build-stamp || true; } > .build-stamp.tmp
-  echo "{{name}} {{srchash}} $(sha256sum "{{name}}" | cut -d" " -f1)" >> .build-stamp.tmp
-  mv .build-stamp.tmp .build-stamp
+  @uv run --quiet python tools/build_state.py stamp
 
 # Remove the built PDF and Word export
 clean:

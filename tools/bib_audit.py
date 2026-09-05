@@ -310,7 +310,7 @@ def _fetch(doi: str, timeout: float):
 
 
 def audit(timeout: float = 15.0, *, entries: list[dict] | None = None,
-          fetch=None, pause: bool = True) -> int:
+          fetch=None, pause: bool = True, require_complete: bool = False) -> int:
     """Audit the bibliography; injectable inputs keep regression tests offline."""
     entries = _entries() if entries is None else entries
     if not entries:
@@ -395,14 +395,22 @@ def audit(timeout: float = 15.0, *, entries: list[dict] | None = None,
             or metadata_warnings):
         print("every DOI resolves, matches its bibliography entry, and none "
               "is retracted")
-    return rc
+    return rc or (2 if errors and require_complete else 0)
 
 
 def main() -> int:
-    timeout = 15.0
-    if "--timeout" in sys.argv:
-        timeout = float(sys.argv[sys.argv.index("--timeout") + 1])
-    return audit(timeout)
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--timeout", type=float, default=15.0)
+    parser.add_argument("--require-complete", action="store_true")
+    args = parser.parse_args()
+    if args.timeout <= 0:
+        parser.error("timeout must be positive")
+    try:
+        return audit(args.timeout, require_complete=args.require_complete)
+    except (OSError, ValueError) as exc:
+        print(f"bibliography audit failed: {exc}")
+        return 1
 
 
 if __name__ == "__main__":

@@ -1,0 +1,196 @@
+"""Build and fingerprint deliverables, publishing only a complete stable build.
+
+State is per output. Compiler dependency files supplement literal source
+discovery; newly discovered dependencies trigger a second build with those
+inputs fingerprinted before any transformation. Checks never compile anything.
+"""
+from __future__ import annotations
+
+import argparse
+from contextlib import contextmanager
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+from atomic_io import write_text
+from manuscript_sources import source_files
+from manifest_validation import load
+
+ROOT = Path(__file__).resolve().parent.parent
+BUILD_TOOLS = ("render_stats.py", "typst_prose.py", "typst2docx.py",
+               "resolve_typst.py", "export_docx.py", "readability.py",
+               "refs_div.lua", "manuscript_sources.py", "manifest_validation.py",
+               "atomic_io.py", "build_state.py", "bibliography.py")
+INTERMEDIATES = {"stats-rendered.json", "paper.resolved.typ"}
+
+
+def digest(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def snapshot(root: Path, dependencies=()) -> dict[str, str | None]:
+    paths = {root / name for name in source_files(root)}
+    paths.update(root / name for name in ("wordcount.typ", "assets.json",
+                                         "pyproject.toml", "uv.lock", "justfile"))
+    paths.update(root / "tools" / name for name in BUILD_TOOLS)
+    paths.update(root.glob("*.bib"))
+    paths.update(root.glob("*.csl"))
+    for folder in ("figures", "si", "csl"):
+        paths.update(p for p in (root / folder).rglob("*") if p.is_file())
+    paths.update(Path(p) if Path(p).is_absolute() else root / p for p in dependencies)
+    result = {}
+    for path in sorted(paths):
+        if path.name in INTERMEDIATES:
+            continue
+        try:
+            name = path.relative_to(root).as_posix()
+        except ValueError:
+            name = str(path)
+        result[name] = digest(path) if path.is_file() else None
+    stats = root / "stats.json"
+    if stats.is_file():
+        doc = load(stats, "stats")
+        doc.pop("pinned", None)
+        result["stats.json"] = hashlib.sha256(json.dumps(doc, sort_keys=True).encode()).hexdigest()
+    else:
+        result["stats.json"] = None
+    return result
+
+
+def state_path(root: Path, output: str) -> Path:
+    return root / ".build-state" / f"{output}.json"
+
+
+def dependency_list(root: Path, output: str) -> list[str]:
+    path = root / ".build-state" / f"{output}.deps.json"
+    if not path.exists():
+        return []
+    data = json.loads(path.read_text())
+    if not isinstance(data, list) or any(not isinstance(p, str) for p in data):
+        raise ValueError(f"invalid dependency state: {path}")
+    return data
+
+
+@contextmanager
+def build_lock(root: Path):
+    folder = root / ".build-state"
+    folder.mkdir(exist_ok=True)
+    with (folder / "build.lock").open("a+b") as stream:
+        try:
+            if os.name == "nt":
+                import msvcrt
+                stream.seek(0); stream.write(b"0"); stream.flush(); stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise ValueError("another manuscript build is running; retry after it finishes") from None
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(stream, fcntl.LOCK_UN)
+
+
+def build(mode: str, root: Path = ROOT) -> int:
+    output = "paper.pdf" if mode == "paper" else "paper.docx"
+    with build_lock(root), tempfile.TemporaryDirectory(dir=root / ".build-state") as tmp:
+        staged = Path(tmp) / output
+        depfile = Path(tmp) / "deps.json"
+        dependencies = dependency_list(root, output)
+        # A first compilation discovers package files and dynamic image/data
+        # paths. Repeat once with them in the pre-transform snapshot.
+        for attempt in range(2):
+            before = snapshot(root, dependencies)
+
+            def run(*args):
+                subprocess.run(args, cwd=root, check=True)
+
+            run(sys.executable, str(root / "tools/render_stats.py"))
+            if mode == "docx":
+                run(sys.executable, str(root / "tools/resolve_typst.py"))
+                run(sys.executable, str(root / "tools/export_docx.py"), "--output", str(staged))
+            else:
+                target = staged if mode == "paper" else Path(tmp) / "paper.html"
+                flags = [] if mode == "paper" else ["--features", "html", "--input", "docx=true", "-f", "html"]
+                run("typst", "compile", *flags, "--deps", str(depfile), "paper.typ", str(target))
+                if mode == "docx-html":
+                    run(sys.executable, str(root / "tools/typst2docx.py"), str(target), str(staged))
+                dependencies = json.loads(depfile.read_text())["inputs"]
+            after = snapshot(root, dependencies)
+            write_text(root / ".build-state" / f"{output}.deps.json", json.dumps(dependencies))
+            if before == after:
+                os.replace(staged, root / output)
+                write_text(state_path(root, output), json.dumps({
+                    "schema_version": 1, "mode": mode, "sources": before,
+                    "dependencies": dependencies, "output_hash": digest(root / output)}, indent=2))
+                return 0
+            # Only new dependencies justify automatic retry. Changed sources
+            # are the author's edit, and must never be represented as built.
+            changed = any(after.get(path) != value for path, value in before.items())
+            if changed or attempt:
+                raise ValueError("sources changed during the build; last good output preserved, rerun the build")
+            print("new compiler dependencies discovered; rebuilding with their source hashes", flush=True)
+    return 1
+
+
+def check(root: Path = ROOT) -> list[dict]:
+    out = []
+    for output, recipe in (("paper.pdf", "just paper"), ("paper.docx", "just docx")):
+        status = "current"
+        try:
+            if not (root / output).is_file():
+                status = "missing"
+            elif not state_path(root, output).is_file():
+                status = "unknown"
+            else:
+                state = json.loads(state_path(root, output).read_text())
+                if state.get("schema_version") != 1:
+                    status = "unknown"
+                elif snapshot(root, state["dependencies"]) != state["sources"]:
+                    status = "stale"
+                elif digest(root / output) != state["output_hash"]:
+                    status = "replaced"
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            status = "unknown"
+        out.append({"output": output, "status": status, "command": recipe})
+    return out
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=("paper", "docx", "docx-html", "check", "stamp"))
+    args = parser.parse_args()
+    try:
+        if args.command == "stamp":
+            print(hashlib.sha256(json.dumps(snapshot(ROOT), sort_keys=True).encode()).hexdigest())
+            return 0
+        if args.command != "check":
+            return build(args.command)
+        rows = check()
+        for row in rows:
+            if row["status"] != "current":
+                print(f"{row['status'].upper()}: {row['output']} -- rebuild: {row['command']}")
+        if all(row["status"] == "current" for row in rows):
+            print("paper.pdf and paper.docx are current with the source")
+            return 0
+        return 1
+    except (OSError, ValueError, subprocess.CalledProcessError) as exc:
+        print(f"build failed: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

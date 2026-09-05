@@ -4,11 +4,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Typst 0.14+](https://img.shields.io/badge/Typst-0.14%2B-239dad)
 
-A reusable Typst manuscript directory where every number, figure and table is
-**traced to the analysis that produced it** and checked for staleness: your
-scripts write them, the prose references them by id, and a typed or drifted
-value fails a check instead of shipping. Around that: PDF and Word export,
-word counts, readability and style checks, and offline audiobook narration.
+A reusable Typst manuscript directory that connects declared numbers, figures,
+and tables to their analysis or documented source. Scripts generate results,
+the prose references them by id, and checks report drift and typed numerals
+for review. It also provides PDF and Word export, word counts, readability and
+style checks, and offline audiobook narration.
 
 New paper: quick start below. Existing manuscript: [MIGRATING.md](MIGRATING.md).
 
@@ -34,7 +34,7 @@ scripted run needs no terminal:
 
 **Do not start a paper with `cp -r`.** It copies `.git` too, so `just version`
 reports the *scaffold's* last commit as the manuscript's state — confidently, and
-wrongly. It also drags along `.build-stamp`, which then claims the new paper's
+wrongly. It also drags along `.build-state/`, which then claims the new paper's
 outputs were built from sources it has never seen.
 
 Then, in the new directory:
@@ -46,8 +46,9 @@ Then, in the new directory:
 4. Put your analysis in `analysis/`, keeping `just assets` as its front door. Or
    delete `analysis/` entirely if the paper has no generated assets.
 
-Nothing else should need editing. `just verify` is the gate that says whether the
-directory is in a shippable state.
+Nothing else should need editing. Use `just verify` for local consistency
+checks and `just preflight` before an actual submission. Neither replaces
+reviewing the manuscript's scientific content.
 
 Three parts are optional. `analysis/` (no generated assets) and `audio/` (no
 narration) can simply be deleted: every recipe and check adapts rather than
@@ -74,9 +75,10 @@ have to drop their import. The exact edits are under
 | `just readability` | Flesch-Kincaid / reading ease / fog without rebuilding |
 | `just assets` | Regenerate every generated figure, table and prose number (delegates to `analysis/`) |
 | `just check` | Report every artifact that has fallen behind its source |
+| `just trace <id> --json` | Inspect a statistic or asset, its uses, provenance, and checks as structured data |
 | `just pin` | Record hashes for the files listed under `pinned` in `stats.json` |
 | `just text-baseline` / `text-diff` | Snapshot the PDF's words; word-level diff after a structural refactor |
-| `just edit-baseline` / `edit-check` | Prove a copy-edit pass changed only wording: numbers, refs, floats, headings survive |
+| `just edit-baseline` / `edit-check` | Check that wording edits preserve retained numbers, helper IDs, citations, declarations, and structure |
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
 | `just prose-check` | Check the prose, plus figure resolution and table shape, against STYLE.md |
 | `just prose-check --list-rules` | Every rule, its severity, and how to configure it |
@@ -91,21 +93,89 @@ have to drop their import. The exact edits are under
 
 ## Working with an AI
 
-CLAUDE.md is the standing brief for any agent editing the manuscript, and the
-gates are what make delegation safe: `edit-check` makes an invented numeral
-fatal, `#lit()`/`#s()` make numbers tamper-evident, `verify` makes "done"
-machine-checkable. On top of that, four packaged workflows ship as skills in
-`.claude/skills/` and travel with `new-paper.sh` into every derived paper:
+Open the manuscript repository in Claude Code or Codex and give your editing
+request. Both use the same standing instructions: `AGENTS.md` links to
+`CLAUDE.md`. The agent edits source files and runs the pipeline through `just`.
+No MCP server is required.
+
+Four workflows ship as skills. Their maintained files live in `.claude/skills/`;
+`.agents/skills` is a relative symlink to that directory so Codex discovers the
+same instructions. Both paths travel with `new-paper.sh` into derived papers.
 
 | Skill | Does |
 |---|---|
-| `/copy-edit` | Wording-only pass (grammar, tighten, de-hedge), bracketed by `edit-baseline`/`edit-check` |
-| `/fix-verify` | Clear a failing gate with the intended fix per finding class — never by weakening a check |
-| `/declare-number` | Route a typed numeral through the four tiers, prove nothing rendered differently |
-| `/new-figure` | Generator, `record()`, id reference, wordcount scope — all four steps, proven by the gate |
+| `copy-edit` | Polish the requested prose while guarding retained numbers, helper IDs, citations, and structure |
+| `fix-verify` | Diagnose failed or incomplete checks and repair the cause while preserving author edits |
+| `declare-number` | Connect a number to the right source; check that a literal conversion preserves displayed text |
+| `new-figure` | Add a generated plot/table, declaration, caption, citations, and the required imports and checks |
 
-Each ends by running the check that proves it behaved, so an agent cannot
-report success without the pipeline agreeing.
+For example, use `/copy-edit Shorten the Results section` in Claude Code or
+`$copy-edit Shorten the Results section` in Codex. The workflows can also be
+selected from a matching plain-language request. Start a new agent session
+after installing the shared paths and check that these four skills appear in
+its skill list. Discovery locations are documented by
+[Claude Code](https://code.claude.com/docs/en/skills) and
+[Codex](https://learn.chatgpt.com/docs/build-skills).
+
+The skills instruct the agent to run the relevant checks and report their
+results. Checks establish mechanical consistency; the agent must still read
+the edited prose for scientific meaning. Instructions alone do not force an
+agent to run a check. A check that could not finish must be reported as
+incomplete, not passed.
+
+## Tracing numbers and assets
+
+Use `just trace <id>` before editing a claim or its supporting asset:
+
+```bash
+just trace effect.treated_over_control
+just trace fig.example --json
+```
+
+`--json` emits exactly one JSON object on stdout. The stable envelope contains
+`schema_version` (currently 1), `id`, `status`, `exit_code`, and `findings`.
+A completed inspection also returns the declaration, display value for a
+statistic, declared input hashes, usage locations (`path`, `line`, `context`),
+and suggested commands. Findings carry stable rule IDs. Suggestions are never
+executed automatically, and some findings require an author decision instead
+of a command.
+
+`status` is `ok`, `failed`, or `incomplete`. `exit_code` is respectively 0, 1,
+or 2; an invalid request also uses 2. The underlying Python CLI returns those
+codes. `just` collapses failed recipes to a nonzero wrapper status, so agents
+should use the JSON fields to distinguish failure from incomplete inspection.
+If an ID exists in both manifests, select `--kind stats` or `--kind assets`.
+
+Trace checks recorded consistency. It does not run the analysis or establish
+scientific correctness. Usage discovery follows literal calls and literal
+Typst includes/imports from the manuscript entrypoints; dynamically computed
+IDs and paths are outside that source index. Comments, raw examples, and old
+`paper.resolved.typ` output do not count as uses. Missing declared inputs are
+reported as incomplete, not silently treated as verified.
+
+The command behavior matters as much as its name:
+
+| Intent | Command | Cost and changes |
+|---|---|---|
+| Understand one declaration | `just trace <id> --json` | Reads sources/declarations; may refresh the local hash cache; never runs analysis |
+| Make a wording pass | `just edit-baseline`, edit, `just edit-check` | Checks literal numbers, helper IDs, citation occurrences, headings, and declarations, including the abstract and literal includes |
+| Build deliverables | `just paper`, `just docx` | Writes build artifacts; never regenerates analysis outputs |
+| Check current work | `just verify` | Cheap local checks; rebuilds nothing |
+| Refresh declared results | `just assets` | Runs analysis and updates tracked generated outputs; potentially expensive |
+| Check a submission | `just preflight` | Builds outputs, runs gates and deep statistics, and requires online bibliography checks to complete |
+
+The edit guard protects mechanical invariants, not prose meaning. Numeric
+statements may be dropped, but new or substituted statistic calls, changed
+asset calls, and edited declarations fail. Snapshots from before this protection
+was added must be recorded again before starting another pass.
+
+## Project scope
+
+The scaffold supports writing and checking a manuscript, linking claims to
+declared results, and producing deliverables. Agents use the same source files
+and commands as authors, with shared skills for the recurring workflows.
+Keep changes focused on concrete manuscript problems and preserve the cheap
+local checks, generated-file ownership, and existing export paths.
 
 ## The ideas
 
@@ -502,14 +572,19 @@ new commit, and a date-based check would then nag with no way to satisfy it.
 that actually happen:
 
 - `paper.pdf` or `paper.docx` built from sources that have since changed. `just
-  paper` and `just docx` record the hash of what they rendered in `.build-stamp`;
-  `just check-build` recompares it. The source hash is captured *before* the
-  compile, so an edit saved mid-build errs toward stale rather than current.
+  paper` and `just docx` record the hash of what they rendered in `.build-state/`;
+  `just check-build` recompares it. Hashes are captured before rendering stats
+  or resolving exports, and checked again before replacing the deliverable.
+  A source edit during the build preserves the last good output and fails.
+  Compiler dependencies, included chapters, CSL files, and the Word filter
+  participate in the check. Concurrent manuscript builds are refused.
 - An output that is **not the file that build produced** — overwritten,
   truncated, or restored from somewhere else. The stamp records the output's own
   hash too; without it, a `paper.pdf` copied in from Downloads passes as
   current, because the source stamp only proves a build happened.
-- `figures/` and `si/` older than the `analysis/` code that generates them.
+
+The declaration checks in `just verify` also compare generated figures, tables,
+and statistics against their recorded code, data, and analysis environment.
 
 `just preflight` is the day-of-submission command: fresh builds of both
 outputs, the whole `verify` gate, `check-stats-deep` (re-derives every
@@ -518,6 +593,12 @@ title, authors and publication details against Crossref or DataCite, plus
 retractions and dead links). Those last two are too slow and too network-bound
 for `verify`, and "run them before submitting" scattered across the docs is a
 ritual — this is the ritual as one command.
+
+Preflight requires a completed DOI audit (`bib-audit --require-complete`).
+Network failures cannot produce a successful submission gate. The standalone
+audit remains tolerant of an offline connection. A deep statistics check that
+cannot run or obtain a fresh writer receipt also exits nonzero; it never treats
+a copy of the old values as proof of regeneration.
 
 The DOI audit does not mistake a resolving link for a verified citation. It
 compares each entry with the metadata registered by the publisher: title,
@@ -528,13 +609,13 @@ versus full given names, and the different dashes used for BibTeX page ranges.
 If a registrar omitted a field, the audit says nothing about that field rather
 than pretending it verified information it never received.
 
-**Neither output is tracked in git**, and neither is `.build-stamp`. Git keeps
+**Neither output is tracked in git**, and neither is `.build-state/`. Git keeps
 every version of a binary forever, a clone pays for all of them, and removing one
 means rewriting history. Ship the PDF as a release asset or a CI artifact.
 
 That is also why staleness is a content hash rather than a commit date: nothing
 here reads git history any more, so the checks work in an exported tree, a shallow
-clone, or no repository at all. `.build-stamp` stays untracked because it
+clone, or no repository at all. `.build-state/` stays untracked because it
 describes *local* build output — tracking it would let a rebuild on one machine
 report every other checkout stale.
 

@@ -68,6 +68,10 @@ def code_inputs() -> dict[str, str]:
             "analysis/scripts/_assets.py",
             "analysis/scripts/_stats.py"}
     out: dict[str, str] = {}
+    for name in ("analysis/pyproject.toml", "analysis/uv.lock"):
+        path = PAPER / name
+        if path.is_file():
+            out[name] = sha(path)
     for mod in list(sys.modules.values()):
         f = getattr(mod, "__file__", None)
         if not f:

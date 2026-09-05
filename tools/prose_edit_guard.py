@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard for a copy-edit pass: prove that only wording changed.
+"""Guard the mechanical invariants of a copy-edit pass.
 
 STYLE.md permits dropping a number from the main text; it never permits editing
 one. It also forbids adding, deleting, or renumbering a figure, table, heading,
@@ -10,7 +10,7 @@ rather than eyeballed.
     just edit-check             # after it
 
 Snapshots live in .edit-guard/ at the manuscript root: local state like
-.build-stamp, gitignored, disposable. A tag argument keeps several passes
+.build-state/, gitignored, disposable. A tag argument keeps several passes
 apart (`just edit-baseline round2`); omitted, it is "default".
 
 Upstreamed from the koth manuscript, which wrote it for exactly this and ran
@@ -23,10 +23,15 @@ content legitimately moves between them):
                disappear (rule 7 permits thinning), but one that appears nowhere
                it appeared before is either invented or altered, and both are
                fatal.
-  labels       <fig:...>, <tbl:...>, <sec:...>, <eq:...> definitions. Exact set.
-  refs         Every @citekey and #ref(<...>) target. Exact set.
+  stats        Literal s()/n() calls, including IDs. May disappear, not change.
+  assets       Literal fig()/tbl() calls, including IDs. Exact occurrences.
+  labels       <fig:...>, <tbl:...>, <sec:...>, <eq:...> definitions. Exact counts.
+  refs         Every @citekey and #ref(<...>) target. Exact counts.
   figures      Count of #figure( blocks. Exact.
   headings     The heading text, in order, per file. Exact.
+
+Declarations must also survive unchanged. These checks cannot prove that a
+wording change preserves meaning or evaluate arbitrary Typst code.
 
 The numeric tokenizer deliberately does NOT use a greedy [\\d,]* : that swallows
 a sentence comma into the token, so "12.6, and" becomes "12.6," and every such
@@ -40,17 +45,18 @@ import re
 import sys
 from pathlib import Path
 
+from manuscript_sources import mask, matches, CALL, source_files
+from atomic_io import write_text
+
 # The manuscript root, one level up: this file lives in tools/.
 ROOT = Path(__file__).resolve().parent.parent
 SNAP_DIR = ROOT / ".edit-guard"
 
-FILES = ["paper.typ", "si-body.typ"]
-
 # A number: digits, optionally with internal separators, but never trailing
 # punctuation. Handles 12.6, 1,177, 79.4, 0.01, 2026-07-31, 8-11.
-NUM = re.compile(r"(?<![A-Za-z0-9_.])[+-]?\d[\d.,:/-]*\d|(?<![A-Za-z0-9_.])\d")
-LABEL = re.compile(r"\)\s*<((?:fig|tbl|eq|sec):[A-Za-z0-9_-]+)>|"
-                   r"^(?:=+|#heading)[^\n]*?<((?:sec):[A-Za-z0-9_-]+)>", re.M)
+NUM = re.compile(r"(?<![A-Za-z0-9_.])[+-]?\d(?:[\d.,:/-]*\d)?")
+LABEL = re.compile(r"\)\s*<((?:fig|tbl|tab|eq|sec):[A-Za-z0-9_:-]+)>|"
+                   r"^(?:=+|#heading)[^\n]*?<((?:sec):[A-Za-z0-9_:-]+)>", re.M)
 REF = re.compile(r"@([A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*)|"
                  r"#refn?\(\s*<([^>]+)>")
 HEADING = re.compile(r"(?m)^(=+)\s+([^\n<]+?)(?:\s*<[^>]+>)?\s*$")
@@ -61,24 +67,41 @@ def _nums(text: str) -> list[str]:
 
 
 def profile(path: Path) -> dict:
-    src = path.read_text()
+    src = mask(path.read_text())
+    calls = matches(CALL, src)
     return {
         "numbers": _nums(src),
-        "labels": sorted({g for m in LABEL.finditer(src) for g in m.groups() if g}),
-        "refs": sorted({g for m in REF.finditer(src) for g in m.groups() if g}),
+        "stats": sorted(m.group(1) + ":" + m.group(2) for m in calls
+                        if m.group(1) in ("s", "n")),
+        "assets": sorted(m.group(1) + ":" + m.group(2) for m in calls
+                         if m.group(1) in ("fig", "tbl")),
+        "labels": sorted(g for m in LABEL.finditer(src) for g in m.groups() if g),
+        "refs": sorted(g for m in REF.finditer(src) for g in m.groups() if g),
         "figures": src.count("#figure("),
         "headings": [f"{m.group(1)} {m.group(2).strip()}" for m in HEADING.finditer(src)],
     }
 
 
+def current() -> dict:
+    files = source_files(ROOT)
+    # Includes/imports carry content and macros that can change rendered values.
+    return {f: profile(ROOT / f) for f in files}
+
+
+def declarations() -> dict:
+    return {name: json.loads((ROOT / name).read_text()).get("values", {})
+            for name in ("stats.json", "assets.json") if (ROOT / name).is_file()}
+
+
 def snapshot(tag: str) -> int:
     SNAP_DIR.mkdir(parents=True, exist_ok=True)
-    data = {f: profile(ROOT / f) for f in FILES}
-    (SNAP_DIR / f"{tag}.json").write_text(json.dumps(data, indent=1))
+    data = current()
+    write_text(SNAP_DIR / f"{tag}.json", json.dumps(
+        {"schema_version": 2, "files": data, "declarations": declarations()}, indent=1))
     n = sum(len(d["numbers"]) for d in data.values())
     print(f"snapshot '{tag}': {n:,} numeric tokens, "
           f"{sum(len(d['refs']) for d in data.values())} refs, "
-          f"{sum(d['figures'] for d in data.values())} figures across {len(FILES)} files")
+          f"{sum(d['figures'] for d in data.values())} figures across {len(data)} files")
     return 0
 
 
@@ -94,13 +117,21 @@ def check(tag: str) -> int:
     nowhere it appeared before still fails, which is the property that matters.
     """
     from collections import Counter
-    want = json.loads((SNAP_DIR / f"{tag}.json").read_text())
-    now = {f: profile(ROOT / f) for f in FILES}
-    ok = True
+    saved = json.loads((SNAP_DIR / f"{tag}.json").read_text())
+    if saved.get("schema_version") != 2:
+        print("snapshot predates helper/abstract protection; record a new edit-baseline")
+        return 2
+    want, now = saved["files"], current()
+    if set(want) != set(now):
+        print("  FATAL -- manuscript source files changed")
+        return 1
+    ok = saved["declarations"] == declarations()
+    if not ok:
+        print("  FATAL -- statistic or asset declarations changed")
 
     def union(src, key):
         out = Counter()
-        for f in FILES:
+        for f in src:
             out += Counter(src[f][key])
         return out
 
@@ -116,20 +147,24 @@ def check(tag: str) -> int:
         print(f"  note -- {len(dropped)} numeric token(s) dropped from the "
               f"manuscript (allowed; confirm each is in a table): {dropped[:12]}")
 
-    for key in ("labels", "refs"):
+    added_stats = union(now, "stats") - union(want, "stats")
+    if added_stats:
+        print(f"  FATAL -- statistic calls invented or changed: {dict(added_stats)}")
+        ok = False
+    for key in ("labels", "refs", "assets"):
         a, b = union(want, key), union(now, key)
         lost, gained = sorted((a - b).elements()), sorted((b - a).elements())
         if lost or gained:
             print(f"  FATAL -- {key} changed. lost={lost[:8]} gained={gained[:8]}")
             ok = False
-    fa = sum(want[f]["figures"] for f in FILES)
-    fb = sum(now[f]["figures"] for f in FILES)
+    fa = sum(want[f]["figures"] for f in want)
+    fb = sum(now[f]["figures"] for f in want)
     if fa != fb:
         print(f"  FATAL -- #figure count {fa} -> {fb}")
         ok = False
 
     # --- per-file, informational: where things moved ---
-    for f in FILES:
+    for f in want:
         a, b = want[f], now[f]
         moved = len(set(a["numbers"]) ^ set(b["numbers"]))
         if a["headings"] != b["headings"]:
@@ -149,11 +184,18 @@ def main() -> int:
     if len(sys.argv) < 2 or sys.argv[1] not in ("snapshot", "check"):
         sys.exit(__doc__)
     tag = sys.argv[2] if len(sys.argv) > 2 else "default"
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", tag):
+        print("tag must contain only letters, numbers, underscores, or hyphens")
+        return 2
     if sys.argv[1] == "check" and not (SNAP_DIR / f"{tag}.json").is_file():
         print(f"no snapshot '{tag}' -- record one BEFORE the editing pass: "
               f"just edit-baseline" + (f" {tag}" if tag != "default" else ""))
         return 1
-    return snapshot(tag) if sys.argv[1] == "snapshot" else check(tag)
+    try:
+        return snapshot(tag) if sys.argv[1] == "snapshot" else check(tag)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"edit guard could not complete: {exc}")
+        return 2
 
 
 if __name__ == "__main__":

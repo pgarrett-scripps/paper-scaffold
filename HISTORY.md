@@ -42,6 +42,46 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.17.0
+
+Hardening the checks around AI editing, plus `just trace <id> --json` as a small
+inspection interface. Trace returns source locations, declarations, guards,
+input hashes, findings, and an explicit checked/failed/incomplete status. It
+never runs analysis; dynamically computed calls are outside its source index.
+
+- Reflowed native references no longer count as float definitions in Word.
+- The edit guard protects helper IDs, citation occurrences, declarations, the
+  abstract, and literal includes. Older snapshots require a new baseline.
+- Build fingerprints include compiler dependencies, included chapters, nested
+  CSL files, and the Word filter. A Python tool captures before transformations,
+  checks again before publishing, preserves last good outputs, and refuses
+  overlapping builds. Per-output records replace the old `.build-stamp` file
+  under `.build-state/`; the staleness check still rebuilds nothing.
+- Deep statistics require an invocation-bound receipt from `Stats.write()`;
+  a no-op or unavailable generator cannot count as re-derived. Submission also
+  requires the bibliography audit to complete; standalone offline use remains
+  tolerant. Writer and checker share numerical guard validation.
+- Analysis lock/config hashes join provenance. Manifest writes are atomic;
+  malformed declarations and nonfinite values receive named errors.
+- New papers exclude local artifacts and correctly emit singleton keyword
+  tuples. Documented CLI flags reach their tools. BibTeX parsing is shared;
+  indented entries work and malformed blocks fail visibly. Tests run without
+  typstyle while explicitly skipping the reflow-dependent check.
+- Python 3.10 declares its TOML dependency; CI checks 3.10/3.12 and rejects lock
+  drift. A separate hardening suite covers the new contracts.
+- Claude Code and Codex discover the same four skills through a relative
+  `.agents/skills` link to `.claude/skills`. The workflows preserve author
+  changes during repairs, distinguish incomplete checks, and use tracing to
+  establish which declaration a claim actually refers to.
+
+Upgrade: copy tools/, tests/, justfile, and analysis/scripts/_stats.py,
+_assets.py, and _provenance.py together; merge the pyproject/lock dependency
+change. Run `just assets` to record environment provenance, then `just paper`
+and `just docx` to create the new build records. Renew any edit baseline before
+starting another wording pass. Copy `.claude/skills/` and the `.agents/skills`
+symlink together for shared skill discovery, and start a new agent session.
+No manuscript syntax changes are required.
+
 ## 3.16.0
 
 `just bib-audit` verifies the citation attached to each DOI, not only the DOI
