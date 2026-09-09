@@ -1,74 +1,21 @@
 #!/usr/bin/env python3
-"""Resolve the manuscript into plain Typst that another tool can read.
+"""Adapt a captured Typst manuscript for Pandoc and Word.
 
-WHY THIS EXISTS. `paper.typ` is not self-contained Typst: it imports a
-template, calls `#s()`, `#lit()`, `fig()` and `tbl()`, and pulls its identity
-out of `config.typ`. Typst itself evaluates all of that. Nothing else does --
-and "nothing else" now matters, because pandoc can read Typst and turn it into
-a Word file with NATIVE equations or into LaTeX for a journal that demands it.
-Pandoc's reader is a real evaluator, so it does not choke on the syntax; it
-chokes on our helpers, which are ours to resolve.
+The shared intermediate is produced by manuscript_snapshot.py. It preserves
+Typst's template, include scopes and reference identities for the PDF build.
+This module subsequently removes layout machinery Pandoc cannot use, emits
+plain front matter and tables, and writes actual compiled reference numbers
+into the Word projection. Never use this projection as the PDF input.
 
-So this writes `paper.resolved.typ`: the same manuscript with every helper
-replaced by what it produces. One resolution step, feeding every export path.
-The alternative -- teaching each exporter about `#s()` -- is how the word
-count, the readability report and the narrator each grew their own copy of the
-same logic, and how the same construct got fixed three separate times.
+The shared build supplies --root, --numbers and --output. The numbers come
+from Typst evaluating that same captured manuscript, including unlabeled
+floats and SI counter resets. The pure resolve_crossrefs helper retains its
+legacy fallback for callers/tests; publishing always supplies native numbers.
 
-IT IS A BUILD ARTIFACT, exactly like stats-rendered.json: gitignored,
-rewritten by every recipe that needs it, never edited by hand, and deleted
-when its source is gone. Read it when a conversion looks wrong -- it is
-precisely what the converter was fed.
-
-WHAT IT RESOLVES, and why each one has to go:
-
-    #s("id") / #n("id")   the value. Left alone, pandoc reports `Identifier
-                          "s" not found` and stops.
-    #lit("2.2")           the literal, as typed.
-    #todo("...")          REFUSED, not stripped. `just paper` panics on an
-                          unresolved note; an export is a real deliverable
-                          too, so it gets the same answer rather than a
-                          quietly cleaner file.
-    fig("id", width: 70%) image("figures/x.png", width: 70%), from assets.json
-    tbl("id")             the generated table's source, inlined
-    #refn(<x>)            ref(<x>, supplement: none) -- the helper's own
-                          definition, written out because its `#let` is
-                          stripped along with the other directive lines
-    @fig:x  @sec:x        #ref(<fig:x>). THIS ONE IS NOT COSMETIC: pandoc
-                          reads `@fig` as a CITATION KEY and leaves `:x` as
-                          stray text, so a cross-reference silently becomes
-                          the words "[fig]:x" in the output. Only float and
-                          section prefixes are rewritten; every other @key is
-                          a real citation and must stay one.
-    #ref(<fig:x>)         the literal text "Figure 3" / "Table S2", numbered
-                          exactly as the PDF numbers it. Pandoc renders a
-                          Typst ref as an EMPTY link, so every
-                          cross-reference silently vanished from the Word
-                          file; there is no target document to link into, and
-                          what the PDF shows at that spot is plain text.
-    #bibliography(...)    carried through from paper.typ's back matter, with
-                          the `style:` identifier resolved to its literal
-                          from config.typ. Left behind with the rest of the
-                          back matter, every citation in the export dangled.
-                          Placed in the PDF's position -- after the back
-                          matter, BEFORE the SI -- not appended at the end,
-                          where the reference list landed under the SI.
-
-The count that numbers cross-references is also written into the definitions:
-"Figure 3: " onto each caption, "2.1." onto each heading. Pandoc numbers
-nothing, so the Word file showed prose saying "Figure 3" above captions that
-carried no number at all.
-
-Front matter is queried out of `config.typ` with `typst query` -- real Typst
-evaluating the real file -- rather than parsed with a regex here. The template
-itself is dropped: a converter cannot use Typst layout primitives, and a
-journal supplies its own class file anyway. What the template SHOWS is not:
-the back matter between BODY END and the bibliography (data availability,
-authors, acknowledgment), the keywords and TOC graphic, and the SI's title
-block all travel, rebuilt as plain content -- see _back_matter, _toc_block
-and _si_title.
-
-Usage:  just resolve            # -> paper.resolved.typ
+paper.resolved.typ at the project root remains a generated compatibility
+preview of paper.word.typ inside the latest snapshot. Edit the manuscript
+sources, never either generated file. A direct invocation without --numbers
+runs the shared build, just like `just resolve`.
 """
 from __future__ import annotations
 
@@ -90,6 +37,7 @@ from atomic_io import write_text
 
 OUT = ROOT / "paper.resolved.typ"
 ASSETS = ROOT / "assets.json"
+NATIVE_NUMBERING = None
 
 ABOUT = ("// GENERATED by tools/resolve_typst.py -- do not edit, do not commit.\n"
          "// The manuscript with every helper resolved, for pandoc. Edit\n"
@@ -356,7 +304,7 @@ _FIGURE_OPEN = re.compile(r"#?figure\(")
 _CAPTION = re.compile(r"caption:\s*\[")
 
 
-def resolve_crossrefs(head: str, body: str) -> str:
+def resolve_crossrefs(head: str, body: str, native: list[dict] | None = None) -> str:
     """Every ref call becomes the literal text the PDF shows for it.
 
     Pandoc renders a Typst ref as an EMPTY link -- there is no page number to
@@ -388,6 +336,9 @@ def resolve_crossrefs(head: str, body: str) -> str:
     body, body_spans = _protect_raw(body)
 
     numbered: dict[str, str] = {}
+    actual = {f'<{r["label"]}>': r for r in native or [] if r["label"]}
+    native_heads = iter(r for r in native or []
+                        if r["kind"] == "heading" and r["number"] is not None)
     counters = {"fig": 0, "tbl": 0, "eq": 0}
     levels: list[int] = []
     si = False
@@ -402,10 +353,20 @@ def resolve_crossrefs(head: str, body: str) -> str:
     # belongs to. Computed on the raw-protected body: a `#figure(` quoted in
     # backticks is prose, not a float.
     fig_spans = []
-    for fm in _FIGURE_OPEN.finditer(body):
+    for fm in _FIGURE_OPEN.finditer(mask(body, strings=True)):
         end = _paren_end(body, fm.end() - 1)
         if end is not None:
             fig_spans.append((fm.start(), end))
+
+    if native is not None:
+        figures = [r for r in native if r["kind"] == "figure"]
+        if len(figures) != len(fig_spans):
+            raise ResolveError("Word export cannot match all compiled figures to source; "
+                               "use explicit figure() calls for exported figures")
+        for (start, end), row in zip(fig_spans, figures):
+            cap = _CAPTION.search(body, start, end)
+            if cap and row["number"] is not None:
+                inserts.append((cap.end(), f'{row["supplement"]} {row["number"]}: '))
 
     def caption_insert(label_at: int, prefix: str, num: str) -> None:
         """Queue "Figure 3: " onto the caption of the float labeled here.
@@ -446,10 +407,21 @@ def resolve_crossrefs(head: str, body: str) -> str:
             levels = levels[:depth] + [0] * (depth - len(levels))
             levels[depth - 1] += 1
             joined = ".".join(str(n) for n in levels)
-            inserts.append((m.end(1),
-                            f" S{joined}" if si else f" {joined}."))
+            if native is None:
+                inserts.append((m.end(1), f" S{joined}" if si else f" {joined}."))
+            else:
+                row = next(native_heads, None)
+                if row is None:
+                    raise ResolveError("Word export cannot match heading numbering to Typst")
+                inserts.append((m.end(1), " " + row["number"]))
         else:
             prefix = m.group(1)
+            if native is not None:
+                row = actual.get(m.group(0))
+                if row is None or row["number"] is None:
+                    continue
+                numbered[m.group(0)] = row["number"].rstrip(".")
+                continue
             # A sec label names the heading it follows -- usually on the same
             # line, on its own line when typstyle wraps a long title. Either
             # way its def event sorts after the heading's bump, so "the
@@ -468,6 +440,9 @@ def resolve_crossrefs(head: str, body: str) -> str:
     for at, text in sorted(inserts, reverse=True):
         body = body[:at] + text + body[at:]
 
+    if native is not None and next(native_heads, None) is not None:
+        raise ResolveError("Word export did not preserve every numbered heading")
+
     def ref(m: re.Match) -> str:
         hash, label, bare = m.group(1), m.group(2), bool(m.group(3))
         if label not in numbered:
@@ -477,8 +452,8 @@ def resolve_crossrefs(head: str, body: str) -> str:
                 f"matter, or nowhere. The reader would get prose pointing at "
                 f"nothing.")
         prefix = label[1:].split(":", 1)[0]
-        text = numbered[label] if bare else \
-            f"{SUPPLEMENT[prefix]} {numbered[label]}"
+        supplement = actual[label]["supplement"] if native is not None else SUPPLEMENT[prefix]
+        text = numbered[label] if bare else f"{supplement} {numbered[label]}"
         # Markup-mode `#ref(...)` becomes plain prose; a code-mode call sits
         # in an argument list, where bare words are an error and a content
         # block `[...]` is the literal it meant.
@@ -487,6 +462,39 @@ def resolve_crossrefs(head: str, body: str) -> str:
     head = _restore_raw(_REF.sub(ref, head), head_spans)
     body = _restore_raw(_REF.sub(ref, body), body_spans)
     return (head + body).replace(_SI_MARK, "")
+
+
+def export_includes(src: str, path: Path, stack=()) -> str:
+    """Inline captured includes for Word, preserving nested relative paths."""
+    if path in stack:
+        raise ResolveError(f"cyclic include: {path}")
+    stack = (*stack, path)
+    visible = mask(src, strings=True)
+    edits = []
+    for m in re.finditer(r'(#?)include\s+"([^"]+)"', src):
+        if not visible[m.start():m.start() + 1].strip():
+            continue
+        target = (ROOT / m[2].lstrip("/") if m[2].startswith("/")
+                  else path.parent / m[2]).resolve()
+        if not target.is_relative_to(ROOT.resolve()):
+            raise ResolveError(f"include outside captured manuscript: {m[2]}")
+        content = export_includes(target.read_text(), target, stack)
+        content = resolve_notation(content, {}, str(target.relative_to(ROOT)))
+        mark = _SI_MARK + "\n" if target == ROOT / "si-body.typ" else ""
+        edits.append((m.start(), m.end(), m[1] + "[\n" + mark + content + "\n]"))
+    # Resolve image paths against the file they were written in, before the
+    # include loses that scope. Pandoc receives project-relative paths.
+    for m in re.finditer(r'(?<![\w.-])image\(\s*"([^"]+)"', src):
+        if not visible[m.start():m.start() + 1].strip():
+            continue
+        target = (ROOT / m[1].lstrip("/") if m[1].startswith("/")
+                  else path.parent / m[1]).resolve()
+        if not target.is_relative_to(ROOT.resolve()):
+            raise ResolveError(f"image outside captured manuscript: {m[1]}")
+        edits.append((m.start(1), m.end(1), target.relative_to(ROOT).as_posix()))
+    for start, end, value in sorted(edits, reverse=True):
+        src = src[:start] + value + src[end:]
+    return src
 
 
 def _paren_end(src: str, at: int) -> int | None:
@@ -646,6 +654,8 @@ def _toc_block(paper_src: str, assets: dict) -> str:
                                            "paper.typ (toc-caption)")
                     block += f"\n\n_{cap}_"
                     break
+    if NATIVE_NUMBERING is not None:
+        block = export_includes(block, ROOT / "paper.typ")
     return block
 
 
@@ -658,6 +668,8 @@ def build() -> str:
     meta = _query_front_matter()
     paper_src = (ROOT / "paper.typ").read_text()
     body = readability.slice_body(paper_src)
+    if NATIVE_NUMBERING is not None:
+        body = export_includes(body, ROOT / "paper.typ")
     body = resolve_notation(body, assets, "paper.typ")
 
     # Back matter and the bibliography, IN THE PDF'S ORDER: main text, then
@@ -684,11 +696,12 @@ def build() -> str:
     # landed on. Appending anyway would put the entire SI in twice -- once
     # here, once through the inliner below -- silently.
     si = ROOT / "si-body.typ"
-    if si.is_file() and not re.search(r'#include\s+"/?si-body\.typ"', body):
+    if si.is_file() and _SI_MARK not in body and not re.search(r'#include\s+"/?si-body\.typ"', body):
         # The marker sits on its own line so the SI's first heading still
         # starts a line, which is what the heading scan anchors on.
+        si_src = export_includes(si.read_text(), si) if NATIVE_NUMBERING is not None else si.read_text()
         body += ("\n\n" + _SI_MARK + "\n" + _si_title(meta)
-                 + resolve_notation(si.read_text(), assets, "si-body.typ"))
+                 + resolve_notation(si_src, assets, "si-body.typ"))
 
     # Any OTHER include inside the body is inlined where it stands. The SI,
     # when its include survived inside the markers, is marked here instead:
@@ -707,6 +720,8 @@ def build() -> str:
     affils = "\n".join(f"{i + 1}. {a}" for i, a in
                        enumerate(meta.get("affils", [])))
     abstract = resolve_notation(_abstract(), assets, "config.typ (abstract)")
+    if NATIVE_NUMBERING is not None:
+        abstract = export_includes(abstract, ROOT / "config.typ")
     keywords = ", ".join(meta.get("keywords") or [])
     toc = _toc_block(paper_src, assets)
 
@@ -719,7 +734,7 @@ def build() -> str:
         + (f"*Keywords:* {keywords}\n\n" if keywords else "")
         + (toc + "\n\n" if toc else "")
     )
-    return resolve_crossrefs(head, body) + "\n"
+    return resolve_crossrefs(head, body, NATIVE_NUMBERING) + "\n"
 
 
 def main() -> int:
@@ -734,4 +749,19 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Adapt a captured manuscript for Word")
+    parser.add_argument("--root", type=Path, default=ROOT)
+    parser.add_argument("--output", type=Path, default=OUT)
+    parser.add_argument("--numbers", type=Path)
+    args = parser.parse_args()
+    if args.numbers is None:
+        # Direct invocations use the shared build too. Only the internal Word
+        # adapter is allowed to consume a pre-captured tree and numbering map.
+        from build_state import build as build_manuscript
+        raise SystemExit(build_manuscript("resolve", args.root.resolve()))
+    ROOT, OUT = args.root.resolve(), args.output.resolve()
+    ASSETS = ROOT / "assets.json"
+    typst_prose.STATS_JSON = ROOT / "stats.json"
+    NATIVE_NUMBERING = json.loads(args.numbers.read_text()) if args.numbers else None
     raise SystemExit(main())

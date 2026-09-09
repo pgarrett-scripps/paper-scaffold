@@ -65,7 +65,7 @@ def split_bibliography(src: str) -> tuple[str, list[str], str | None]:
     call = _call_span(src, "#bibliography(")
     if call is None:
         return src, [], None
-    paths = re.findall(r'"([^"]+\.(?:bib|yml|yaml|json))"', call)
+    paths = [p.lstrip("/") for p in re.findall(r'"([^"]+\.(?:bib|yml|yaml|json))"', call)]
     style = re.search(r'style:\s*"([^"]+)"', call)
     title = re.search(r"title:\s*\[([^\]]*)\]", call)
     heading = (f"= {title.group(1) if title else 'Bibliography'}"
@@ -103,7 +103,7 @@ def main() -> int:
         return 1
     src, bib, style = split_bibliography(SRC.read_text())
 
-    args = ["--resource-path", str(ROOT)]
+    args = ["--fail-if-warnings", "--resource-path", str(ROOT)]
     if bib:
         try:
             missing = check_citations(src, [ROOT / b for b in bib])
@@ -153,5 +153,8 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=OUT)
-    OUT = parser.parse_args().output
+    parser.add_argument("--root", type=Path, default=ROOT)
+    parser.add_argument("--source", type=Path, default=SRC)
+    args = parser.parse_args()
+    OUT, ROOT, SRC = args.output, args.root, args.source
     raise SystemExit(main())

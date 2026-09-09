@@ -153,7 +153,17 @@ class Hardening(unittest.TestCase):
                 Path(args[-1]).write_text("complete output")
                 Path(args[args.index("--deps") + 1]).write_text('{"inputs": ["paper.typ", "dynamic.csv"]}')
 
-        with patch.object(build_state.subprocess, "run", side_effect=run), contextlib.redirect_stdout(io.StringIO()):
+        def capture(root, folder, sources, dependencies):
+            # The dependency retry belongs to the build coordinator. The
+            # snapshot renderer has its own real-compiler tests.
+            folder.mkdir()
+            (folder / "paper.pdf").write_text("complete output")
+            (folder / "paper.word.typ").write_text("Original.")
+            return {"id": "fixture"}
+
+        with patch.object(build_state.subprocess, "run", side_effect=run), \
+                patch.object(build_state, "prepare_snapshot", side_effect=capture), \
+                contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(build_state.build("paper", self.root), 0)
         self.assertEqual(len(calls), 2)
         self.assertEqual(build_state.check(self.root)[0]["status"], "current")

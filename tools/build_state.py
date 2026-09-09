@@ -15,6 +15,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import shutil
 
 from atomic_io import write_text
 from manuscript_sources import source_files
@@ -24,7 +25,8 @@ ROOT = Path(__file__).resolve().parent.parent
 BUILD_TOOLS = ("render_stats.py", "typst_prose.py", "typst2docx.py",
                "resolve_typst.py", "export_docx.py", "readability.py",
                "refs_div.lua", "manuscript_sources.py", "manifest_validation.py",
-               "atomic_io.py", "build_state.py", "bibliography.py")
+               "atomic_io.py", "build_state.py", "bibliography.py",
+               "manuscript_snapshot.py", "review.py")
 INTERMEDIATES = {"stats-rendered.json", "paper.resolved.typ"}
 
 
@@ -104,8 +106,20 @@ def build_lock(root: Path):
                 fcntl.flock(stream, fcntl.LOCK_UN)
 
 
+def prepare_snapshot(root: Path, folder: Path, sources: dict, dependencies: list) -> dict:
+    from manuscript_snapshot import materialize, query_numbers, project_word, seal
+    from review import make_document
+    materialize(root, folder, sources)
+    subprocess.run(["typst", "compile", "--root", str(folder),
+                    str(folder / "paper.typ"), str(folder / "paper.pdf")],
+                   cwd=folder, check=True)
+    project_word(folder, query_numbers(folder))
+    write_text(folder / "document.json", json.dumps(make_document(folder), ensure_ascii=False))
+    return seal(folder, sources, dependencies)
+
+
 def build(mode: str, root: Path = ROOT) -> int:
-    output = "paper.pdf" if mode == "paper" else "paper.docx"
+    output = "paper.pdf" if mode in ("paper", "resolve") else "paper.docx"
     with build_lock(root), tempfile.TemporaryDirectory(dir=root / ".build-state") as tmp:
         staged = Path(tmp) / output
         depfile = Path(tmp) / "deps.json"
@@ -119,23 +133,44 @@ def build(mode: str, root: Path = ROOT) -> int:
                 subprocess.run(args, cwd=root, check=True)
 
             run(sys.executable, str(root / "tools/render_stats.py"))
-            if mode == "docx":
-                run(sys.executable, str(root / "tools/resolve_typst.py"))
-                run(sys.executable, str(root / "tools/export_docx.py"), "--output", str(staged))
-            else:
-                target = staged if mode == "paper" else Path(tmp) / "paper.html"
-                flags = [] if mode == "paper" else ["--features", "html", "--input", "docx=true", "-f", "html"]
-                run("typst", "compile", *flags, "--deps", str(depfile), "paper.typ", str(target))
-                if mode == "docx-html":
-                    run(sys.executable, str(root / "tools/typst2docx.py"), str(target), str(staged))
-                dependencies = json.loads(depfile.read_text())["inputs"]
+            # Discover actual inputs before capturing them, including dynamic
+            # image/data paths. This probe is never published as the final PDF.
+            run("typst", "compile", "--deps", str(depfile), "paper.typ", str(Path(tmp) / "probe.pdf"))
+            dependencies = json.loads(depfile.read_text())["inputs"]
             after = snapshot(root, dependencies)
             write_text(root / ".build-state" / f"{output}.deps.json", json.dumps(dependencies))
             if before == after:
+                folder = Path(tmp) / "manuscript"
+                manifest = prepare_snapshot(root, folder, before, dependencies)
+                if mode in ("paper", "resolve"):
+                    shutil.copyfile(folder / "paper.pdf", staged)
+                elif mode == "docx":
+                    run(sys.executable, str(root / "tools/export_docx.py"),
+                        "--root", str(folder), "--source", str(folder / "paper.word.typ"),
+                        "--output", str(staged))
+                else:
+                    target = folder / "paper.html"
+                    run("typst", "compile", "--root", str(folder), "--features", "html",
+                        "--input", "docx=true", "-f", "html", str(folder / "paper.typ"), str(target))
+                    run(sys.executable, str(root / "tools/typst2docx.py"), str(target), str(staged))
+                if snapshot(root, dependencies) != before:
+                    raise ValueError("sources changed during the build; last good output preserved, rerun the build")
+                saved = root / ".build-state" / "manuscripts" / manifest["id"]
+                saved.parent.mkdir(exist_ok=True)
+                if saved.exists():
+                    from manuscript_snapshot import validate
+                    validate(saved)
+                else:
+                    os.replace(folder, saved)
+                # Compatibility preview for people inspecting the Word adapter.
+                write_text(root / "paper.resolved.typ", (saved / "paper.word.typ").read_text())
+                write_text(root / ".build-state" / "manuscript.json", json.dumps({
+                    "id": manifest["id"], "path": saved.relative_to(root).as_posix()}))
                 os.replace(staged, root / output)
                 write_text(state_path(root, output), json.dumps({
                     "schema_version": 1, "mode": mode, "sources": before,
-                    "dependencies": dependencies, "output_hash": digest(root / output)}, indent=2))
+                    "dependencies": dependencies, "manuscript_id": manifest["id"],
+                    "output_hash": digest(root / output)}, indent=2))
                 return 0
             # Only new dependencies justify automatic retry. Changed sources
             # are the author's edit, and must never be represented as built.
@@ -171,7 +206,7 @@ def check(root: Path = ROOT) -> list[dict]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("paper", "docx", "docx-html", "check", "stamp"))
+    parser.add_argument("command", choices=("paper", "resolve", "docx", "docx-html", "check", "stamp"))
     args = parser.parse_args()
     try:
         if args.command == "stamp":

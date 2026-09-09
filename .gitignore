@@ -21,6 +21,9 @@ paper-draft.pdf
 # Snapshots of the manuscript's mechanical properties (numbers, refs, floats,
 # headings), for `just edit-check` around a copy-edit pass. Same contract.
 .edit-guard/
+# Named manuscript versions and their local HTML comparison. These are user
+# review history, not disposable build cache; only remove deliberately.
+.review/
 
 # Rendered from stats.json by tools/render_stats.py: the display strings Typst
 # reads. Derived, not source -- stats.json holds the value and the format spec,

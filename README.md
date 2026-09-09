@@ -78,6 +78,8 @@ have to drop their import. The exact edits are under
 | `just trace <id> --json` | Inspect a statistic or asset, its uses, provenance, and checks as structured data |
 | `just pin` | Record hashes for the files listed under `pinned` in `stats.json` |
 | `just text-baseline` / `text-diff` | Snapshot the PDF's words; word-level diff after a structural refactor |
+| `just review-baseline <name>` | Save a resolved manuscript version, including its figures and bibliography |
+| `just review <name> [new-name]` | Highlight changes against the current manuscript or another saved version |
 | `just edit-baseline` / `edit-check` | Check that wording edits preserve retained numbers, helper IDs, citations, declarations, and structure |
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
 | `just prose-check` | Check the prose, plus figure resolution and table shape, against STYLE.md |
@@ -176,6 +178,55 @@ declared results, and producing deliverables. Agents use the same source files
 and commands as authors, with shared skills for the recurring workflows.
 Keep changes focused on concrete manuscript problems and preserve the cheap
 local checks, generated-file ownership, and existing export paths.
+
+## Reviewing changes between versions
+
+Save the version you have finished reviewing, then compare after editing:
+
+```bash
+just review-baseline reviewed
+# Edit prose or regenerate analysis outputs.
+just review reviewed
+```
+
+Open `.review/review.html`. It shows the previous and current passages side by
+side, highlights added and removed words, and includes tables, equations,
+captions, figures, and the reference list. The section navigator shows where each edit belongs; **Next** / **Previous**
+(or **J** / **K**) move between edits. **Content edits** hides automatic citation
+renumbering; choose **All changes** to include it or **Full paper** for context.
+Changed numbers are highlighted as complete values. Unchanged passages appear
+once in Full paper mode. A changed number is
+visible even when its `#s("id")` call did not change. Figures are stored with
+each version, so overwriting a plot does not change what the old version shows.
+Soft line wrapping does not count as a writing edit. Citation renumbering is
+distinguished from changing the cited work. Moved passages may appear as a
+removal and an addition; formatting rules and page layout are not compared.
+
+`just review-versions` lists saved names without rebuilding.
+
+Names are permanent: a command refuses to overwrite an existing version. To
+compare two saved versions, use `just review reviewed revised`. Saved versions
+live in `.review/versions/`, outside the disposable `.build-state/` cache.
+They are local and gitignored; back up `.review/` if you want to retain this
+review history. New papers do not inherit it. Neither review command reruns
+analysis. Saving or comparing against current work makes a fresh strict build,
+so unresolved notes and missing inputs fail visibly.
+
+PDF, Word, and review now share a captured intermediate manuscript under
+`.build-state/manuscripts/<id>/`. Its `paper.typ` contains resolved literal
+statistic calls and asset paths while retaining Typst imports, include scopes,
+labels, equations, and layout rules. It includes copies of the input files.
+Typst supplies the actual heading and float numbers for the Word adaptation.
+`paper.word.typ` is that adaptation; the root `paper.resolved.typ` remains a
+convenient preview of it. Both are generated and must not be hand-edited.
+`just resolve` refreshes this intermediate and its PDF.
+
+The snapshot manifest records input and output hashes and the Typst version.
+The HTML report embeds images and works offline. Recompiling a saved source tree
+still requires the external toolchain, fonts, and Typst packages; a snapshot
+does not vendor those. Custom Typst constructs must be supported by the Word
+adapter as well as Typst. A mismatch in exported figures or heading numbering
+fails the shared build rather than silently omitting content.
 
 ## The ideas
 

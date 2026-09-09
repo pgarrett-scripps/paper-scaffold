@@ -42,6 +42,31 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.18.0
+
+PDF, Word, and revision review now use a shared captured manuscript. Literal
+statistics and asset paths are resolved while Typst layout and include scopes
+survive. Word uses the compiled heading/float numbers, including unlabeled
+figures, instead of independently guessing them.
+
+`just review-baseline <name>` saves a version with its figures and bibliography;
+`just review <name> [new-name]` writes an offline HTML comparison. Versions are
+immutable, local, and excluded from new-paper copies. The existing edit guard
+and PDF text-diff commands keep their separate purposes.
+
+Section links locate edits, complete numbers are highlighted, and content edits
+are separated from automatic display/numbering changes. Full-paper context
+renders unchanged passages once, avoiding duplicate figures and text. Navigation
+shows the current edit and supports J/K. `just review-versions` lists saved names.
+The review remains a standalone local HTML file, without a review-status database.
+
+Upgrade: copy the updated `tools/`, tests, justfile, and `.gitignore`, then
+rebuild PDF and Word. Existing source files need no edits for the scaffold's
+supported constructs. The shared build now also requires successful Word
+adaptation; custom constructs that the adapter cannot preserve need explicit
+support before they can pass. `paper.resolved.typ` remains a Word preview;
+the shared source tree is under `.build-state/manuscripts/`.
+
 ## 3.17.0
 
 Hardening the checks around AI editing, plus `just trace <id> --json` as a small

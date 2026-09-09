@@ -161,6 +161,7 @@ tar -C "$SCAFFOLD" -cf - \
     --exclude='./paper.resolved.typ' \
     --exclude='./.text-baseline' \
     --exclude='./.edit-guard' \
+    --exclude='./.review' \
     --exclude='./.build-state' \
     --exclude='./audio/*.m4b' \
     --exclude='./audio/*.wav' \

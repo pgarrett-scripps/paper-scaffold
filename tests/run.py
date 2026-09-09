@@ -170,6 +170,8 @@ def main() -> int:
     ok &= structural_cases()
     from hardening import run_cases
     ok &= run_cases()
+    from review_cases import run_cases as review_cases
+    ok &= review_cases()
 
     if ok:
         note = "" if extract_prose is not None else ", no audio/ so narration skipped"

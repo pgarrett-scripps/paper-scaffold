@@ -461,9 +461,21 @@ readability:
 #
 # A build artifact, like stats-rendered.json: gitignored, rewritten on demand,
 # never edited. Read it when an export looks wrong; it is what pandoc was fed.
-# Resolve the manuscript into plain Typst -> paper.resolved.typ (for pandoc)
-resolve: render-stats
-  @uv run --quiet python tools/resolve_typst.py
+# Capture the shared resolved manuscript and PDF; refresh the Word projection
+resolve:
+  @uv run --quiet python tools/build_state.py resolve
+
+# Save an immutable resolved manuscript version, including figures and bibliography
+review-baseline name:
+  @uv run --quiet python tools/review.py baseline "$1"
+
+# List saved review versions without rebuilding the manuscript
+review-versions:
+  @uv run --quiet python tools/review.py versions
+
+# Compare a saved version with the current manuscript or another saved version
+review baseline new="current":
+  @uv run --quiet python tools/review.py compare "$1" "$2"
 
 # Snapshot the manuscript's numbers/refs/floats/headings before an editing pass
 edit-baseline tag="default":
