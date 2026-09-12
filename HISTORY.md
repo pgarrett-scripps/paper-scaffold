@@ -42,6 +42,27 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.19.0
+
+Optional `manuscript.toml` declares named PDF targets and counted chapter parts.
+`just document <id>` builds the full document or an independent chapter from the
+same sources, without requiring Word adaptation. Per-target state tracks actual
+compiler dependencies, selected configuration, tooling, and output hashes.
+Failed or concurrent builds preserve the last good output.
+
+`document-metrics` reports Typst word counts and readability per part and refuses
+stale results. `document-verify` checks nested chapter prose, separate prefixed
+bibliographies, project-wide declarations when present, and output freshness.
+`document-edit-baseline` / `document-edit-check` scope the existing mechanical
+guard to one target. Literal source discovery also covers declared entrypoints.
+
+Upgrade: copy `tools/`, tests, and the added justfile recipes together, and merge
+the pyproject/lock version. Existing single-paper projects need no source edits.
+For a chapter project, add the manifest and explicit counted-body markers and
+keep its own layout and standalone entrypoint wrappers. See MULTI-DOCUMENT.md
+and examples/chapters. Chapter Word export, resolved review, and automatic
+toolchain upgrades are not part of this release.
+
 ## 3.18.0
 
 PDF, Word, and revision review now use a shared captured manuscript. Literal

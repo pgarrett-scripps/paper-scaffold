@@ -16,7 +16,7 @@ set positional-arguments
 # The hand-written Typst sources, for `just fmt`. Add files here as the
 # manuscript grows (a reviewer-response letter, a cover letter, a shared macro
 # file). Deliberately does NOT include si/*.typ -- see the `fmt` recipe.
-typst_sources := "config.typ paper.typ si-body.typ"
+typst_sources := "config.typ paper.typ si-body.typ code.typ"
 
 # Line width for typstyle. Must stay in step with `tinymist.formatterPrintWidth`
 # in .vscode/settings.json, or format-on-save and `just fmt` will fight.
@@ -25,6 +25,34 @@ fmt_width := "80"
 [private]
 default:
   @just --list
+
+# List named documents declared in manuscript.toml (optional multi-chapter mode)
+documents:
+  @uv run --quiet python tools/documents.py list
+
+# Build a named PDF, or all PDFs, and report chapter counts/readability
+document target="":
+  @uv run --quiet python tools/documents.py build {{quote(target)}}
+
+# Check selected PDF freshness without rebuilding; defaults to all targets
+document-check target="all":
+  @uv run --quiet python tools/documents.py check {{quote(target)}}
+
+# Show counts from a current document build; refuses stale metrics
+document-metrics target="":
+  @uv run --quiet python tools/documents.py metrics {{quote(target)}}
+
+# Prose, chapter bibliographies and PDF freshness; does not rebuild
+document-verify target="all":
+  @uv run --quiet python tools/documents.py verify {{quote(target)}}
+
+# Snapshot one document before a wording-only edit
+document-edit-baseline target tag="default":
+  @uv run --quiet python tools/prose_edit_guard.py snapshot {{quote(tag)}} --document {{quote(target)}}
+
+# Verify one document's wording-edit invariants against its own baseline
+document-edit-check target tag="default":
+  @uv run --quiet python tools/prose_edit_guard.py check {{quote(tag)}} --document {{quote(target)}}
 
 # Which paper-scaffold version this manuscript is built on, and the state of the
 # working tree. The version comes from pyproject.toml, which is copied along with
@@ -416,10 +444,7 @@ draft: render-stats
 # Compile paper.typ -> paper.pdf, then print word counts and readability
 paper:
   @uv run --quiet python tools/build_state.py paper
-  @bash tools/wordcount.sh
-  @echo ""
-  @uv run --quiet python tools/readability.py
-  @echo "  density and per-section outliers: just density"
+  @uv run --quiet python tools/paper_report.py
 
 # See wordcount.typ for exactly what is excluded (refs, figures/tables, captions,
 # math, code) vs. included (headings, inline code).

@@ -21,6 +21,7 @@
 // assets.typ. Delete this import along with assets.typ and assets.json if the
 // project includes no generated figures or tables.
 #import "assets.typ": fig, tbl
+#import "code.typ": code-style
 
 // Word-export path (`just docx`): compiling with --input docx=true bypasses the
 // arkheion template. Its front matter and heading styling are built from layout-only
@@ -40,6 +41,7 @@
 
 // Apply the template for PDF; in docx mode pass the document through untouched.
 #show: if docx-mode { doc => doc } else { _template }
+#show: code-style
 
 // arkheion normally supplies heading numbering; without it the `@sec:` cross-references
 // fail to resolve, so restore it on the docx path only. The SI's own "S1"-style

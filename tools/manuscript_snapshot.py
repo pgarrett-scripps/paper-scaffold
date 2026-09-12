@@ -16,7 +16,7 @@ import sys
 
 from atomic_io import write_text
 from manuscript_sources import mask
-from resolve_typst import _paren_end
+from resolve_typst import _paren_end, front_matter_probe
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = 1
@@ -183,30 +183,41 @@ def content_text(value) -> str:
     raise ValueError(f"unsupported Typst numbering content: {value!r}")
 
 
-def query_numbers(folder: Path) -> list[dict]:
+def query_numbers(folder: Path, *, front_matter: Path | None = None) -> list[dict]:
+    """Evaluate numbering, optionally capturing front matter in the same pass."""
     probe = folder / "review-query.typ"
-    probe.write_text(NUMBER_PROBE)
+    probe.write_text(NUMBER_PROBE + (front_matter_probe(label=False) if front_matter else ""))
     try:
         result = subprocess.run(["typst", "query", "--root", str(folder),
                                  str(probe), "metadata", "--field", "value"],
                                 cwd=folder, check=True, capture_output=True, text=True)
-        records = [v["elements"] for v in json.loads(result.stdout)
+        values = json.loads(result.stdout)
+        records = [v["elements"] for v in values
                    if isinstance(v, dict) and v.get("review_numbering_schema") == 1]
         if len(records) != 1:
             raise ValueError("could not obtain manuscript numbering from Typst")
         for row in records[0]:
             row["number"] = None if row["number"] is None else content_text(row["number"])
             row["supplement"] = content_text(row["supplement"])
+        if front_matter is not None:
+            metadata = [v for v in values
+                        if isinstance(v, dict) and v.get("front_matter_schema") == 1]
+            if len(metadata) != 1:
+                raise ValueError("could not obtain manuscript front matter from Typst")
+            write_text(front_matter, json.dumps(metadata[0], ensure_ascii=False))
         return records[0]
     finally:
         probe.unlink(missing_ok=True)
 
 
-def project_word(folder: Path, numbers: list[dict]) -> None:
+def project_word(folder: Path, numbers: list[dict], *, front_matter: Path | None = None) -> None:
     write_text(folder / "numbering.json", json.dumps(numbers, indent=2))
-    subprocess.run([sys.executable, str(ROOT / "tools/resolve_typst.py"),
-                    "--root", str(folder), "--numbers", str(folder / "numbering.json"),
-                    "--output", str(folder / "paper.word.typ")], check=True, cwd=folder)
+    args = [sys.executable, str(ROOT / "tools/resolve_typst.py"),
+            "--root", str(folder), "--numbers", str(folder / "numbering.json"),
+            "--output", str(folder / "paper.word.typ")]
+    if front_matter is not None:
+        args.extend(["--front-matter", str(front_matter)])
+    subprocess.run(args, check=True, cwd=folder)
 
 
 def seal(folder: Path, sources: dict, dependencies: list[str]) -> dict:

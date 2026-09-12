@@ -118,21 +118,16 @@ def _restore_raw(src: str, spans: list[str]) -> str:
     return _RAW_BACK.sub(lambda m: spans[int(m.group(1))], src)
 
 
-def _query_front_matter() -> dict:
-    """Title, authors and affiliations, evaluated by Typst itself.
-
-    A regex over config.typ would be the obvious shortcut and the wrong one:
-    the author line is BUILT there (initials, suffixes, particles -- see
-    surname-of), so only Typst knows what it comes to. This asks Typst.
-    """
+def front_matter_probe(*, label: bool = True) -> str:
+    """Typst metadata shared by the standalone and combined build queries."""
     # Each author comes back as (name, affils), where affils is the author's
     # affiliation NUMBERS -- positions in paper-affiliations, the same list
     # the head prints below the author line, so the superscripts cannot
     # disagree with it. Both config shapes are normalized here in Typst:
     # `affiliation: "..."` (one string) and `affiliations: (...)` (a tuple).
-    probe = ('#import "/config.typ": paper-title, paper-authors, '
+    return ('#import "/config.typ": paper-title, paper-authors, '
              'paper-affiliations, paper-date, paper-keywords\n'
-             "#metadata((title: paper-title, "
+             "#metadata((front_matter_schema: 1, title: paper-title, "
              "authors: paper-authors.map(a => (name: a.name, "
              'affils: a.at("affiliations", default: '
              '(a.at("affiliation", default: none),))'
@@ -140,10 +135,19 @@ def _query_front_matter() -> dict:
              ".map(af => paper-affiliations.position(x => x == af))"
              ".filter(p => p != none).map(p => p + 1))), "
              "affils: paper-affiliations, date: paper-date, "
-             "keywords: paper-keywords)) <rmeta>\n")
+             "keywords: paper-keywords))" + (" <rmeta>" if label else "") + "\n")
+
+
+def _query_front_matter() -> dict:
+    """Title, authors and affiliations, evaluated by Typst itself.
+
+    A regex over config.typ would be the obvious shortcut and the wrong one:
+    the author line is BUILT there (initials, suffixes, particles -- see
+    surname-of), so only Typst knows what it comes to. This asks Typst.
+    """
     with tempfile.NamedTemporaryFile("w", suffix=".typ", dir=ROOT,
                                      delete=False) as fh:
-        fh.write(probe)
+        fh.write(front_matter_probe())
         tmp = Path(fh.name)
     try:
         proc = subprocess.run(
@@ -659,13 +663,13 @@ def _toc_block(paper_src: str, assets: dict) -> str:
     return block
 
 
-def build() -> str:
+def build(front_matter: dict | None = None) -> str:
     if not ASSETS.is_file():
         assets = {}
     else:
         assets = json.loads(ASSETS.read_text()).get("values", {})
 
-    meta = _query_front_matter()
+    meta = _query_front_matter() if front_matter is None else front_matter
     paper_src = (ROOT / "paper.typ").read_text()
     body = readability.slice_body(paper_src)
     if NATIVE_NUMBERING is not None:
@@ -737,9 +741,9 @@ def build() -> str:
     return resolve_crossrefs(head, body, NATIVE_NUMBERING) + "\n"
 
 
-def main() -> int:
+def main(front_matter: dict | None = None) -> int:
     try:
-        write_text(OUT, build())
+        write_text(OUT, build(front_matter))
     except ResolveError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
@@ -754,6 +758,7 @@ if __name__ == "__main__":
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--output", type=Path, default=OUT)
     parser.add_argument("--numbers", type=Path)
+    parser.add_argument("--front-matter", type=Path)
     args = parser.parse_args()
     if args.numbers is None:
         # Direct invocations use the shared build too. Only the internal Word
@@ -764,4 +769,5 @@ if __name__ == "__main__":
     ASSETS = ROOT / "assets.json"
     typst_prose.STATS_JSON = ROOT / "stats.json"
     NATIVE_NUMBERING = json.loads(args.numbers.read_text()) if args.numbers else None
-    raise SystemExit(main())
+    front_matter = json.loads(args.front_matter.read_text()) if args.front_matter else None
+    raise SystemExit(main(front_matter))

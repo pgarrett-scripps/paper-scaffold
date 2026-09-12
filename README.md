@@ -12,6 +12,11 @@ style checks, and offline audiobook narration.
 
 New paper: quick start below. Existing manuscript: [MIGRATING.md](MIGRATING.md).
 
+Dissertation or book: [MULTI-DOCUMENT.md](MULTI-DOCUMENT.md) describes optional
+named PDF targets, separate chapter exports, chapter metrics and checks, and
+wording-edit guards over shared chapter sources. Existing single-paper commands
+are unchanged.
+
 ## Quick start
 
 ```bash
@@ -125,6 +130,43 @@ the edited prose for scientific meaning. Instructions alone do not force an
 agent to run a check. A check that could not finish must be reported as
 incomplete, not passed.
 
+## Code blocks
+
+Language-tagged fences get syntax highlighting automatically:
+
+````typst
+```python
+def normalize(values):
+    return values / values.max()
+```
+````
+
+Use `python`, `bash`, `json`, or another supported language after the opening
+fence. Untagged or unknown languages display literal monospace text. Single
+backticks keep short identifiers such as `values.max()` inline.
+
+The PDF uses `code.typ` for a light background, padding, a monospace font,
+and blocks that can continue across pages. Long lines wrap visually. Word
+export (`just docx`) keeps the code editable, preserves its indentation and
+line breaks, and applies matching background and font sizing. Typst and
+Pandoc use their own syntax palettes, so token colors can differ. Both use
+the language tag you supply; neither guesses the language or executes code.
+
+The main manuscript enables the style already. For another document, add
+this after its template setup:
+
+```typst
+#import "code.typ": code-style
+#show: code-style
+```
+
+Adjust the import path for a nested document. PDF styling lives in `code.typ`;
+Word's corresponding `SourceCode` and `VerbatimChar` styles are set in
+`tools/export_docx.py`. The older `just docx-html` fallback does not use these
+Word styles. Block code stays outside prose metrics and narration; inline
+code still counts as words. Captions, numbered listings, and external-file
+snippets are not part of this initial support.
+
 ## Tracing numbers and assets
 
 Use `just trace <id>` before editing a claim or its supporting asset:
@@ -220,6 +262,13 @@ Typst supplies the actual heading and float numbers for the Word adaptation.
 `paper.word.typ` is that adaptation; the root `paper.resolved.typ` remains a
 convenient preview of it. Both are generated and must not be hand-edited.
 `just resolve` refreshes this intermediate and its PDF.
+
+`just paper` overlaps PDF compilation with the independent Word/review
+preparation, then runs word count and readability together. Reports still
+appear in order. Word front matter and numbering share one fresh Typst query.
+Every invocation builds fresh, and both preparation paths
+must succeed before the PDF is published; source-change and concurrent-build
+checks remain in place.
 
 The snapshot manifest records input and output hashes and the Typst version.
 The HTML report embeds images and works offline. Recompiling a saved source tree

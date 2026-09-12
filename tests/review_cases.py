@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ import build_state
 import manuscript_snapshot as snapshot
 import resolve_typst
 import review
+import paper_report
 
 
 class Reviews(unittest.TestCase):
@@ -83,6 +85,58 @@ See #ref(<fig:second>) and #ref(<sec:results>).
         self.assertIn("Figure 2: Second", resolved)
         self.assertIn("See Figure 2 and Section I", resolved)
         self.assertIn("= I. Results", resolved)
+
+    @unittest.skipUnless(shutil.which("typst"), "Typst not installed")
+    def test_combined_metadata_matches_separate_queries_and_word_projection(self):
+        (self.root / "config.typ").write_text('''#let paper-title = "Computed " + "title"
+#let paper-authors = (
+  (name: "Ada " + "Lovelace", affiliations: ("Lab B", "Lab A", "Missing")),
+  (name: "René Example", affiliation: "Lab A"),
+)
+#let paper-affiliations = ("Lab A", "Lab B")
+#let paper-date = "2026"
+#let paper-keywords = ("alpha", "β")
+#let paper-abstract = [A complete abstract.]
+''')
+        (self.root / "paper.typ").write_text('''#set heading(numbering: "I.")
+// >>> BODY START
+= Results <rmeta>
+Original words and $x = 2$.
+#figure(rect(), caption: [First.]) <fig:first>
+See @fig:first.
+// <<< BODY END
+''')
+        separate_numbers = snapshot.query_numbers(self.root)
+        target = self.root / "front-matter.json"
+        with patch.object(snapshot.subprocess, "run", wraps=subprocess.run) as calls:
+            numbers = snapshot.query_numbers(self.root, front_matter=target)
+            self.assertEqual(calls.call_count, 1)
+        self.assertEqual(numbers, separate_numbers)
+        meta = json.loads(target.read_text())
+        self.assertEqual(meta["title"], "Computed title")
+        self.assertEqual(meta["authors"], [{"name": "Ada Lovelace", "affils": [2, 1]},
+                                           {"name": "René Example", "affils": [1]}])
+        with patch.object(resolve_typst, "ROOT", self.root), \
+                patch.object(resolve_typst, "ASSETS", self.root / "assets.json"), \
+                patch.object(resolve_typst, "NATIVE_NUMBERING", numbers):
+            self.assertEqual(meta, resolve_typst._query_front_matter())
+            separate_word = resolve_typst.build()
+            with patch.object(resolve_typst, "_query_front_matter",
+                              side_effect=AssertionError("redundant query")):
+                self.assertEqual(resolve_typst.build(meta), separate_word)
+        self.assertFalse((self.root / "review-query.typ").exists())
+
+    def test_combined_query_rejects_missing_or_ambiguous_front_matter(self):
+        for metadata in ([], [{"front_matter_schema": 1}] * 2):
+            with self.subTest(metadata=metadata):
+                result = subprocess.CompletedProcess([], 0, json.dumps([
+                    {"review_numbering_schema": 1, "elements": []}, *metadata]))
+                target = self.root / "front-matter.json"
+                with patch.object(snapshot.subprocess, "run", return_value=result):
+                    with self.assertRaisesRegex(ValueError, "front matter"):
+                        snapshot.query_numbers(self.root, front_matter=target)
+                self.assertFalse(target.exists())
+                self.assertFalse((self.root / "review-query.typ").exists())
 
     @unittest.skipUnless(shutil.which("typst"), "Typst not installed")
     def test_pdf_resolution_preserves_include_scope_and_rendered_bytes(self):
@@ -274,6 +328,75 @@ We measured #s("count") samples.
                 build_state.build("paper", self.root)
         self.assertEqual((self.root / "paper.pdf").read_text(), "Last good PDF.")
         self.assertFalse((self.root / ".build-state/manuscript.json").exists())
+
+    def test_snapshot_joins_pdf_before_sealing_or_cleanup(self):
+        for failure in (None, "pdf", "word"):
+            with self.subTest(failure=failure):
+                started, release, finished = (threading.Event() for _ in range(3))
+
+                def compile_pdf(*args, **kwargs):
+                    started.set()
+                    try:
+                        if not release.wait(5):
+                            raise AssertionError("Word preparation did not overlap PDF compilation")
+                        if failure == "pdf":
+                            raise subprocess.CalledProcessError(1, "typst")
+                    finally:
+                        finished.set()
+
+                def numbers(folder, **kwargs):
+                    self.assertTrue(started.wait(5), "PDF compilation did not start")
+                    self.assertFalse(finished.is_set())
+                    release.set()
+                    if failure == "word":
+                        raise ValueError("Word preparation failed")
+                    return []
+
+                def seal(*args):
+                    self.assertTrue(finished.is_set())
+                    return {"id": "complete"}
+
+                with patch.object(snapshot, "materialize"), \
+                        patch.object(snapshot, "query_numbers", side_effect=numbers), \
+                        patch.object(snapshot, "project_word"), \
+                        patch.object(snapshot, "seal", side_effect=seal) as sealing, \
+                        patch.object(review, "make_document", return_value={}), \
+                        patch.object(build_state, "write_text"), \
+                        patch.object(build_state.subprocess, "run", side_effect=compile_pdf):
+                    if failure:
+                        with self.assertRaises((ValueError, subprocess.CalledProcessError)):
+                            build_state.prepare_snapshot(self.root, self.root / "capture", {}, [])
+                        sealing.assert_not_called()
+                    else:
+                        self.assertEqual(build_state.prepare_snapshot(
+                            self.root, self.root / "capture", {}, []), {"id": "complete"})
+                    self.assertTrue(finished.is_set(), "worker outlived snapshot cleanup")
+
+    def test_parallel_reports_keep_order_and_propagate_failures(self):
+        for failure in (None, "wordcount.sh", "readability.py"):
+            with self.subTest(failure=failure):
+                together = threading.Barrier(2)
+                finished = set()
+
+                def report(command, **kwargs):
+                    name = Path(command[-1]).name
+                    together.wait(timeout=5)
+                    finished.add(name)
+                    return subprocess.CompletedProcess(command, 7 if failure == name else 0,
+                                                       name + "\n", "failed\n" if failure == name else "")
+
+                out, err = io.StringIO(), io.StringIO()
+                with patch.object(paper_report.subprocess, "run", side_effect=report), \
+                        contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    self.assertEqual(paper_report.main(self.root), 7 if failure else 0)
+                self.assertEqual(finished, {"wordcount.sh", "readability.py"})
+                expected = "wordcount.sh\n"
+                if failure != "wordcount.sh":
+                    expected += "\nreadability.py\n"
+                if not failure:
+                    expected += "  density and per-section outliers: just density\n"
+                self.assertEqual(out.getvalue(), expected)
+                self.assertEqual(err.getvalue(), "failed\n" if failure else "")
 
 
 def run_cases():

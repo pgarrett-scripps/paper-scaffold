@@ -172,6 +172,10 @@ def main() -> int:
     ok &= run_cases()
     from review_cases import run_cases as review_cases
     ok &= review_cases()
+    from document_cases import run_cases as document_cases
+    ok &= document_cases()
+    from code_cases import run_cases as code_cases
+    ok &= code_cases()
 
     if ok:
         note = "" if extract_prose is not None else ", no audio/ so narration skipped"

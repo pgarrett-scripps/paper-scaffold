@@ -62,7 +62,13 @@ def matches(pattern, src: str):
     return [m for m in pattern.finditer(visible) if code[m.start():m.start()+1].strip()]
 
 
-def source_files(root: Path = ROOT) -> dict[str, str]:
+def source_files(root: Path = ROOT, entrypoints=None) -> dict[str, str]:
+    if entrypoints is None:
+        if (root / "manuscript.toml").is_file():
+            from document_project import load_project
+            entrypoints = tuple(d.entrypoint for d in load_project(root).documents.values())
+        else:
+            entrypoints = ENTRYPOINTS
     found = {}
     active = set()
 
@@ -89,7 +95,7 @@ def source_files(root: Path = ROOT) -> dict[str, str]:
                   else path.parent / target)
         active.remove(path)
 
-    for name in ENTRYPOINTS:
+    for name in entrypoints:
         if (root / name).is_file():
             visit(root / name)
     return found

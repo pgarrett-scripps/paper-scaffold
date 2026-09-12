@@ -1,0 +1,27 @@
+schema_version = 1
+default_document = "thesis"
+
+[parts.introduction]
+source = "chapters/introduction.typ"
+bibliography = "chapters/introduction.bib"
+citation_prefix = "intro-"
+
+[parts.methods]
+source = "chapters/methods.typ"
+bibliography = "chapters/methods.bib"
+citation_prefix = "methods-"
+
+[documents.thesis]
+entrypoint = "thesis.typ"
+output = "build/thesis.pdf"
+parts = ["introduction", "methods"]
+
+[documents.introduction]
+entrypoint = "introduction.typ"
+output = "build/introduction.pdf"
+parts = ["introduction"]
+
+[documents.methods]
+entrypoint = "methods.typ"
+output = "build/methods.pdf"
+parts = ["methods"]

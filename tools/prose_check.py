@@ -665,7 +665,8 @@ def _normalize_doi(doi: str) -> str:
 
 
 def check_bibliography(root: Path | None = None,
-                       cfg: Config | None = None) -> list[Finding]:
+                       cfg: Config | None = None, *, bib_paths=None,
+                       cited_keys: set[str] | None = None) -> list[Finding]:
     """Checks on references.bib, the last artifact here nothing read.
 
     Typst already fails on a citation with no entry, so that direction is
@@ -684,7 +685,7 @@ def check_bibliography(root: Path | None = None,
     import datetime
 
     r = root or ROOT
-    bibs = sorted(r.glob("*.bib"))
+    bibs = sorted(r.glob("*.bib")) if bib_paths is None else list(bib_paths)
     if not bibs:
         return []
     try:
@@ -694,9 +695,10 @@ def check_bibliography(root: Path | None = None,
     if not entries:
         return []
 
-    cited: set[str] = set()
-    for src in sorted(r.glob("*.typ")):
-        cited |= set(re.findall(r"@([A-Za-z0-9_:-]+)", src.read_text()))
+    cited: set[str] = set() if cited_keys is None else cited_keys
+    if cited_keys is None:
+        for src in sorted(r.glob("*.typ")):
+            cited |= set(re.findall(r"@([A-Za-z0-9_:-]+)", src.read_text()))
 
     out: list[Finding] = []
     where = bibs[0].name

@@ -140,6 +140,7 @@ tar -C "$SCAFFOLD" -cf - \
     --exclude='./.git' \
     --exclude='./.github' \
     --exclude='./scripts' \
+    --exclude='./examples' \
     --exclude='./.venv' \
     --exclude='./analysis/.venv' \
     --exclude='./audio/.venv' \

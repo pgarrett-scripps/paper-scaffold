@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -26,7 +27,8 @@ BUILD_TOOLS = ("render_stats.py", "typst_prose.py", "typst2docx.py",
                "resolve_typst.py", "export_docx.py", "readability.py",
                "refs_div.lua", "manuscript_sources.py", "manifest_validation.py",
                "atomic_io.py", "build_state.py", "bibliography.py",
-               "manuscript_snapshot.py", "review.py")
+               "manuscript_snapshot.py", "review.py", "paper_report.py",
+               "wordcount.sh", "report.py")
 INTERMEDIATES = {"stats-rendered.json", "paper.resolved.typ"}
 
 
@@ -110,11 +112,20 @@ def prepare_snapshot(root: Path, folder: Path, sources: dict, dependencies: list
     from manuscript_snapshot import materialize, query_numbers, project_word, seal
     from review import make_document
     materialize(root, folder, sources)
-    subprocess.run(["typst", "compile", "--root", str(folder),
-                    str(folder / "paper.typ"), str(folder / "paper.pdf")],
-                   cwd=folder, check=True)
-    project_word(folder, query_numbers(folder))
-    write_text(folder / "document.json", json.dumps(make_document(folder), ensure_ascii=False))
+    # Both paths read the captured sources. Neither consumes the other's
+    # output, so Word numbering/adaptation can overlap PDF compilation.
+    # Join even on failure before the caller removes the temporary tree;
+    # sealing and publication require both paths to have succeeded.
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pdf = pool.submit(subprocess.run,
+                         ["typst", "compile", "--root", str(folder),
+                          str(folder / "paper.typ"), str(folder / "paper.pdf")],
+                         cwd=folder, check=True)
+        front_matter = folder / "front-matter.json"
+        numbers = query_numbers(folder, front_matter=front_matter)
+        project_word(folder, numbers, front_matter=front_matter)
+        write_text(folder / "document.json", json.dumps(make_document(folder), ensure_ascii=False))
+        pdf.result()
     return seal(folder, sources, dependencies)
 
 

@@ -41,6 +41,7 @@ to the end of a sentence picks one up.
 from __future__ import annotations
 
 import json
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -51,6 +52,7 @@ from atomic_io import write_text
 # The manuscript root, one level up: this file lives in tools/.
 ROOT = Path(__file__).resolve().parent.parent
 SNAP_DIR = ROOT / ".edit-guard"
+DOCUMENT = None
 
 # A number: digits, optionally with internal separators, but never trailing
 # punctuation. Handles 12.6, 1,177, 79.4, 0.01, 2026-07-31, 8-11.
@@ -83,14 +85,27 @@ def profile(path: Path) -> dict:
 
 
 def current() -> dict:
-    files = source_files(ROOT)
+    if DOCUMENT is None:
+        files = source_files(ROOT)
+    else:
+        from document_project import load_project
+        project = load_project(ROOT)
+        files = project.sources(project.select(DOCUMENT)[0])
     # Includes/imports carry content and macros that can change rendered values.
     return {f: profile(ROOT / f) for f in files}
 
 
 def declarations() -> dict:
-    return {name: json.loads((ROOT / name).read_text()).get("values", {})
+    result = {name: json.loads((ROOT / name).read_text()).get("values", {})
             for name in ("stats.json", "assets.json") if (ROOT / name).is_file()}
+    if DOCUMENT is not None:
+        from document_project import load_project
+        project = load_project(ROOT)
+        doc = project.select(DOCUMENT)[0]
+        # JSON normalizes tuples to arrays in the saved representation.
+        result["document"] = json.loads(json.dumps({"target": vars(doc),
+            "parts": [vars(project.parts[p]) for p in doc.parts]}))
+    return result
 
 
 def snapshot(tag: str) -> int:
@@ -181,18 +196,28 @@ def check(tag: str) -> int:
 
 
 def main() -> int:
-    if len(sys.argv) < 2 or sys.argv[1] not in ("snapshot", "check"):
-        sys.exit(__doc__)
-    tag = sys.argv[2] if len(sys.argv) > 2 else "default"
+    global DOCUMENT, SNAP_DIR
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=("snapshot", "check"))
+    parser.add_argument("tag", nargs="?", default="default")
+    parser.add_argument("--document", help="guard one manuscript.toml target")
+    args = parser.parse_args()
+    tag = args.tag
+    if args.document:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", args.document) or args.document == "all":
+            print("--document must name one document")
+            return 2
+        DOCUMENT = args.document
+        SNAP_DIR = ROOT / ".edit-guard" / "documents" / DOCUMENT
     if not re.fullmatch(r"[A-Za-z0-9_-]+", tag):
         print("tag must contain only letters, numbers, underscores, or hyphens")
         return 2
-    if sys.argv[1] == "check" and not (SNAP_DIR / f"{tag}.json").is_file():
+    if args.command == "check" and not (SNAP_DIR / f"{tag}.json").is_file():
         print(f"no snapshot '{tag}' -- record one BEFORE the editing pass: "
               f"just edit-baseline" + (f" {tag}" if tag != "default" else ""))
         return 1
     try:
-        return snapshot(tag) if sys.argv[1] == "snapshot" else check(tag)
+        return snapshot(tag) if args.command == "snapshot" else check(tag)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         print(f"edit guard could not complete: {exc}")
         return 2
