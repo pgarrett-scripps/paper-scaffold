@@ -8,8 +8,8 @@ or evidence that a release has been published.
 The existing architecture remains: authors edit manuscript sources and the
 presentation fields of declarations; analysis owns generated values and assets;
 local checks inspect recorded consistency; submission checks also re-run
-statistics and audit the bibliography. See [README.md](README.md) for current
-usage and [HISTORY.md](HISTORY.md#3170) for changes and upgrade steps.
+statistics and audit the bibliography. See [DOCUMENTATION.md](DOCUMENTATION.md)
+for current usage and [HISTORY.md](HISTORY.md#3170) for changes and upgrade steps.
 
 ## Correctness findings addressed
 

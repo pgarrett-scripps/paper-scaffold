@@ -1,7 +1,8 @@
 # Working in this directory
 
 Instructions for an agent editing the manuscript. Read [README.md](README.md) for
-what the pipeline does and [STYLE.md](STYLE.md) for prose conventions. If the
+the overview, [DOCUMENTATION.md](DOCUMENTATION.md) for pipeline details, and
+[STYLE.md](STYLE.md) for prose conventions. If the
 task is moving an existing manuscript onto this scaffold, follow
 [MIGRATING.md](MIGRATING.md) instead of improvising the order.
 
