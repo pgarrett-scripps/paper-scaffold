@@ -46,10 +46,15 @@ answer beats an implicit one that looks total.
 from __future__ import annotations
 
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 from _provenance import PAPER, caller_script, code_inputs, declared_inputs, sha
+
+sys.path.insert(0, str(PAPER / "tools"))
+from atomic_io import write_text
+from manifest_validation import validate, ManifestError
 
 OUT = PAPER / "assets.json"
 
@@ -116,13 +121,16 @@ def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
     if OUT.is_file():
         try:
             doc = json.loads(OUT.read_text())
-            doc.setdefault("values", {})
         except json.JSONDecodeError as e:
             raise AssetError(
                 f"assets.json is not valid JSON ({e}); fix or delete it") from None
 
+    try:
+        validate(doc, "assets")
+    except ManifestError as exc:
+        raise AssetError(str(exc)) from None
     old = doc["values"].get(id, {})
-    owner = old.get("origin", {}).get("by")
+    owner = (old.get("origin") or {}).get("by")
     if owner == "adopted":
         # Adoption is explicitly the provenance a script may replace: it means
         # "nothing can rebuild this", and a generator claiming the id has just
@@ -137,7 +145,7 @@ def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
     # `at` is when the OUTPUT last changed, not when the script last ran. A
     # regeneration that produces byte-identical output (seeded RNG, no embedded
     # timestamps) keeps the old date, so the field carries information.
-    if old.get("hash") == entry["hash"] and old.get("origin", {}).get("at"):
+    if old.get("hash") == entry["hash"] and (old.get("origin") or {}).get("at"):
         entry["origin"]["at"] = old["origin"]["at"]
     else:
         entry["origin"]["at"] = datetime.now(timezone.utc).strftime(
@@ -145,6 +153,6 @@ def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
 
     doc["_about"] = ABOUT
     doc["values"][id] = entry
-    OUT.write_text(json.dumps(
+    write_text(OUT, json.dumps(
         {"_about": ABOUT, "values": dict(sorted(doc["values"].items()))},
         indent=2) + "\n")

@@ -42,6 +42,251 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.19.0
+
+Optional `manuscript.toml` declares named PDF targets and counted chapter parts.
+`just document <id>` builds the full document or an independent chapter from the
+same sources, without requiring Word adaptation. Per-target state tracks actual
+compiler dependencies, selected configuration, tooling, and output hashes.
+Failed or concurrent builds preserve the last good output.
+
+`document-metrics` reports Typst word counts and readability per part and refuses
+stale results. `document-verify` checks nested chapter prose, separate prefixed
+bibliographies, project-wide declarations when present, and output freshness.
+`document-edit-baseline` / `document-edit-check` scope the existing mechanical
+guard to one target. Literal source discovery also covers declared entrypoints.
+
+Upgrade: copy `tools/`, tests, and the added justfile recipes together, and merge
+the pyproject/lock version. Existing single-paper projects need no source edits.
+For a chapter project, add the manifest and explicit counted-body markers and
+keep its own layout and standalone entrypoint wrappers. See MULTI-DOCUMENT.md
+and examples/chapters. Chapter Word export, resolved review, and automatic
+toolchain upgrades are not part of this release.
+
+## 3.18.0
+
+PDF, Word, and revision review now use a shared captured manuscript. Literal
+statistics and asset paths are resolved while Typst layout and include scopes
+survive. Word uses the compiled heading/float numbers, including unlabeled
+figures, instead of independently guessing them.
+
+`just review-baseline <name>` saves a version with its figures and bibliography;
+`just review <name> [new-name]` writes an offline HTML comparison. Versions are
+immutable, local, and excluded from new-paper copies. The existing edit guard
+and PDF text-diff commands keep their separate purposes.
+
+Section links locate edits, complete numbers are highlighted, and content edits
+are separated from automatic display/numbering changes. Full-paper context
+renders unchanged passages once, avoiding duplicate figures and text. Navigation
+shows the current edit and supports J/K. `just review-versions` lists saved names.
+The review remains a standalone local HTML file, without a review-status database.
+
+Upgrade: copy the updated `tools/`, tests, justfile, and `.gitignore`, then
+rebuild PDF and Word. Existing source files need no edits for the scaffold's
+supported constructs. The shared build now also requires successful Word
+adaptation; custom constructs that the adapter cannot preserve need explicit
+support before they can pass. `paper.resolved.typ` remains a Word preview;
+the shared source tree is under `.build-state/manuscripts/`.
+
+## 3.17.0
+
+Hardening the checks around AI editing, plus `just trace <id> --json` as a small
+inspection interface. Trace returns source locations, declarations, guards,
+input hashes, findings, and an explicit checked/failed/incomplete status. It
+never runs analysis; dynamically computed calls are outside its source index.
+
+- Reflowed native references no longer count as float definitions in Word.
+- The edit guard protects helper IDs, citation occurrences, declarations, the
+  abstract, and literal includes. Older snapshots require a new baseline.
+- Build fingerprints include compiler dependencies, included chapters, nested
+  CSL files, and the Word filter. A Python tool captures before transformations,
+  checks again before publishing, preserves last good outputs, and refuses
+  overlapping builds. Per-output records replace the old `.build-stamp` file
+  under `.build-state/`; the staleness check still rebuilds nothing.
+- Deep statistics require an invocation-bound receipt from `Stats.write()`;
+  a no-op or unavailable generator cannot count as re-derived. Submission also
+  requires the bibliography audit to complete; standalone offline use remains
+  tolerant. Writer and checker share numerical guard validation.
+- Analysis lock/config hashes join provenance. Manifest writes are atomic;
+  malformed declarations and nonfinite values receive named errors.
+- New papers exclude local artifacts and correctly emit singleton keyword
+  tuples. Documented CLI flags reach their tools. BibTeX parsing is shared;
+  indented entries work and malformed blocks fail visibly. Tests run without
+  typstyle while explicitly skipping the reflow-dependent check.
+- Python 3.10 declares its TOML dependency; CI checks 3.10/3.12 and rejects lock
+  drift. A separate hardening suite covers the new contracts.
+- Claude Code and Codex discover the same four skills through a relative
+  `.agents/skills` link to `.claude/skills`. The workflows preserve author
+  changes during repairs, distinguish incomplete checks, and use tracing to
+  establish which declaration a claim actually refers to.
+
+Upgrade: copy tools/, tests/, justfile, and analysis/scripts/_stats.py,
+_assets.py, and _provenance.py together; merge the pyproject/lock dependency
+change. Run `just assets` to record environment provenance, then `just paper`
+and `just docx` to create the new build records. Renew any edit baseline before
+starting another wording pass. Copy `.claude/skills/` and the `.agents/skills`
+symlink together for shared skill discovery, and start a new agent session.
+No manuscript syntax changes are required.
+
+## 3.16.0
+
+`just bib-audit` verifies the citation attached to each DOI, not only the DOI
+itself. A resolving DOI used to pass even when an AI or a bad copy supplied the
+wrong title, authors, or year beside it. Crossref and DataCite responses now
+normalize into the same record shape and are compared with `references.bib`.
+Wrong identity fields fail preflight; venue, volume, issue, and pages are review
+warnings because registrars commonly disagree across online and print versions.
+The offline suite covers false title, author, year, venue, volume, issue, and
+page data, harmless formatting differences, DataCite records, and the command's
+failure status. Upgrade: copy tools/bib_audit.py, tests/run.py, justfile, and the
+README bibliography-audit description.
+
+The resolver rejoins citation clusters the 80-column reflow split across
+lines. Typst groups adjacent citations across a soft line break, so the PDF
+collapsed `@a @b @c\n@d @e @f` into one range; pandoc's Typst reader only
+groups citations on one line, and a real manuscript's Word export shipped
+reading "10-12 13-15" where the PDF read "10-15". Found by an author reading
+their own export. Only a single newline is joined -- a blank line is a
+paragraph break. Upgrade: copy tools/resolve_typst.py and tests/run.py.
+
+## 3.15.1
+
+The Word export's author line carries the affiliation superscripts. The head
+printed a bare name list above a numbered affiliation list nothing pointed
+into: the front-matter probe flattened each author to a.name. It now returns
+(name, affils) records, the numbers computed by Typst itself as positions in
+paper-affiliations -- the same list the head prints, so the markers cannot
+disagree with it -- and the resolver emits them as `#super[...]`, which
+pandoc reads natively into real Word superscripts. Both config shapes
+normalize in the probe (`affiliation: "..."` and `affiliations: (...)`); an
+author with no resolvable affiliation gets no marker; the SI title block
+keeps plain names, exactly as si-authors shows. Upgrade: copy
+tools/resolve_typst.py and tests/run.py.
+
+## 3.15.0
+
+The Word export carries the whole paper, in the paper's order. Found by
+actually reading a real manuscript's export: no figure numbers anywhere, no
+SI title page, the reference list after the entire SI, and the back matter
+missing outright. Each was a structural gap in the resolve -> pandoc route,
+not a conversion bug, so each fix lives in the resolver or the exporter and
+carries a regression case.
+
+- Captions and headings now carry the PDF's numbers as literal text
+  ("Figure 3: ", "2.1.", SI "S1"): pandoc numbers nothing, so every
+  cross-reference the 3.14.0 pass resolved pointed at a number no caption or
+  heading showed. The same event scan that numbers the refs writes the
+  definitions.
+- The back matter travels: the prose between BODY END and `#bibliography`
+  (data availability, author information, acknowledgment) was dropped with
+  the template, though a journal reads those sections from the Word file.
+  The slice refuses the SI-appendix machinery (page break, counter surgery)
+  when a manuscript has no bibliography to stop at.
+- The bibliography stays in the PDF's position -- after the back matter,
+  BEFORE the SI -- instead of being appended last. The exporter anchors the
+  reference list there with a `#block[]<refs>` under the References heading,
+  promoted to a Div by the new tools/refs_div.lua: citeproc fills a Div with
+  id "refs", and without one appends the list at the very end of the
+  document, under the SI.
+- The SI gets its title block (heading, paper title, author line),
+  synthesized from config.typ: the PDF builds it from layout primitives
+  inside a docx-mode conditional, neither of which travels. A `#heading`
+  CALL rather than `= ` markup, so it cannot tick Section S1 away from the
+  SI's first real section.
+- Keywords, and the `toc-graphic` / `toc-caption` bindings when the front
+  matter has them, land under the abstract as plain content -- the same
+  pieces the docx-mode front matter emits on the HTML route.
+- check_citations no longer reads an email's `@` as a citation key: escaped
+  (`\@scripps`) or mid-word (`"mailto:pgarrett@scripps.edu"`) is not
+  citation syntax to Typst, and each briefly refused a build as "@scripps
+  not in the bibliography" once the back matter traveled.
+
+Upgrade: copy tools/resolve_typst.py, tools/export_docx.py, tests/run.py,
+and the new tools/refs_div.lua.
+
+## 3.14.1
+
+The resolver test suite carries its own table fixture. The
+`markup table gains a content block` case inlines its target file, and it
+pointed at `si/example_table.typ` -- which exists here, and not in a derived
+manuscript that deleted the example generators. Found porting 3.13.1 into a
+real paper: the suite failed on a file the manuscript's analysis has every
+right not to declare. The case now writes a temp table and resolves it by
+absolute path. Upgrade: copy tests/run.py.
+
+## 3.14.0
+
+`just docx` now goes resolve -> pandoc: NATIVE editable Word equations, real
+tables, and a reference list set by citeproc. The HTML route -- equations
+rasterized into images -- is `just docx-html`, kept as a fallback while this
+one earns trust. The 3.13.0 known gap is closed, plus one nobody had
+measured:
+
+- The bibliography: `#bibliography(...)` sits in back matter, which the body
+  slice drops, so every citation in the export dangled. The resolver now
+  carries the call through with its `style:` identifier resolved to the
+  string literal in config.typ -- the resolved file compiles standalone,
+  references and all. The exporter (tools/export_docx.py) swaps the call for
+  its title as a heading and hands the .bib paths to citeproc, because
+  pandoc's reader parses the call without wiring it in.
+- Cross-references: pandoc renders a Typst ref as an EMPTY link -- no pages
+  to point at -- so every "see Figure 3" silently became "see " in the Word
+  file. The resolver now resolves each ref to the literal text the PDF
+  shows, reimplementing the deterministic numbering: floats count per kind
+  in document order (tbl/tab share the Table counter), headings nest, and
+  the SI resets both with the "S" prefix, exactly as paper.typ's back-matter
+  counter block does. A ref whose label no exported float or heading carries
+  is an error, not a link left to vanish.
+- Citation keys are checked against the .bib BEFORE converting: citeproc
+  renders a missing key as bold prose and exits 0, which is a shipped-anyway
+  failure this pipeline exists to refuse.
+- Citations follow `<style>.csl` in the manuscript root when present; the
+  scaffold ships american-chemical-society.csl to match the default
+  paper-bib-style. Without one, pandoc's default applies, with a printed
+  note -- visibly different, not silently wrong.
+
+The docx-mode block in paper.typ is now load-bearing only for docx-html.
+Upgrade: copy tools/resolve_typst.py, tools/export_docx.py,
+tools/typst_prose.py, the justfile docx/docx-html/resolve/_stamp-manuscript
+recipes, and your style's .csl; the tests gained export_cases().
+
+## 3.13.1
+
+Ten resolver fixes out of a code review, every one a way `paper.resolved.typ`
+could differ silently from the PDF. The reviewed surface was small -- the
+resolver, one shared regex, the tests -- but each bug shipped wrong output
+without an error, which is the failure mode this scaffold exists to close.
+
+- Raw spans are stashed before every pass and restored after: a documented
+  `#s("id")` in backticks was being resolved or rejected, and a `#todo` in a
+  fence refused an export the PDF builds clean.
+- The `#todo` refusal now runs after the comment strip, so a note mentioned
+  in a comment no longer blocks the export.
+- Standalone `#import`/`#let`/`#set`/`#show` lines are stripped, exactly as
+  readability.clean strips them. Left in, the "self-contained" output still
+  imported the project helpers and the gitignored stats-rendered.json.
+  Consequence: `refn()` is rewritten to its full definition,
+  `ref(<x>, supplement: none)` -- plain `#ref()` rendered "Table Table S1".
+- The matched leading `#` is captured and re-emitted for `fig`/`tbl`/`refn`:
+  a markup-mode `#fig()` resolved to the literal words `image("...")`, and a
+  markup-mode `#tbl()` now gains `#[...]`, since bare brackets in markup are
+  text, not a content block.
+- `ASSET_CALL` (typst_prose.py) gained a left word boundary, so a
+  manuscript's own `#subfig()` is no longer matched on its `fig(` suffix.
+  Its groups shifted by one; resolve_typst.py is the only consumer.
+- Cross-reference labels may be multi-segment (`@fig:panel:a`), matching
+  what typst_prose.CITE always allowed.
+- si-body.typ is appended only when its `#include` did not survive the body
+  slice, closing a double-SI path on manuscripts that include it inside the
+  markers.
+- `_abstract()` fails loud: a config.typ whose abstract the resolver cannot
+  read is a ResolveError, not a silently empty Abstract section, and
+  comments are stripped before the bracket count so a `]` in a comment
+  cannot truncate it.
+- tests/run.py: the fixture-stats swap is try/finally-guarded, SystemExit is
+  caught per case (resolve_stats raises it for unknown ids), and each fix
+  above carries a regression case.
+
 ## 3.13.0
 
 `just resolve` -> `paper.resolved.typ`: the manuscript as plain Typst, with

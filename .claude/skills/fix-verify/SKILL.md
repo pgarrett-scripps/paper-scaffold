@@ -1,49 +1,67 @@
 ---
 name: fix-verify
-description: Take a failing `just verify` (or any pipeline check) and fix each finding the way this pipeline intends — never by weakening a check, editing a generated file, or silencing without a written reason.
+description: Diagnose and fix failing manuscript pipeline checks while preserving author edits, generated-file ownership, and verification rules. Use when verify or a specific check reports a problem.
 ---
 
-# Fix a failing gate
+# Fix a failing pipeline check
 
-Run `just verify` (or start from output the user pasted) and clear it. Every
-finding class has one intended fix; applying a different one usually creates
-the next failure. Work through errors first, then triage warnings.
+Work from the manuscript root and follow AGENTS.md/CLAUDE.md. Start with the
+reported failure or run `just verify`. Inspect existing changes before editing.
+Use `just trace <id> --json` for findings about a statistic or asset. Read its
+findings and status, including incomplete, before choosing a fix.
 
-## The fix table
+## Choose the fix from the evidence
 
-| Finding | The intended fix | Never |
-|---|---|---|
-| `STALE: paper.pdf/docx` | `just paper` / `just docx` | edit `.build-stamp` |
-| `REPLACED: ... not the file that build produced` | rebuild; if deliberate restoration, rebuild anyway — the stamp follows builds | copy stamps around |
-| checksum mismatch on a stats value | the value was hand-edited: `git checkout stats.json`, then change the ANALYSIS and `just assets` — or take it over honestly with `origin.by="hand"` + note | keep the edited value |
-| guard (`expect`) violated | either the analysis changed meaning (fix it) or the sentence's assumption is stale (reword the sentence AND update `expect` in stats.json) | delete the guard to pass |
-| `sources ... has changed` | `just assets` (or `just check-stats-deep` to see which values move) | re-pin blindly |
-| pinned file changed | check the numbers that depend on it, then `just pin` to accept | `just pin` without looking |
-| asset hash changed / unclaimed file | generated: fix the generator, `just assets`. No generator exists: `just adopt note="..."` | hand-edit files in `figures/` or `si/` |
-| `bypassed-asset` | reference by id: `fig("...")`/`tbl("...")` | keep the filename path |
-| hand entry with no note | write the real provenance into `origin.note` | invent a note |
-| `unresolved-todo` | resolve the note, then delete the call | delete the call unresolved |
-| fmt-check | `just fmt`, then `just test` still passes | reflow by hand |
-| extractor test failure | teach the extractor in `tools/typst_prose.py`, add a fixture case, `just test-update`, READ the golden diff | edit golden files directly |
+- **Missing, unknown, stale, or replaced PDF/Word output:** rebuild with the
+  named recipe. State lives in `.build-state/`; never edit or copy it to make
+  an old output appear current. For a concurrent build or source edit during
+  compilation, finish the edit or let the build finish, then retry sequentially.
+- **Generated statistic checksum mismatch:** inspect the entry and generator,
+  then regenerate with `just assets` once the analysis is correct. This
+  preserves author-owned fmt, unit, desc, and expect. Do not restore all of
+  stats.json from Git, hand-edit generated values/checksums, or relabel a
+  generated value as hand-entered to bypass the finding.
+- **Guard violation:** determine whether the calculation is wrong or the
+  claim is outdated. Fix the analysis or update the claim and its justified
+  expect together, within the user's request. Existing guards live in
+  stats.json; generator arguments only seed new entries. Do not relax a guard
+  merely because the value fails it. If the scientific intent is unclear,
+  identify the decision needed and continue independent fixes.
+- **Changed declared inputs:** inspect what changed, then `just assets` to
+  regenerate. `just check-stats-deep` re-runs statistics for comparison without
+  updating committed values; it is stronger and potentially expensive.
+- **Changed pinned file:** inspect the change and its effect on claims before
+  `just pin` deliberately accepts it. Pinning does not regenerate analysis.
+- **Asset mismatch or missing generator:** repair the generator and regenerate.
+  If analysis is permanently gone and preserving the existing output is
+  intended, consult `just adopt` and its scope before recording real provenance.
+  A temporarily unavailable dependency is not a reason to adopt outputs.
+- **Missing provenance or malformed declaration:** repair the specific field
+  from real evidence. Do not invent a source or replace the ledger with an
+  empty one. Use the four tiers for genuinely hand-entered numbers.
+- **Bypassed asset:** use its declared fig()/tbl() ID, preserving its content.
+- **Unresolved todo:** address the note before removing its marker.
+- **Formatting:** `just fmt`, followed by the extractor tests in verify.
+- **Extractor failure:** fix the extractor, add the construct to
+  tests/fixture.typ, then `just test-update`; inspect the golden diff.
 
-## Warnings are triage, not chores
+## Warnings and incomplete checks
 
-- `derivable-number`: replace the typed numeral with `#s("id")` **only if the
-  rendered string is identical**; otherwise flag it to the user — swapping
-  changes the paper.
-- `unaccounted-number`: four tiers, weakest to strongest claim — `#lit("x")`
-  for deliberate prose, hand entry with note if it deserves an audit trail,
-  `gen_stats.py` if the analysis computes it, `prose-check.toml` with a
-  written reason for a global exception.
-- Style warnings (long-sentence, verbosity, repetition): fix the prose or
-  leave them standing; suppress in `prose-check.toml` only with a reason a
-  reviewer would accept, **never by editing `tools/prose_check.py`**.
+Matching digits do not prove two quantities are the same. Use declare-number
+when a warning needs a provenance declaration; check the quantity, units,
+population, and rendered digits before substituting an ID. Use copy-edit for
+wording-only batches, including its before-edit guard.
 
-## Rules of engagement
+Address style warnings relevant to the request. Deliberate exceptions belong
+in prose-check.toml with a reason, not in checker code. Unavailable data,
+uncompleted re-derivation, and an offline required audit mean verification is
+incomplete. Resolve the cause when possible; otherwise report it without
+claiming success. Trace does not re-run analysis. Ordinary verify does not
+include deep statistics or online bibliography checks.
 
-Read the comment above any recipe or check before overriding it — every one
-exists because a specific failure happened; HISTORY.md's "Decisions reversed"
-lists the obvious ideas that were tried and were wrong. If the intended fix
-requires something unavailable (the analysis data is gone, a tool is
-missing), say exactly that rather than substituting a workaround that fakes
-green. Done means `just verify` exits clean and you quote its final line.
+## Finish
+
+Rebuild any stale Word output with its named recipe. Finish with `just paper`
+then `just verify`; quote its verdict and exact word count/readability. Rerun
+an originally failing deep or online check when it is part of the task. Use
+`just preflight` for an actual submission, not every local repair.

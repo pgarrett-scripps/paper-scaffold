@@ -117,12 +117,11 @@ def report(name: str, want: str, got: str) -> bool:
 
 def main() -> int:
     if not shutil.which("typstyle"):
-        print("error: typstyle not found (cargo install typstyle)", file=sys.stderr)
-        return 2
+        print("note: typstyle absent; reflow checks skipped, ordinary tests still run")
 
     src = FIXTURE.read_text()
     flat = extract(src)
-    wrapped = extract(reflowed(src))
+    wrapped = extract(reflowed(src)) if shutil.which("typstyle") else flat
 
     if "--update" in sys.argv:
         EXPECTED.mkdir(exist_ok=True)
@@ -169,11 +168,20 @@ def main() -> int:
         ok = False
 
     ok &= structural_cases()
+    from hardening import run_cases
+    ok &= run_cases()
+    from review_cases import run_cases as review_cases
+    ok &= review_cases()
+    from document_cases import run_cases as document_cases
+    ok &= document_cases()
+    from code_cases import run_cases as code_cases
+    ok &= code_cases()
 
     if ok:
         note = "" if extract_prose is not None else ", no audio/ so narration skipped"
+        invariant = "reflow-invariant" if shutil.which("typstyle") else "reflow skipped"
         print(f"  all extractor checks pass ({len(flat)} outputs, "
-              f"reflow-invariant, no leaks) + structural cases{note}")
+              f"{invariant}, no leaks) + structural cases{note}")
     return 0 if ok else 1
 
 
@@ -363,6 +371,7 @@ def structural_cases() -> bool:
     ok &= check_stats_cases()
     ok &= stats_ownership_cases()
     ok &= resolver_cases()
+    ok &= export_cases()
     ok &= adoption_cases()
     ok &= check_assets_cases()
     ok &= suppression_cases()
@@ -553,6 +562,98 @@ def bibliography_cases() -> bool:
         ok = False
     if "retraction" not in ba.WITHDRAWN:
         print("  bib-audit does not treat a retraction as withdrawn")
+        ok = False
+
+    # A resolving DOI is not proof that the fields beside it describe that
+    # work. These cases stay pure and offline so the ordinary test suite catches
+    # a metadata check that is weakened or accidentally removed.
+    entry = {
+        "_key": "curie2020",
+        "_type": "article",
+        "doi": "10.1/example",
+        "title": "{An} Example: Results & Methods",
+        "author": "Curie, M. and Einstein, Albert",
+        "year": "2020",
+        "journal": "Journal of Examples",
+        "volume": "12",
+        "issue": "3",
+        "pages": "10--20",
+    }
+    metadata = {
+        "title": ["<i>An</i> example: results &amp; methods"],
+        "author": [
+            {"family": "Curie", "given": "Marie"},
+            {"family": "Einstein", "given": "A."},
+        ],
+        "published-print": {"date-parts": [[2020]]},
+        "published-online": {"date-parts": [[2019]]},
+        "container-title": ["Journal of Examples: Annual Proceedings"],
+        "volume": "12",
+        "issue": "3",
+        "page": "10-20",
+    }
+    if ba._metadata_issues(entry, "ok", metadata):
+        print("  bib-audit metadata: formatting-only differences were reported")
+        ok = False
+
+    tex_entry = dict(entry,
+                     author=("Dan{\\v{c}}{\\'i}k, V. and "
+                             "Weilnb{\\\"o}ck, Lisa and others"))
+    tex_metadata = dict(metadata, author=[
+        {"family": "Dančík", "given": "Vlado"},
+        {"family": "Weilnböck", "given": "Lisa"},
+        {"family": "Someone", "given": "Else"},
+    ])
+    if ba._metadata_issues(tex_entry, "ok", tex_metadata):
+        print("  bib-audit metadata: TeX accents or 'and others' were reported")
+        ok = False
+
+    short_title = dict(metadata, title=["An Example"])
+    issues = ba._metadata_issues(entry, "ok", short_title)
+    if [(item.field, item.fatal) for item in issues] != [("title", False)]:
+        print("  bib-audit metadata: an incomplete registered title was not "
+              "reported as a non-fatal review item")
+        ok = False
+
+    wrong = dict(entry, title="A Different Paper",
+                 author="Curie, Pierre and Einstein, Albert", year="2021")
+    issues = ba._metadata_issues(wrong, "ok", metadata)
+    fatal = {item.field for item in issues if item.fatal}
+    if fatal != {"title", "author", "year"}:
+        print("  bib-audit metadata: wrong core fields produced "
+              f"{sorted(fatal)}, expected author/title/year")
+        ok = False
+
+    wrong_details = dict(entry, journal="Other Journal", volume="99",
+                         issue="", number="8", pages="200--220")
+    issues = ba._metadata_issues(wrong_details, "ok", metadata)
+    warnings = {item.field for item in issues if not item.fatal}
+    if warnings != {"venue", "volume", "issue", "pages"}:
+        print("  bib-audit metadata: wrong detail fields produced "
+              f"{sorted(warnings)}, expected issue/pages/venue/volume")
+        ok = False
+
+    datacite = {
+        "titles": [{"title": "A Dataset"}],
+        "creators": [{"familyName": "Curie", "givenName": "Marie"}],
+        "publicationYear": 2020,
+        "container": {"title": "Example Repository"},
+    }
+    data_entry = dict(entry, title="A Dataset", author="Curie, Marie",
+                      journal="Example Repository")
+    if ba._metadata_issues(data_entry, "datacite", datacite):
+        print("  bib-audit metadata: matching DataCite fields were reported")
+        ok = False
+
+    # Exercise the command-level contract too: a mismatched title must make
+    # preflight fail, not merely print an advisory that can scroll past.
+    import contextlib
+    import io
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc = ba.audit(entries=[wrong],
+                      fetch=lambda doi, timeout: ("ok", metadata), pause=False)
+    if rc != 1:
+        print("  bib-audit metadata: a core mismatch did not fail the audit")
         ok = False
     return ok
 
@@ -1338,66 +1439,335 @@ def resolver_cases() -> bool:
     import resolve_typst as rt
     import typst_prose
     ok = True
+    # The table case INLINES the target file, so it must exist on disk. A
+    # temp file rather than the scaffold's si/example_table.typ: a derived
+    # manuscript may have deleted the example generator, and this suite must
+    # not depend on which assets the manuscript's analysis declares. The
+    # absolute path wins the resolver's `ROOT / path` join.
+    tbl_tmp = tempfile.TemporaryDirectory()
+    tbl_file = Path(tbl_tmp.name) / "example_table.typ"
+    tbl_file.write_text("#table(columns: 2, [a], [b])\n")
     assets = {"fig.x": {"path": "figures/example_figure.png"},
-              "tbl.x": {"path": "si/example_table.typ"}}
+              "tbl.x": {"path": str(tbl_file)}}
     # Against the TEST-owned stats, like extract(): the fixture must not
-    # depend on which ids the manuscript's analysis currently declares.
+    # depend on which ids the manuscript's analysis currently declares. The
+    # swap is try/finally-guarded, also like extract(): a case that escapes
+    # the loop must not leave the module pointing at the fixture.
     saved = typst_prose.STATS_JSON
     fixture_stats = HERE / "fixture-stats.json"
     if fixture_stats.is_file():
         typst_prose.STATS_JSON = fixture_stats
+    try:
+        cases = [
+            # (name, source, must appear, must NOT appear)
+            ("stats resolve", '#s("cohort.total_n")', None, "#s("),
+            ("lit unwraps", '#lit("2.2")', "2.2", "#lit("),
+            ("figure keeps its arguments", '#fig("fig.x", width: 70%)',
+             'image("figures/example_figure.png", width: 70%)', "fig("),
+            # The matched `#` must be re-emitted: without it, a markup-mode
+            # call resolved to the literal words image("...") in the export.
+            ("markup figure keeps its hash", 'See #fig("fig.x") here.',
+             '#image("figures/example_figure.png")', None),
+            # A markup-mode table needs `#[...]`; bare brackets in markup are
+            # literal text, not a content block.
+            ("markup table gains a content block", '#tbl("tbl.x")',
+             "#[", None),
+            # No left boundary matched any identifier ending in fig/tbl, so a
+            # manuscript's own #subfig() helper was rejected -- or, on an id
+            # collision, silently rewritten.
+            ("a subfig helper is not fig", '#subfig("panel-a")',
+             '#subfig("panel-a")', "image("),
+            # pandoc reads @fig as a CITATION KEY and orphans the label, so a
+            # cross-reference silently becomes the words "[fig]:x".
+            ("crossref becomes a ref", "see @fig:demo here",
+             "#ref(<fig:demo>)", "@fig:"),
+            # Labels may be multi-segment, exactly as typst_prose.CITE allows;
+            # capturing one segment resolved @fig:panel:a to a nonexistent
+            # label plus stray ':a' prose.
+            ("multi-segment crossref label", "see @fig:panel:a here",
+             "#ref(<fig:panel:a>)", "@fig:"),
+            ("citation is NOT a crossref", "as shown @lovelace1843 here",
+             "@lovelace1843", "#ref(<lovelace"),
+            # typstyle breaks a long call and leaves a trailing comma; the
+            # first draft's pattern had no `,?` and died on a real manuscript.
+            # The helper's `#let` is stripped, so the rewrite must write out
+            # its definition: plain #ref() rendered "Table Table S1".
+            ("reflowed refn keeps its supplement", "#refn(\n  <tbl:x>,\n)",
+             "#ref(<tbl:x>, supplement: none)", "refn("),
+            # A code-mode refn (inside a larger expression) must not gain an
+            # invalid `#`.
+            ("code-mode refn stays code", "#figure(refn(<tbl:x>))",
+             "(ref(<tbl:x>, supplement: none))", "(#ref"),
+            # si-body.typ documents its own usage with a literal #s("id") in a
+            # comment, which the resolver then asked stats.json to resolve.
+            ("comments are stripped first", '// example: #s("id")\nreal text',
+             "real text", "#s("),
+            # ...and the #todo refusal runs AFTER the strip: a note mentioned
+            # in a comment builds clean under `just paper` and must export.
+            ("a commented todo does not refuse", '// old: #todo("was fixed")\nreal text',
+             "real text", "#todo"),
+            # Directive lines are stripped, as readability.clean strips them:
+            # left in place, the "self-contained" output still imported the
+            # project helpers and gitignored stats-rendered.json.
+            ("directive lines are dropped",
+             '#import "stats.typ": s, n\n#let refn(l) = ref(l, supplement: none)\nprose stays',
+             "prose stays", "#import"),
+            # Raw spans are verbatim in the PDF and must be verbatim in the
+            # export: a documented `#s("id")` in backticks was either rejected
+            # (undeclared id) or silently replaced by the number.
+            ("inline code is verbatim", 'use `#s("id")` here',
+             '`#s("id")`', None),
+            ("a fence is verbatim", 'before\n```\n#fig("fig.nope")\n```\nafter',
+             '#fig("fig.nope")', "image("),
+            ("a todo in a fence does not refuse", '```\n#todo("example")\n```',
+             '#todo("example")', None),
+            # The 80-column reflow splits a long citation cluster across a
+            # soft line break. Typst groups citations across it, so the PDF
+            # collapsed six keys into one range; pandoc's Typst reader only
+            # groups citations on one LINE, and the Word export shipped
+            # reading "10-12 13-15" where the PDF read "10-15".
+            ("a line-split citation cluster is rejoined",
+             "natively @lovelace1843 @hopper1952\n@turing1936, but each",
+             "@lovelace1843 @hopper1952 @turing1936, but each",
+             "@hopper1952\n"),
+            # ...but only a single newline: a blank line is a paragraph break,
+            # and two citations either side of one are separate sentences.
+            ("citations across a paragraph break stay put",
+             "ends here @lovelace1843\n\n@hopper1952 opens the next",
+             "@lovelace1843\n\n@hopper1952", None),
+        ]
+        for name, src, want, forbid in cases:
+            try:
+                got = rt.resolve_notation(src, assets, "t")
+            # SystemExit too: resolve_stats raises it for an unknown id, and
+            # `except Exception` let it abort the whole run mid-suite instead
+            # of printing this case's diagnostic.
+            except (Exception, SystemExit) as e:
+                print(f"  resolver [{name}]: raised {type(e).__name__}: {e}")
+                ok = False
+                continue
+            if want and want not in got:
+                print(f"  resolver [{name}]: expected {want!r} in {got!r}")
+                ok = False
+            if forbid and forbid in got:
+                print(f"  resolver [{name}]: {forbid!r} survived in {got!r}")
+                ok = False
 
-    cases = [
-        # (name, source, must appear, must NOT appear)
-        ("stats resolve", '#s("cohort.total_n")', None, "#s("),
-        ("lit unwraps", '#lit("2.2")', "2.2", "#lit("),
-        ("figure keeps its arguments", '#fig("fig.x", width: 70%)',
-         'image("figures/example_figure.png", width: 70%)', "fig("),
-        # pandoc reads @fig as a CITATION KEY and orphans the label, so a
-        # cross-reference silently becomes the words "[fig]:x".
-        ("crossref becomes a ref", "see @fig:demo here",
-         "#ref(<fig:demo>)", "@fig:"),
-        ("citation is NOT a crossref", "as shown @lovelace1843 here",
-         "@lovelace1843", "#ref(<lovelace"),
-        # typstyle breaks a long call and leaves a trailing comma; the first
-        # draft's pattern had no `,?` and died on a real manuscript.
-        ("reflowed refn with trailing comma", "#refn(\n  <tbl:x>,\n)",
-         "#ref(<tbl:x>)", "refn("),
-        # si-body.typ documents its own usage with a literal #s("id") in a
-        # comment, which the resolver then asked stats.json to resolve.
-        ("comments are stripped first", '// example: #s("id")\nreal text',
-         "real text", "#s("),
-    ]
-    for name, src, want, forbid in cases:
+        # A note that cannot ship must not ship through an export either.
         try:
-            got = rt.resolve_notation(src, assets, "t")
-        except Exception as e:
-            print(f"  resolver [{name}]: raised {type(e).__name__}: {e}")
+            rt.resolve_notation('#todo("check")', assets, "t")
+            print("  resolver: an unresolved #todo was exported anyway")
+            ok = False
+        except rt.ResolveError:
+            pass
+
+        # An id the manifest does not declare must name itself, not vanish.
+        try:
+            rt.resolve_notation('#fig("fig.nope")', assets, "t")
+            print("  resolver: an undeclared asset id was accepted")
+            ok = False
+        except rt.ResolveError:
+            pass
+    finally:
+        typst_prose.STATS_JSON = saved
+        tbl_tmp.cleanup()
+    return ok
+
+
+def export_cases() -> bool:
+    """The pandoc export path: crossref numbering, bibliography, key checks.
+
+    Pandoc renders a Typst ref as an EMPTY link, so a wrong number here is a
+    cross-reference that silently reads wrong in the Word file -- and a
+    missing citation key ships as bold prose at exit 0. Both get exact cases.
+    """
+    import tempfile
+
+    import export_docx as ex
+    import resolve_typst as rt
+    ok = True
+
+    # The numbering the PDF shows, reimplemented: floats per kind in document
+    # order (tbl and tab share the Table counter), headings nest, the SI
+    # marker resets everything with an "S" prefix.
+    body = (
+        "= Intro <sec:i>\n"
+        "prose\n"
+        '#figure(image("a.png"), caption: [First light.]) <fig:a>\n'
+        "== Deep\n<sec:d>\n"  # label wrapped onto its own line, as typstyle may
+        "#figure(table()) <tbl:t>\n"
+        "#figure(table()) <tab:u>\n"
+        "$ x $ <eq:e>\n"
+        "\x00SI\x00\n= SI Methods <sec:s>\n"
+        '#figure(image("b.png"), caption: [Appendix view.]) <fig:b>\n'
+        "see #ref(<fig:a>), #ref(<tbl:t>), #ref(<tab:u>), #ref(<eq:e>), "
+        "#ref(<sec:d>), #ref(<sec:s>), #ref(<fig:b>), "
+        "figure(ref(<fig:b>, supplement: none)) and "
+        "S#ref(<fig:b>, supplement: none) and `#ref(<fig:a>)` verbatim\n")
+    try:
+        got = rt.resolve_crossrefs("also #ref(<fig:a>) in the abstract\n\n",
+                                   body)
+    except (Exception, SystemExit) as e:
+        print(f"  crossrefs: raised {type(e).__name__}: {e}")
+        got = ""
+        ok = False
+    for want in ("see Figure 1,", " Table 1,", " Table 2,", " Equation 1,",
+                 " Section 1.1,", " Section S1,", " Figure S1,",
+                 "figure([S1])",        # code mode: a content block, not bare words
+                 "and SS1 and",         # supplement: none -> the bare number
+                 "`#ref(<fig:a>)` verbatim",   # raw spans stay verbatim
+                 "also Figure 1 in the abstract",   # replaced in head too
+                 # The count is written into the definitions too: pandoc
+                 # numbers nothing, so captions and headings carry the PDF's
+                 # numbers as literal text. Main-text headings use arkheion's
+                 # "1." pattern (trailing dot); the SI's own function has none.
+                 "caption: [Figure 1: First light.]",
+                 "caption: [Figure S1: Appendix view.]",
+                 "= 1. Intro",
+                 "== 1.1. Deep",
+                 "= S1 SI Methods"):
+        if want not in got:
+            print(f"  crossrefs: expected {want!r} in the resolved text")
+            ok = False
+    if "\x00" in got:
+        print("  crossrefs: the SI marker leaked into the output")
+        ok = False
+    try:
+        rt.resolve_crossrefs("", "see #ref(<fig:ghost>)\n")
+        print("  crossrefs: a ref to a nonexistent label was accepted")
+        ok = False
+    except rt.ResolveError:
+        pass
+
+    # The bibliography call is carried through with its style identifier
+    # resolved from config.typ; commented-out calls are not calls.
+    cases = [
+        ("style identifier resolves",
+         '#bibliography("r.bib", style: paper-bib-style)',
+         '#let paper-bib-style = "acs"',
+         '#bibliography("r.bib", style: "acs")'),
+        ("literal style passes through",
+         '#bibliography("r.bib", style: "nature")', "",
+         '#bibliography("r.bib", style: "nature")'),
+        ("no bibliography is legal", "just prose", "", ""),
+        ("a commented call is not a call",
+         '// #bibliography("r.bib")', "", ""),
+    ]
+    for name, paper, config, want in cases:
+        try:
+            got = rt.bibliography_line(paper, config)
+        except (Exception, SystemExit) as e:
+            print(f"  bibliography [{name}]: raised {type(e).__name__}: {e}")
             ok = False
             continue
-        if want and want not in got:
-            print(f"  resolver [{name}]: expected {want!r} in {got!r}")
+        if got != want:
+            print(f"  bibliography [{name}]: expected {want!r}, got {got!r}")
             ok = False
-        if forbid and forbid in got:
-            print(f"  resolver [{name}]: {forbid!r} survived in {got!r}")
-            ok = False
-
-    # A note that cannot ship must not ship through an export either.
     try:
-        rt.resolve_notation('#todo("check")', assets, "t")
-        print("  resolver: an unresolved #todo was exported anyway")
+        rt.bibliography_line('#bibliography("r.bib", style: mystery)', "")
+        print("  bibliography: an unresolvable style identifier was accepted")
         ok = False
     except rt.ResolveError:
         pass
 
-    # An id the manifest does not declare must name itself, not vanish.
-    try:
-        rt.resolve_notation('#fig("fig.nope")', assets, "t")
-        print("  resolver: an undeclared asset id was accepted")
+    # The exporter swaps the call for its own heading and hands the paths on.
+    src, paths, style = ex.split_bibliography(
+        'prose\n#bibliography("references.bib", title: [References], '
+        'style: "acs")\n')
+    if "= References" not in src or "#bibliography" in src:
+        print("  split_bibliography: the call did not become its heading")
         ok = False
-    except rt.ResolveError:
-        pass
-    typst_prose.STATS_JSON = saved
+    if paths != ["references.bib"] or style != "acs":
+        print(f"  split_bibliography: got paths {paths!r}, style {style!r}")
+        ok = False
+    # Citeproc puts the reference list inside a Div with id "refs" and
+    # otherwise appends it at the very END -- after the entire SI. The
+    # heading must carry the anchor refs_div.lua promotes into that Div.
+    if "#block[]<refs>" not in src:
+        print("  split_bibliography: the <refs> anchor is missing -- the "
+              "reference list would land after the SI")
+        ok = False
+
+    # A cited key with no entry is the failure citeproc ships at exit 0.
+    with tempfile.NamedTemporaryFile("w", suffix=".bib") as bib:
+        bib.write("@article{real2020,\n  title={x}\n}\n")
+        bib.flush()
+        p = Path(bib.name)
+        missing = ex.check_citations("cite @real2020. and @ghost2020 here",
+                                     [p])
+        if missing != ["ghost2020"]:
+            print(f"  check_citations: expected ['ghost2020'], got {missing!r}")
+            ok = False
+        # An author email's @, both as Typst escapes it in prose and inside a
+        # mailto: string -- neither is citation syntax to Typst, and each
+        # briefly failed the export as "@scripps not in the bibliography".
+        missing = ex.check_citations(
+            'write to #link("mailto:pgarrett@scripps.edu")'
+            "[pgarrett\\@scripps.edu] today", [p])
+        if missing:
+            print(f"  check_citations: an email's @ was read as a citation "
+                  f"key: {missing!r}")
+            ok = False
+
+    # The back matter travels: sliced from BODY END to the bibliography,
+    # never into the SI-appendix machinery (page break, counter surgery).
+    fake = ("// >>> BODY START -- t\nbody prose\n// <<< BODY END -- t\n"
+            "#heading(numbering: none)[Associated Content]\n\n"
+            "Data are available.\n\n"
+            '#bibliography("r.bib")\n#pagebreak()\n#counter(heading).update(0)\n')
+    back = rt._back_matter(fake, {})
+    if "Associated Content" not in back or "Data are available." not in back:
+        print(f"  back matter: the sections were dropped: {back!r}")
+        ok = False
+    if "#bibliography" in back or "#pagebreak" in back or "#counter" in back:
+        print(f"  back matter: appendix machinery leaked in: {back!r}")
+        ok = False
+
+    # The TOC graphic and its caption, from the front-matter bindings; the
+    # caption's bracket walk must survive a nested pair.
+    assets = {"fig.x": {"path": "figures/example_figure.png"}}
+    fake = ("#let toc-caption = [At a [nested] glance.]\n"
+            '#let toc-graphic = fig("fig.x", width: 92%)\n'
+            "// >>> BODY START -- t\nbody\n// <<< BODY END -- t\n")
+    blk = rt._toc_block(fake, assets)
+    if 'image("figures/example_figure.png", width: 92%)' not in blk:
+        print(f"  toc block: the graphic did not resolve: {blk!r}")
+        ok = False
+    if "_At a [nested] glance._" not in blk:
+        print(f"  toc block: the caption was truncated or dropped: {blk!r}")
+        ok = False
+    if rt._toc_block("// >>> BODY START -- t\nb\n// <<< BODY END -- t\n", {}):
+        print("  toc block: a manuscript without one produced content")
+        ok = False
+
+    # The author line carries affiliation superscripts -- the numbers Typst
+    # derived, joined for a shared appointment, absent when an author has
+    # none to point at. Without them the export showed a bare name list
+    # above a numbered affiliation list nothing pointed into.
+    line = rt._author_line({"authors": [
+        {"name": "A. Uthor", "affils": [1]},
+        {"name": "B. Oth", "affils": [1, 2]},
+        {"name": "C. Lone", "affils": []}]})
+    if line != "A. Uthor#super[1], B. Oth#super[1,2], C. Lone":
+        print(f"  author line: got {line!r}")
+        ok = False
+
+    # The SI title block is a #heading CALL on purpose: `= ` markup would
+    # tick the crossref pass's counter and number the SI's first real
+    # section S2. Its author line is the PLAIN names (si-authors), and the
+    # probe's records must feed it as cleanly as a test's bare strings.
+    si_title = rt._si_title(
+        {"title": "T", "authors": [{"name": "A. Uthor", "affils": [1]}]})
+    if "_A. Uthor_" not in si_title or "#super" in si_title:
+        print(f"  si title: author records leaked markers: {si_title!r}")
+        ok = False
+    si_title = rt._si_title({"title": "T", "authors": ["A. Uthor"]})
+    if "[Supporting Information]" not in si_title or "_A. Uthor_" not in si_title:
+        print(f"  si title: missing pieces: {si_title!r}")
+        ok = False
+    if re.search(r"(?m)^=+ ", si_title):
+        print("  si title: a markup heading would steal the SI's S1")
+        ok = False
     return ok
 
 

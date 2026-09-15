@@ -121,7 +121,8 @@ reader less than the lookup does.
 ## Claims
 
 Every load-bearing number in the text should be traceable to a generated table or
-figure, not typed in by hand. See the `si/` contract in [README.md](README.md).
+figure, not typed in by hand. See the
+[`si/` contract](DOCUMENTATION.md#the-si-contract-generated-tables-never-hand-typed-numbers).
 
 State the scope of a claim in the sentence that makes it. "Identifications were
 unchanged in ddaPASEF" needs the acquisition mode in it, because the diaPASEF

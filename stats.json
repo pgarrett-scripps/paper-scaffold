@@ -2,6 +2,8 @@
   "_about": "Numbers the manuscript states in prose, read as #s(\"<id>\"). Scripts own each entry's value; fmt, unit, desc and expect are the author's to edit here. Entries with origin.by = \"hand\" are entirely yours.",
   "sources": {
     "analysis/scripts/gen_stats.py": {
+      "analysis/pyproject.toml": "sha256:762ba6f1daa2d1dba8c7569529df2d69e4a6aed7c1b63e7455ed3d0b2a147f5d",
+      "analysis/uv.lock": "sha256:e21d564964b2cd47035d7523fe2ce1644f8815c3882c59d5ef8bf9aa58927c97",
       "analysis/scripts/gen_stats.py": "sha256:556323f33fde4e3fbc67c36ed12de83e931de126b6efb2f6d5817329cef527e7",
       "analysis/scripts/example_data.csv": "sha256:c19c83771308bceecc3f22425ecea53ee3c37db0af1e4ceeea61e844b212b187"
     }

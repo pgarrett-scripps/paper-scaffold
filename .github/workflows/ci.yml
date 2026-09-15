@@ -28,6 +28,9 @@ env:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      UV_LOCKED: "true"
+      UV_PYTHON: ${{ matrix.python }}
     strategy:
       fail-fast: false
       matrix:
@@ -36,6 +39,7 @@ jobs:
         # figures from the Word export (see the justfile comment), and a new one
         # changes HTML export in ways typst2docx.py has to keep up with.
         typst: ["0.14.2", "0.15.1"]
+        python: ["3.10", "3.12"]
 
     steps:
       # A shallow checkout is fine: no check reads git history any more. Staleness
@@ -94,7 +98,7 @@ jobs:
 
       # Build before verifying, exactly as CLAUDE.md tells a human to. Neither
       # output is tracked, so a fresh clone has neither and `just check` correctly
-      # asks for both. Building also writes the .build-stamp that check-build
+      # asks for both. Building also writes the .build-state/ that check-build
       # compares against.
       - run: just paper
       - run: just docx
@@ -154,16 +158,22 @@ jobs:
           doc = z.read("word/document.xml").decode("utf8", "replace")
           media = [n for n in z.namelist() if n.startswith("word/media/")]
           checks = {
-              "abstract survived the template bypass": "working skeleton" in doc,
+              "abstract survived": "working skeleton" in doc,
               "section headings survived": "Introduction" in doc and "Methods" in doc,
-              "equations were rasterized back in": len(media) > 0,
+              "equations are native Word math": "<m:oMath>" in doc,
+              "figures embedded": len(media) > 0,
               "the SI came along": "Supporting Information" in doc,
+              "references were set": "Analytical Engine" in doc,
           }
           for name, ok in checks.items():
               print(("  ok   " if ok else "  FAIL ") + name)
           print(f"  ({len(media)} embedded image(s))")
           sys.exit(0 if all(checks.values()) else 1)
           PY
+
+      # The fallback route still has to build -- it is the one html.frame()
+      # and the typst floor exist for, and the matrix is what holds that floor.
+      - run: just docx-html
 
       - run: just verify
 

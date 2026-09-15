@@ -4,14 +4,15 @@
 # rewriting history. Ship the PDF as a release asset or a CI artifact instead.
 #
 # Staleness is answered without git now -- `just paper` and `just docx` record
-# the hash of what they rendered in .build-stamp and `just check-build` recompares
-# it. .build-stamp is untracked too, because it describes local build output:
+# the hash of what they rendered in .build-state/ and `just check-build` recompares
+# it. .build-state/ is untracked too, because it describes local build output:
 # tracking it would let a rebuild here report every other checkout stale.
 paper.pdf
 paper-draft.pdf
 .build-stamp
+.build-state/
 # Stat-keyed cache for the content hashes `just verify` compares. Local build
-# state like .build-stamp: safe to delete, never the recorded truth (that stays
+# state like .build-state/: safe to delete, never the recorded truth (that stays
 # in stats.json / assets.json). See tools/hashcache.py.
 .hash-cache.json
 # Snapshot of paper.pdf's extracted text, for `just text-diff` around a
@@ -20,6 +21,9 @@ paper-draft.pdf
 # Snapshots of the manuscript's mechanical properties (numbers, refs, floats,
 # headings), for `just edit-check` around a copy-edit pass. Same contract.
 .edit-guard/
+# Named manuscript versions and their local HTML comparison. These are user
+# review history, not disposable build cache; only remove deliberately.
+.review/
 
 # Rendered from stats.json by tools/render_stats.py: the display strings Typst
 # reads. Derived, not source -- stats.json holds the value and the format spec,

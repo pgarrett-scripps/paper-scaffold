@@ -652,22 +652,8 @@ DOI_ERA = 2000
 
 
 def _bib_entries(path: Path) -> list[dict]:
-    """Every entry as {key, type, fields...}, or [] if the file cannot be read."""
-    try:
-        import bibtexparser
-    except ImportError:
-        return []
-    try:
-        db = bibtexparser.parse_file(str(path))
-    except Exception:
-        return []
-    out = []
-    for e in db.entries:
-        rec = {f.key.lower(): (f.value or "").strip("{} ") for f in e.fields}
-        rec["_key"] = e.key
-        rec["_type"] = (e.entry_type or "").lower()
-        out.append(rec)
-    return out
+    from bibliography import entries
+    return entries(path)
 
 
 def _normalize_doi(doi: str) -> str:
@@ -679,7 +665,8 @@ def _normalize_doi(doi: str) -> str:
 
 
 def check_bibliography(root: Path | None = None,
-                       cfg: Config | None = None) -> list[Finding]:
+                       cfg: Config | None = None, *, bib_paths=None,
+                       cited_keys: set[str] | None = None) -> list[Finding]:
     """Checks on references.bib, the last artifact here nothing read.
 
     Typst already fails on a citation with no entry, so that direction is
@@ -698,16 +685,20 @@ def check_bibliography(root: Path | None = None,
     import datetime
 
     r = root or ROOT
-    bibs = sorted(r.glob("*.bib"))
+    bibs = sorted(r.glob("*.bib")) if bib_paths is None else list(bib_paths)
     if not bibs:
         return []
-    entries = [e for b in bibs for e in _bib_entries(b)]
+    try:
+        entries = [e for b in bibs for e in _bib_entries(b)]
+    except (OSError, ValueError) as exc:
+        return [Finding("bibliography-parse", "error", str(exc))]
     if not entries:
         return []
 
-    cited: set[str] = set()
-    for src in sorted(r.glob("*.typ")):
-        cited |= set(re.findall(r"@([A-Za-z0-9_:-]+)", src.read_text()))
+    cited: set[str] = set() if cited_keys is None else cited_keys
+    if cited_keys is None:
+        for src in sorted(r.glob("*.typ")):
+            cited |= set(re.findall(r"@([A-Za-z0-9_:-]+)", src.read_text()))
 
     out: list[Finding] = []
     where = bibs[0].name

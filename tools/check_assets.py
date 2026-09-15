@@ -33,6 +33,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import hashcache  # noqa: E402
+from manifest_validation import load, ManifestError
+from manuscript_sources import usages
 
 ASSETS = ROOT / "assets.json"
 
@@ -74,7 +76,7 @@ def _entry(id: str, rec: dict) -> list[Finding]:
         out.append(Finding("warn", id,
             f"points at {path}, outside {'/ '.join(OUTPUT_DIRS)}/"))
 
-    by = rec.get("origin", {}).get("by")
+    by = (rec.get("origin") or {}).get("by")
 
     want = rec.get("hash")
     if not want:
@@ -98,7 +100,7 @@ def _entry(id: str, rec: dict) -> list[Finding]:
         # Adopted: nothing can rebuild it, by declaration. The note is the
         # audit trail, exactly as for a hand-entered number in stats.json,
         # and is required for the same reason.
-        if not (rec.get("origin", {}).get("note") or "").strip():
+        if not ((rec.get("origin") or {}).get("note") or "").strip():
             out.append(Finding("error", id,
                 "is adopted but has no origin.note. Say where the file came "
                 "from -- a repository, a collaborator, a previous submission. "
@@ -132,9 +134,7 @@ def _references(values: dict) -> list[Finding]:
     second is the one nothing else sees: an asset that is still generated and
     still hashed, and that no sentence points at any more.
     """
-    src = " ".join(re.sub(r"//[^\n]*", " ", p.read_text())
-                   for p in sorted(ROOT.glob("*.typ")))
-    called = set(CALL.findall(src))
+    called = {u["id"] for u in usages(ROOT) if u["helper"] in ("fig", "tbl")}
     out = [Finding("error", id, "is referenced by the manuscript but not "
                                 "declared in assets.json -- run: just assets")
            for id in sorted(called - set(values))]
@@ -179,9 +179,9 @@ def main() -> int:
         print("no assets.json: this manuscript declares no generated assets.")
         return 0
     try:
-        doc = json.loads(ASSETS.read_text())
-    except json.JSONDecodeError as e:
-        print(f"assets.json is not valid JSON: {e}")
+        doc = load(ASSETS, "assets")
+    except ManifestError as e:
+        print(str(e))
         return 1
     values = doc.get("values")
     if not isinstance(values, dict):
@@ -191,14 +191,17 @@ def main() -> int:
     found: list[Finding] = []
     for id, rec in sorted(values.items()):
         found += _entry(id, rec)
-    found += _references(values)
+    try:
+        found += _references(values)
+    except (OSError, ValueError) as exc:
+        found.append(Finding("error", "sources", str(exc)))
     found += _unclaimed(values)
 
     from report import findings
     findings([(f.level, f.id, f.msg) for f in found])
     errors = [f for f in found if f.level == "error"]
     adopted = sum(1 for r in values.values()
-                  if r.get("origin", {}).get("by") == "adopted")
+                  if (r.get("origin") or {}).get("by") == "adopted")
     print(f"  {len(values)} declared asset(s)"
           + (f", {adopted} adopted (nothing can regenerate them)" if adopted else "")
           + (f", {len(errors)} error(s)" if errors else ", no errors"))

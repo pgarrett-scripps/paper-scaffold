@@ -9,6 +9,7 @@ logs and `just paper | tee` stay plain, greppable text.
 from __future__ import annotations
 
 import sys
+import os
 
 from rich import box
 from rich.console import Console
@@ -19,7 +20,8 @@ from rich.table import Table
 # is worse than no styling at all. A real terminal reports its own width; for
 # everything else the reports are allowed the width they need.
 console = Console(highlight=False,
-                  width=None if sys.stdout.isatty() else 200)
+                  width=None if sys.stdout.isatty() else
+                  int(os.environ.get("PAPER_REPORT_COLUMNS", "200")))
 
 
 def table(title: str, caption: str | None = None) -> Table:

@@ -62,6 +62,7 @@ RULES: dict[str, tuple[str, str]] = {
     "bypassed-asset":     ("error", "the file path"),
     "low-resolution-figure": ("warn", "the file name"),
     "oversized-table":    ("warn",  "the file name"),
+    "bibliography-parse":  ("error", ""),
     "duplicate-reference": ("error", "the shared DOI"),
     "uncited-reference":  ("warn",  "the entry key"),
     "missing-doi":        ("warn",  "the entry key"),

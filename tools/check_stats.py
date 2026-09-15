@@ -43,6 +43,8 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import hashcache  # noqa: E402
 import typst_prose  # noqa: E402
+from manifest_validation import load, ManifestError, guard_errors
+from manuscript_sources import usages
 
 STATS = ROOT / "stats.json"
 
@@ -66,56 +68,8 @@ def _guard(id: str, rec: dict) -> list[Finding]:
     was edited afterwards or typed in by hand. This is the same check applied to
     whatever is actually in the file.
     """
-    out: list[Finding] = []
-    v = rec.get("value")
-    expect = rec.get("expect") or {}
-    # expect is hand-edited JSON, so its SHAPE is checked before its meaning: a
-    # key this does not understand ("between" instead of min/max) is a guard
-    # that would never fire, which must be an error, not a silence.
-    if not isinstance(expect, dict):
-        return [Finding("error", id,
-            f"has an expect that is not an object ({type(expect).__name__}); "
-            f"no guard in it can be enforced")]
-    unknown = set(expect) - {"sign", "min", "max"}
-    if unknown:
-        out.append(Finding("error", id,
-            f"expect has unknown key(s) {', '.join(sorted(unknown))} -- only "
-            f"sign, min and max are understood, so this guard is not being "
-            f"enforced"))
-    if isinstance(v, bool) or not isinstance(v, (int, float)):
-        return out
-    if v != v:
-        return out + [Finding("error", id,
-            "is NaN, which no guard can pass and no sentence can state")]
-    sign = expect.get("sign")
-    if sign:
-        ok = {"+": v > 0, "-": v < 0, "nonzero": v != 0}.get(sign)
-        if ok is None:
-            out.append(Finding("error", id, f"unknown sign guard {sign!r}"))
-        elif not ok:
-            word = {"+": "positive", "-": "negative", "nonzero": "nonzero"}[sign]
-            out.append(Finding("error", id,
-                f"is {v}, but the prose assumes it is {word}. Either the value "
-                f"is wrong or the sentence reading it needs rewording."))
-    # Each bound on its own: expect is author-edited, and a one-sided band
-    # (`min` with no `max`) is a legitimate thing to write there. A bound that
-    # is not a number (a quoted "0") is reported, not compared -- comparing
-    # would be a TypeError that kills the whole gate without naming the entry.
-    lo, hi = expect.get("min"), expect.get("max")
-    for name, bound in (("min", lo), ("max", hi)):
-        if bound is not None and (isinstance(bound, bool)
-                                  or not isinstance(bound, (int, float))):
-            out.append(Finding("error", id,
-                f"expect.{name} is {bound!r}, not a number -- quoted in the "
-                f"JSON? This bound is not being enforced."))
-    lo = lo if isinstance(lo, (int, float)) and not isinstance(lo, bool) else None
-    hi = hi if isinstance(hi, (int, float)) and not isinstance(hi, bool) else None
-    if (lo is not None and v < lo) or (hi is not None and v > hi):
-        band = f"[{lo if lo is not None else '-inf'}, {hi if hi is not None else 'inf'}]"
-        out.append(Finding("error", id,
-            f"is {v}, outside its declared range {band} -- usually a unit "
-            f"error or a changed denominator"))
-    return out
+    return [Finding("error", id, message)
+            for message in guard_errors(rec.get("value"), rec.get("expect", {}))]
 
 
 def _origin(id: str, rec: dict) -> list[Finding]:
@@ -126,8 +80,10 @@ def _origin(id: str, rec: dict) -> list[Finding]:
             'has no origin.by -- add "hand" with a note, or let a generator '
             'write it')]
     by = o["by"]
+    if not isinstance(by, str):
+        return [Finding("error", id, "origin.by must be a string")]
     if by == "hand":
-        if not (o.get("note") or "").strip():
+        if not isinstance(o.get("note"), str) or not o["note"].strip():
             return [Finding("error", id,
                 "is hand-entered but has no origin.note. Say where the number "
                 "came from: a protocol, a spec, a paper. A typed number with no "
@@ -179,7 +135,7 @@ def _checksum(values: dict) -> list[Finding]:
     import hashlib
     out: list[Finding] = []
     for id, rec in sorted(values.items()):
-        if rec.get("origin", {}).get("by") == "hand":
+        if (rec.get("origin") or {}).get("by") == "hand":
             continue
         want = rec.get("checksum")
         if not want:
@@ -236,7 +192,9 @@ def _pinned(doc: dict) -> list[Finding]:
     Cached hashing, like _sources: pins exist precisely for the big raw files.
     """
     out: list[Finding] = []
-    pinned = doc.get("pinned") or {}
+    pinned = doc.get("pinned", {})
+    if pinned is None:
+        pinned = {}
     if not isinstance(pinned, dict):
         # Hand-authored by design, so its shape is a thing that can be wrong.
         # A list of paths is the obvious first guess at the syntax.
@@ -299,19 +257,12 @@ def _unused(values: dict) -> list[Finding]:
     already a hard failure (an unknown id panics the compile), so without this
     nothing ever notices a value going out of use.
     """
-    # Line comments are stripped first. stats.typ documents its own usage with a
-    # literal `#s("effect.treated_over_control")` in a comment, and paper.typ has
-    # `#s("id")` in its header -- counting those as real calls would mask exactly
-    # the value that had gone out of use.
-    src = " ".join(re.sub(r"//[^\n]*", " ", p.read_text())
-                   for p in sorted(ROOT.glob("*.typ")))
-    called = set(re.findall(typst_prose.STATS, src))
-    called |= set(re.findall(typst_prose.STATS_N, src))
+    called = {u["id"] for u in usages(ROOT) if u["helper"] in ("s", "n")}
     return [Finding("warn", id, "is declared but no .typ file reads it")
             for id in sorted(set(values) - called)]
 
 
-def _rederive(values: dict) -> list[Finding]:
+def _rederive(values: dict) -> tuple[list[Finding], str]:
     """Re-run the generator and diff its entries against what is committed.
 
     This is the one check here that establishes something rather than merely
@@ -326,7 +277,7 @@ def _rederive(values: dict) -> list[Finding]:
     """
     mine = GEN.relative_to(ROOT).as_posix()
     owned = {id: r for id, r in values.items()
-             if r.get("origin", {}).get("by") == mine}
+             if (r.get("origin") or {}).get("by") == mine}
     # The status string reaches the summary line, because "(re-derived)" must
     # not be printable when nothing was: on an all-hand-entered manuscript this
     # returned empty and the summary still claimed re-derivation -- a silent
@@ -334,7 +285,7 @@ def _rederive(values: dict) -> list[Finding]:
     if not owned:
         return [], "nothing generator-owned to re-derive"
     if not GEN.is_file():
-        return [], f"{mine} is absent, nothing re-derived"
+        return [Finding("incomplete", "(re-derive)", f"{mine} is absent")], "nothing re-derived"
 
     with tempfile.TemporaryDirectory() as d:
         shadow = Path(d) / "stats.json"
@@ -358,12 +309,16 @@ def _rederive(values: dict) -> list[Finding]:
         # still re-derives. (Found downstream, in the dnoise manuscript.)
         import os
         import shutil
+        import uuid
+        receipt = Path(d) / "receipt.json"
+        token = uuid.uuid4().hex
         runner = (["uv", "run", "--quiet", "python", str(GEN)]
                   if shutil.which("uv") else [sys.executable, str(GEN)])
         proc = subprocess.run(
             runner,
             cwd=GEN.parent, capture_output=True, text=True,
-            env={**os.environ, "PAPER_STATS_OUT": str(shadow)})
+            env={**os.environ, "PAPER_STATS_OUT": str(shadow),
+                 "PAPER_STATS_RECEIPT": str(receipt), "PAPER_STATS_TOKEN": token})
         if proc.returncode != 0:
             err = (proc.stderr.strip().splitlines()[-1]
                    if proc.stderr.strip() else "no output")
@@ -374,14 +329,26 @@ def _rederive(values: dict) -> list[Finding]:
                 return [Finding("error", "(re-derive)",
                     f"the analysis now produces a value that violates a guard "
                     f"in stats.json: {err}")], "re-derivation failed on a guard"
-            return [Finding("note", "(re-derive)",
+            return [Finding("incomplete", "(re-derive)",
                 f"could not re-run {GEN.relative_to(ROOT)}, so generated values "
                 f"were not re-checked: {err}")], "could not re-run the generator"
-        doc = json.loads(shadow.read_text())
-        # Only this generator's entries are compared: the copy carried the hand
-        # and other-script entries along, and they are not re-derivable.
-        fresh = {id: r for id, r in doc.get("values", {}).items()
-                 if r.get("origin", {}).get("by") == mine}
+        try:
+            written = json.loads(receipt.read_text())
+            if written.get("token") != token or written.get("by") != mine:
+                raise ValueError("receipt does not identify this invocation")
+            import hashlib
+            if (written.get("output") != str(shadow.resolve())
+                    or written.get("sha256") != hashlib.sha256(shadow.read_bytes()).hexdigest()):
+                raise ValueError("receipt does not identify the redirected output bytes")
+            doc = load(shadow, "stats")
+            fresh = {id: r for id, r in doc["values"].items()
+                     if (r.get("origin") or {}).get("by") == mine}
+            if sorted(fresh) != written.get("ids"):
+                raise ValueError("receipt IDs disagree with generated output")
+        except (OSError, ValueError, AttributeError) as exc:
+            return [Finding("incomplete", "(re-derive)",
+                f"no valid completion receipt: {exc}. Update analysis/scripts/_stats.py "
+                "alongside this checker; the generator must call Stats.write().")], "nothing verified"
 
     out: list[Finding] = []
     for id, rec in sorted(owned.items()):
@@ -389,7 +356,8 @@ def _rederive(values: dict) -> list[Finding]:
             out.append(Finding("error", id,
                 "is recorded as generated but the generator no longer produces "
                 "it. Re-run `just assets` to drop it, or take it over by hand."))
-        elif fresh[id].get("value") != rec.get("value"):
+        elif (fresh[id].get("value") != rec.get("value")
+              or type(fresh[id].get("value")) is not type(rec.get("value"))):
             out.append(Finding("error", id,
                 f"is {rec.get('value')!r} in stats.json but the analysis now "
                 f"produces {fresh[id].get('value')!r} -- run: just assets"))
@@ -405,9 +373,9 @@ def main() -> int:
         print("no stats.json: this manuscript declares no generated numbers.")
         return 0
     try:
-        doc = json.loads(STATS.read_text())
-    except json.JSONDecodeError as e:
-        print(f"stats.json is not valid JSON: {e}")
+        doc = load(STATS, "stats")
+    except ManifestError as e:
+        print(str(e))
         return 1
     values = doc.get("values")
     if not isinstance(values, dict):
@@ -428,19 +396,26 @@ def main() -> int:
         rederived, status = _rederive(values)
         found += rederived
         deep = f" ({status})"
-    found += _unused(values)
+    try:
+        found += _unused(values)
+    except (OSError, ValueError) as exc:
+        found.append(Finding("error", "sources", str(exc)))
 
     hand = sum(1 for r in values.values()
-               if r.get("origin", {}).get("by") == "hand")
+               if (r.get("origin") or {}).get("by") == "hand")
     errors = [f for f in found if f.level == "error"]
 
     from report import findings
     findings([(f.level, f.id, f.msg) for f in found])
     pins = len(doc.get("pinned") or {})
+    incomplete = sum(f.level == "incomplete" for f in found)
     print(f"  {len(values)} declared value(s), {hand} hand-entered{deep}"
           + (f", {pins} pinned file(s)" if pins else "")
-          + (f", {len(errors)} error(s)" if errors else ", no errors"))
-    return 1 if errors else 0
+          + (f", {len(errors)} error(s)" if errors else ", no errors")
+          + (f", {incomplete} INCOMPLETE check(s)" if incomplete else ""))
+    if errors:
+        return 1
+    return 2 if any(f.level == "incomplete" for f in found) else 0
 
 
 if __name__ == "__main__":
