@@ -13,6 +13,21 @@ ENTRYPOINTS = ("paper.typ", "config.typ", "si-body.typ")
 CALL = re.compile(r'(?<![\w-])#?(s|n|fig|tbl)\(\s*"([^"\n]+)"')
 DEPENDENCY = re.compile(r'#(?:include|import)\s+"([^"\n]+)"')
 
+# The Supporting Information's own reference list. Typst allows exactly one
+# native #bibliography per document ("multiple bibliographies are not yet
+# supported"), so a manuscript whose SI ships as a separate file sets the SI
+# list with Alexandria instead: a `#show: alexandria(prefix: "si-", ...)` in
+# paper.typ, and a matching `#bibliographyx(..., prefix: "si-")` in si-body.typ.
+#
+# Both prefixes are read from the source as STRING LITERALS, not evaluated. A
+# manuscript that computes either one from a variable is not supported here and
+# reads as "no SI bibliography"; the two literals sitting next to their calls is
+# what lets a text-only tool -- this index, prose_check, the resolver -- see the
+# arrangement at all.
+ALEXANDRIA_SHOW = re.compile(r'#show:\s*alexandria\(\s*prefix:\s*"([^"\n]*)"')
+BIBLIOGRAPHYX = "#bibliographyx("
+BIBLIOGRAPHY = "#bibliography("
+
 
 def mask(src: str, *, strings: bool = False) -> str:
     """Blank comments/raw spans (and optionally strings), preserving offsets."""
@@ -54,6 +69,116 @@ def mask(src: str, *, strings: bool = False) -> str:
             continue
         out[start:i] = ["\n" if c == "\n" else " " for c in src[start:i]]
     return "".join(out)
+
+
+def call_span(src: str, opener: str, *, start: int = 0) -> tuple[int, int] | None:
+    """(start, end) of `opener ... )` with balanced parens, or None.
+
+    Commented-out and quoted occurrences are skipped: the opener is located in
+    the masked source, so `// #bibliography(...)` in a note is not the call.
+    Parentheses are then balanced over the masked text too, so a `")"` inside a
+    string argument cannot close the call early.
+    """
+    code = mask(src, strings=True)
+    at = code.find(opener, start)
+    if at < 0:
+        return None
+    depth = 0
+    for i in range(at + len(opener) - 1, len(src)):
+        if code[i] == "(":
+            depth += 1
+        elif code[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return at, i + 1
+    return None
+
+
+def _string_args(call: str, suffixes: tuple[str, ...]) -> list[str]:
+    return [a.lstrip("/") for a in re.findall(r'"([^"\n]+)"', call)
+            if a.endswith(suffixes)]
+
+
+def si_bibliography(root: Path = ROOT, sources: dict[str, str] | None = None) -> dict | None:
+    """The SI's own reference list, as the sources declare it, or None.
+
+    Returns the prefix paper.typ routes to Alexandria, alongside whatever
+    si-body.typ's #bibliographyx call says. The two are reported separately
+    and deliberately NOT reconciled here: disagreeing prefixes is a real
+    manuscript defect, and `just prose-check` names it. Typst also refuses to
+    compile it, but with a message pointing inside the Alexandria package.
+
+    A manuscript with no SI list -- the scaffold's default until one is added
+    -- returns None, and every caller then behaves exactly as it did before
+    this existed.
+    """
+    def read(name: str) -> str:
+        if sources is not None:
+            return sources.get(name, "")
+        path = root / name
+        return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+    paper, si = read("paper.typ"), read("si-body.typ")
+    m = ALEXANDRIA_SHOW.search(mask(paper))
+    span = call_span(si, BIBLIOGRAPHYX)
+    if m is None and span is None:
+        return None
+    out = {"prefix": m.group(1) if m else None, "file": "si-body.typ",
+           "call": None, "span": None, "block": None, "list_prefix": None,
+           "paths": [], "style": None}
+    if span is not None:
+        call = si[span[0]:span[1]]
+        prefix = re.search(r'prefix:\s*"([^"\n]*)"', call)
+        style = re.search(r'style:\s*"([^"\n]*)"', call)
+        out.update(call=call, span=span, block=_bibliography_block(si, span),
+                   list_prefix=prefix.group(1) if prefix else None,
+                   paths=_string_args(call, (".bib", ".yml", ".yaml", ".json")),
+                   style=style.group(1) if style else None)
+    return out
+
+
+def without_si_bibliography(si_src: str, paper_src: str = "", *,
+                            replacement: str = "") -> str:
+    """si-body.typ with its Alexandria reference list taken out of the way.
+
+    Two tools need this and neither can use Alexandria's output: the Word
+    projection, which replaces the call with the plain #bibliography pandoc
+    understands, and the plain-text review copy, which omits reference lists
+    outright. Both also need the "si-" prefix off the SI's citations -- it is
+    Alexandria's routing tag, not part of any key in the .bib -- because
+    without the list to route to, a prefixed citation resolves to nothing.
+
+    Returns the source unchanged when there is no SI bibliography.
+    """
+    si = si_bibliography(sources={"paper.typ": paper_src, "si-body.typ": si_src})
+    if si is None or si["block"] is None:
+        return si_src
+    start, end = si["block"]
+    out = si_src[:start] + replacement + si_src[end:]
+    prefix = si["prefix"] or si["list_prefix"]
+    if prefix:
+        out = re.sub(r"(?<![\w\\:./-])@" + re.escape(prefix)
+                     + r"([A-Za-z0-9_-]+)", r"@\1", out)
+    return out
+
+
+def _bibliography_block(si: str, span: tuple[int, int]) -> tuple[int, int]:
+    """The call plus the layout wrapped around it: `#set` line, and label.
+
+    The whole arrangement is one unit to every tool that removes or rewrites
+    the list -- the Word projection, the review text -- because a `#set
+    heading(numbering: none)` left behind with no list under it silences the
+    numbering of whatever follows, and an orphaned label reaches the
+    converter as stray markup.
+    """
+    start, end = span
+    tail = re.match(r"[ \t]*<[A-Za-z0-9_:.-]+>", si[end:])
+    if tail:
+        end += tail.end()
+    head = re.search(r"\n#set heading\([^\n]*\)\n\s*$", si[:start])
+    if head:
+        start = head.start() + 1
+    return start, end
 
 
 def matches(pattern, src: str):

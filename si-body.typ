@@ -25,6 +25,14 @@
 #import "stats.typ": lit, n, s, todo
 #import "assets.typ": fig, tbl
 
+// The SI's own reference list. Cite in this file as @si-key, never @key: the
+// "si-" prefix is what routes a citation to the list at the foot of this file
+// rather than to the main text's. A bare @key here compiles and silently joins
+// the MAIN reference list, so `just prose-check` reports one. The matching
+// `#show: alexandria(prefix: "si-", ...)` lives in paper.typ.
+#import "@preview/alexandria:0.2.0": bibliographyx
+#import "config.typ": paper-bib-style
+
 Replace this with a summary of what the Supporting Information contains. Text
 above the first `=` heading is the SI audiobook's opening chapter, so keep any
 orienting material here.
@@ -50,4 +58,21 @@ Cross-references resolve in both directions, so @tbl:si-example and Table #refn(
 Replace this with where the data, code, and analysis scripts live, and which
 versions were used. Accession numbers, a repository URL, and the command lines
 needed to reproduce every number belong here. Keep the section, since most
-journals now require it.
+journals now require it. A work cited only in the SI is cited with the prefix
+@si-hopper1952 and appears in the SI's reference list below, numbered from 1,
+not in the main text's.
+
+// The SI's reference list. `full: false` is Alexandria's default, so only the
+// works actually cited above are printed. Keep this call LAST in the file and
+// at the top level: the `#set` applies to everything after it, which is why
+// the SI's own S1/S2 section numbering is not disturbed, and tools/
+// resolve_typst.py rewrites the call itself into a plain #bibliography for the
+// Word export. The <si-references> label is what wordcount.typ excludes, so
+// the list is no more counted as SI prose than the main one is as main text.
+#set heading(numbering: none)
+#bibliographyx(
+  "references.bib",
+  prefix: "si-",
+  title: [References],
+  style: paper-bib-style,
+) <si-references>

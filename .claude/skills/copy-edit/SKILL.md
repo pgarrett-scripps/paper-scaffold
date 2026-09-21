@@ -1,6 +1,6 @@
 ---
 name: copy-edit
-description: Tighten or polish manuscript wording while checking numbers, statistic and asset IDs, citations, and structure. Use for wording-only edits, not new results or structural rewrites.
+description: Tighten or polish manuscript wording directly in Typst, preserving scientific terminology, numbers, citations, and structure. Use for wording-only edits, not new results, structural rewrites, or PDF layout review.
 ---
 
 # Copy-edit manuscript wording
@@ -9,12 +9,15 @@ Work from the manuscript root and follow AGENTS.md/CLAUDE.md and STYLE.md.
 Edit the section the user names, including the abstract in config.typ when
 requested. With no named scope, edit the main text between the body markers.
 Follow literal includes when the requested section lives in another file.
+Use source text and current resolved Typst for review, following the reading
+workflow in AGENTS.md/CLAUDE.md. Do not invoke PDF or image-viewing skills for
+ordinary copy-editing.
 
 ## Before editing
 
 Inspect existing changes so you can preserve work already in progress. Run
-`just paper` to record actual before-edit word counts and readability, then
-`just edit-baseline` before changing prose. A separate pass can use a tag:
+`just wordcount` and `just readability` for before-edit metrics without a PDF
+build, then `just edit-baseline` before changing prose. A separate pass can use a tag:
 `just edit-baseline short-results` and `just edit-check short-results`.
 When resuming a pass, keep its original baseline; do not replace it to erase
 failures. An old snapshot format needs a new baseline before a new pass.
@@ -29,12 +32,19 @@ trace checks recorded consistency, not the science.
 - Edit hand-written prose only. Keep generated tables and figures untouched.
 - Preserve headings, labels, body markers, floats, citation occurrences, and
   asset IDs. Move a citation with its sentence, not to a different claim.
+- Keep a citation key exactly as written, prefix included. In `si-body.typ`
+  citations read `@si-key`, which is what puts them in the SI's own reference
+  list; dropping the prefix moves the work to the main text's list silently.
 - Preserve retained numbers and s()/n() IDs. STYLE.md permits dropping a
   redundant numeric statement, but not introducing or substituting one.
   Do not change between s(), n(), lit(), and typed numerals in this workflow.
 - Keep stats.json and assets.json declarations unchanged. A request to revise
   results or restructure sections is broader than wording-only editing; use
   the appropriate workflow rather than weakening the guard.
+- Preserve defined scientific terms and the quantity they name. Apply
+  STYLE.md's "Scientific terms and concrete claims" review: replace vague
+  claims with supported specifics, never with invented jargon or mechanisms.
+  Keep coherent paragraphs and remove redundant explanations nearby.
 
 ## Check the result
 
@@ -49,10 +59,15 @@ Use the same tag for edit-check if the baseline was tagged. On failure,
 inspect the offending changes and correct your edits while preserving user
 work. Never reset whole files or re-baseline just to obtain a pass.
 
-The guard checks mechanical invariants. Read the edited sentences for meaning
-even when it passes. If verify names another stale deliverable, rebuild it
-with the named recipe and rerun the gate. Report checks that could not run
-as incomplete, with their cause.
+The guard checks mechanical invariants. Read the edited sentences and their
+context in the refreshed paper.resolved.typ for meaning even when it passes.
+Check terminology, claim scope, and uncertainty against the source. Do not
+render page images or open the PDF for this wording-only workflow. If verify
+names another stale deliverable, rebuild it with the named recipe and rerun
+the gate. Report checks that could not run as incomplete, with their cause.
+
+Once these checks pass and the text review is complete, stop. Further builds
+require a new edit or a specific failure to resolve.
 
 Report the edit-check verdict, exact before/after word counts and readability,
 and a representative sentence change. Do not estimate missing baseline metrics.

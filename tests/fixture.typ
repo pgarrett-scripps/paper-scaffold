@@ -172,4 +172,23 @@ as does the reflowed form #fig(
   caption: [A second caption, also excluded. Sentinel: _fixturecaption_.],
 ) <fig:fixture>
 
+= Reference lists
+
+A reference list is not prose: no journal counts one, and nobody wants one read
+aloud. The main text's sits outside the BODY markers and so was never seen by
+these extractors. The Supporting Information's own list does sit inside the file
+they read whole, in both forms the scaffold can produce -- Typst's native call
+below, and the Alexandria one the SI needs because Typst allows only one native
+list per document. A citation routed to the second carries a prefix,
+@si-lovelace1843, and must be dropped exactly like an unprefixed one.
+
+#bibliography("references.bib", title: [Fixturebibliography one])
+
+#bibliographyx(
+  "references.bib",
+  prefix: "si-",
+  title: [Fixturebibliography two],
+  style: "american-chemical-society",
+) <si-references>
+
 // <<< BODY END

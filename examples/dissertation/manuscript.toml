@@ -1,0 +1,24 @@
+schema_version = 1
+default_document = "dissertation"
+[parts.abstract]
+source = "dissertation.typ"
+[parts.first]
+source = "chapters/first.typ"
+bibliography = "chapters/first.bib"
+citation_prefix = "first-"
+[parts.second]
+source = "chapters/second.typ"
+bibliography = "chapters/second.bib"
+citation_prefix = "second-"
+[documents.dissertation]
+entrypoint = "dissertation.typ"
+output = "build/dissertation.pdf"
+parts = ["abstract", "first", "second"]
+[documents.first]
+entrypoint = "first.typ"
+output = "build/first.pdf"
+parts = ["first"]
+[documents.second]
+entrypoint = "second.typ"
+output = "build/second.pdf"
+parts = ["second"]

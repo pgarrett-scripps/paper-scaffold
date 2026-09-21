@@ -38,6 +38,7 @@ from typst_prose import (  # noqa: E402
     REFN,
     markup as _markup,
     resolve_stats,
+    BIBLIOGRAPHY_CALLS,
     strip_balanced,
 )
 
@@ -101,6 +102,9 @@ def clean(text):
     text = strip_balanced(text, "#figure(")
     # A bare #table( in running prose, not wrapped in a #figure.
     text = strip_balanced(text, "#table(")
+    # The SI sets its own reference list, in the file this narrates whole.
+    for call in BIBLIOGRAPHY_CALLS:
+        text = strip_balanced(text, call)
     # Same for a bare fig()/tbl() call: an image is not narration.
     text = re.sub(ASSET, " ", text)
 

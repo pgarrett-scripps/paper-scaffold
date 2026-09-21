@@ -86,7 +86,11 @@ build needs internet access to download dependencies and the Typst template.
    | `config.typ` | Title, authors, abstract, and keywords |
    | `paper.typ` | Main text |
    | `si-body.typ` | Supporting information |
-   | `references.bib` | Bibliography |
+   | `references.bib` | Bibliography, for both reference lists |
+
+   The Supporting Information prints its own reference list, since journals
+   take it as a separate file. Cite `@si-key` in `si-body.typ` and `@key` in
+   `paper.typ`; both read `references.bib`.
 
    Replace the examples in `analysis/` when you are ready to connect your own
    results. The [documentation](DOCUMENTATION.md#the-parts-worth-understanding)
@@ -95,8 +99,7 @@ build needs internet access to download dependencies and the Typst template.
 4. **Build and check your changes.**
 
    ```bash
-   just paper     # PDF, word count, and readability
-   just docx      # Editable Word export
+   just paper     # PDF, editable Word, review text, and prose metrics
    just verify    # Local consistency checks
    ```
 
@@ -112,6 +115,7 @@ build needs internet access to download dependencies and the Typst template.
 | Move an existing manuscript into the scaffold | [Migration guide](MIGRATING.md) |
 | Write a dissertation or book | [Multi-document guide](MULTI-DOCUMENT.md) |
 | Set your writing conventions | [Prose style](STYLE.md) |
+| Include/exclude sections and set word limits | [Word-count configuration](DOCUMENTATION.md#word-count-scopes-and-limits) |
 | See changes and upgrade guidance | [Version history](HISTORY.md) |
 
 ## License

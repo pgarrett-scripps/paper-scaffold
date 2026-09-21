@@ -17,15 +17,16 @@ New here? Start with the [overview and quick start](README.md).
 | Work with an AI editor | [Shared workflows](#working-with-an-ai) |
 | Export to Word | [Word export](#the-word-export-is-more-delicate-than-it-looks) |
 | Check the writing | [Prose metrics](#reading-the-prose-metrics), [rule configuration](#suppressing-a-finding-prose-checktoml) |
+| Select sections and set word limits | [Word-count scopes and limits](#word-count-scopes-and-limits) |
 | Listen to a draft | [Audio](#audio) |
 | Troubleshoot | [Requirements](#requirements), [common pitfalls](#things-that-will-bite-you) |
 
 Existing manuscript: follow [MIGRATING.md](MIGRATING.md).
 
 Dissertation or book: [MULTI-DOCUMENT.md](MULTI-DOCUMENT.md) describes optional
-named PDF targets, separate chapter exports, chapter metrics and checks, and
-wording-edit guards over shared chapter sources. Existing single-paper commands
-are unchanged.
+named PDF targets, chapter metrics and checks, wording-edit guards, and the
+dissertation Word adapter. `just paper` detects a multi-document manifest;
+existing single-paper projects keep their normal build behavior.
 
 ## Quick start
 
@@ -81,12 +82,16 @@ have to drop their import. The exact edits are under
 | `just verify` | **The gate.** Formatting, extractors, prose rules and staleness, in one pass |
 | `just preflight` | **The submission gate.** Fresh builds + `verify` + deep stats + DOI audit |
 | `just doctor` | Are the external tools installed and new enough? |
-| `just paper` | Compile `paper.pdf`, then print word counts and readability |
+| `just paper` | Build `paper.pdf`, `paper.docx`, and `paper.review.txt`, with word counts and readability |
+| `just pdf` | Build only `paper.pdf`, with word counts and readability |
 | `just draft` | Compile `paper-draft.pdf` with unresolved `#s()` numbers shown as `?id?` |
 | `just watch` | Live preview, recompiling on save |
 | `just fmt` | Reflow the hand-written Typst sources (typstyle, 80 cols) |
 | `just docx` | Export `paper.docx` for journals and co-authors |
-| `just wordcount` | Journal-style counts without rebuilding |
+| `just review-text [target]` | Export a compact `.review.txt` with prose, equations and numbered captions for AI review |
+| `just wordcount` | Journal-style counts and configured section checks without rebuilding |
+| `just wordcount --sections` | List exact section paths available for word-count checks |
+| `just check-words` | Enforce configured minimum/maximum word counts; also runs in `verify` |
 | `just readability` | Flesch-Kincaid / reading ease / fog without rebuilding |
 | `just assets` | Regenerate every generated figure, table and prose number (delegates to `analysis/`) |
 | `just check` | Report every artifact that has fallen behind its source |
@@ -98,6 +103,7 @@ have to drop their import. The exact edits are under
 | `just edit-baseline` / `edit-check` | Check that wording edits preserve retained numbers, helper IDs, citations, declarations, and structure |
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
 | `just prose-check` | Check the prose, plus figure resolution and table shape, against STYLE.md |
+| `just word-audit` | Count flagged words across the manuscript without rebuilding |
 | `just prose-check --list-rules` | Every rule, its severity, and how to configure it |
 | `just bib-audit` | Check DOI metadata, retractions and dead links against Crossref/DataCite (network) |
 | `just viz` | Diagnostics about the draft -> `viz/`: nine plots plus `report.json` for tools |
@@ -108,12 +114,125 @@ have to drop their import. The exact edits are under
 | `just audiobook` | Chaptered `.m4b` of the main text |
 | `just all` | PDF + Word + both audiobooks, then `just check` |
 
+## Word-count scopes and limits
+
+`word-limits.toml` selects what each word-count check includes and sets optional
+minimum and maximum word counts. Run `just wordcount --sections` to see the
+available paths, then edit the configuration. For example:
+
+```toml
+schema_version = 1
+
+[[checks]]
+name = "Abstract"
+include = ["abstract"]
+min = 100
+max = 250
+
+[[checks]]
+name = "Main text without Methods"
+include = ["main"]
+exclude = ["main/Methods"]
+min = 2000
+max = 4000
+
+[[checks]]
+name = "Results"
+include = ["main/Results"]
+max = 1500
+```
+
+These bounds are examples, not default journal requirements. The shipped file
+has no active bounds. Omit `min` or `max` when that bound does not apply; both
+are inclusive, nonnegative integers. With neither bound, a check just reports
+its selected count. An absent file or empty `checks` list disables the gate.
+
+Paths are case-sensitive: `abstract`, `main`, and `si` select entire regions;
+`main/Methods` selects that heading and every subsection until the next heading
+of equal or higher level. A nested path looks like `main/Methods/Sampling`.
+Headings in included files participate in the same hierarchy. A literal `/`
+in a heading is displayed as `%2F` in its path (`%` becomes `%25`); copy paths
+from `--sections`. Duplicate heading paths cannot be selected individually.
+Rename them or select their common parent. Renamed or missing selections fail
+explicitly rather than silently reducing the count.
+
+Every check takes the union of its `include` paths, then subtracts its `exclude`
+paths. Overlaps count once; exclusions win. An exclusion outside the included
+scope is an error. Multiple independent checks may cover the same text. To
+count the main text and SI together, use `include = ["main", "si"]`; add
+`"abstract"` explicitly if it belongs in that limit.
+
+Counts still use the evaluated Typst content and the existing wordometer rules:
+headings and inline code count; references, citations, figures, tables inside
+figures, captions, equations, and block code do not. The main text remains
+bounded by BODY markers, the abstract comes from `config.typ`, and SI comes
+from `si-body.typ`. Front matter and back matter outside those scopes are not
+selectable. These selections affect word-count checks only; they do not remove
+content from exports or change readability, spelling, or standard main/SI
+totals. This configuration currently applies to the single-paper workflow;
+named document metrics keep their existing `manuscript.toml` part scopes.
+
+`just wordcount` and `just paper` display counts and any violations without
+blocking a draft build on length alone. `just check-words` fails for violated
+bounds, and runs inside `just verify` and therefore `just preflight`. Invalid
+configuration or a count that cannot be completed is an error in either mode.
+The gate reads current sources without writing a PDF or regenerating analysis;
+if formatted statistics are stale, it asks for `just render-stats`.
+
+For structured output, use `just check-words --json`, or
+`uv run python tools/wordcount.py --json` for a report without enforcement.
+JSON includes standard counts, section counts, selected paths, bounds, and
+statuses. A section row holds its own words before the next heading; the human
+`--sections` listing includes descendant words. The Python CLI exits 0 for a
+completed passing check, 1 for a violated bound, and 2 for an incomplete check;
+`just` wraps nonzero exit codes.
+
 ## Working with an AI
+
+`just review-text` writes `paper.review.txt` for upload to an AI reviewer.
+`just paper` runs the PDF, Word, and review-text exports together; `just pdf`,
+`just docx`, and `just review-text` remain available for individual formats.
+It preserves wording, headings, evaluated numbers, equations in plain-text
+notation, code, and numbered figure/table captions. Images, table bodies,
+reference lists, page furniture, and repeated front matter are omitted.
+Citation keys remain in brackets so feedback can identify the cited source;
+figure/table references use compiled numbers. Other cross-references retain
+their source labels. This is an export, not an AI summary or rewrite.
+
+The export evaluates current Typst sources in a temporary copy and does not
+require a current PDF or Word file. Main prose comes from BODY markers;
+single-paper exports also include the configured title/abstract, back matter
+before the bibliography, and included `si-body.typ`. Manifest projects export
+their selected BODY parts in order: `just review-text chapter-id` selects a
+chapter and `just review-text all` exports every target. Each text file sits
+beside its corresponding PDF, with `.review.txt` replacing `.pdf`.
+
+Unknown content constructs stop the export rather than silently deleting text;
+arbitrary context-dependent prose needs explicit exporter support. Existing
+exports remain intact on failure. Re-run the command after edits; these review
+copies are not included in the PDF/Word freshness gate. They support prose and
+argument review, but visual, table-data, and bibliography checks require the
+full manuscript.
 
 Open the manuscript repository in Claude Code or Codex and give your editing
 request. Both use the same standing instructions: `AGENTS.md` links to
 `CLAUDE.md`. The agent edits source files and runs the pipeline through `just`.
 No MCP server is required.
+
+For prose work, agents read and edit the Typst source directly. After a
+successful build, `paper.resolved.typ` provides a readable text view with the
+statistics, tables, and reference numbers filled in. It is generated and must
+not be edited. Check `just check-build` before treating it as current; during
+edits, use the source and `just trace <id> --json` to inspect a displayed number.
+`just resolve` also builds the PDF, so it is not needed for each prose change.
+The final `just paper` refreshes the resolved text.
+
+Ordinary wording edits use text review and command-line checks. PDF or image
+inspection is reserved for requested visual review, layout or figure changes,
+and specific rendering defects. Copy-editing records its initial metrics with
+`just wordcount` and `just readability`, then builds after editing and runs
+`just verify`. The writing review also checks defined terminology and concrete,
+supported claims using [STYLE.md](STYLE.md#scientific-terms-and-concrete-claims).
 
 Four workflows ship as skills. Their maintained files live in `.claude/skills/`;
 `.agents/skills` is a relative symlink to that directory so Codex discovers the
@@ -364,6 +483,57 @@ paper's prose" is not the whole file: the front matter, the back matter, the
 acknowledgments, and the bibliography all have to be excluded from a journal word
 count, a reading-level score, and a narration. Each tool fails loudly if the
 markers go missing rather than guessing. Do not delete them.
+
+### Two reference lists: the SI carries its own
+
+The Supporting Information goes to the journal as its own file, so it needs its
+own reference list. Typst allows exactly one native `#bibliography` per
+document ("multiple bibliographies are not yet supported"), and the SI is
+compiled as an appendix to the main text so cross-references resolve across
+both halves. The SI's list therefore comes from
+[Alexandria](https://typst.app/universe/package/alexandria), which routes
+citations to it **by prefix**:
+
+```typst
+// paper.typ, once, above the template
+#show: alexandria(prefix: "si-", read: p => read(p))
+
+// si-body.typ, last in the file
+#set heading(numbering: none)
+#bibliographyx(
+  "references.bib",
+  prefix: "si-",
+  title: [References],
+  style: paper-bib-style,
+) <si-references>
+```
+
+Cite `@si-key` in `si-body.typ` and `@key` in `paper.typ`. Both lists number
+from 1, and each prints only the works its own half cites; one work cited in
+both appears in both, with a different number in each. Both read the same
+`references.bib` — one bibliography file, two lists — so `just bib-audit`,
+the duplicate-DOI check and the uncited-entry check all keep working
+unchanged.
+
+**The failure this arrangement has, and what catches it.** A bare `@key` in
+the SI compiles, renders an ordinary superscript, and quietly joins the MAIN
+reference list, where a reader of the separately submitted SI cannot follow
+it. Nothing on the page says so. `just prose-check` reports it as
+`misrouted-citation`, and reports the two prefixes drifting apart as
+`si-bibliography-prefix` (Typst refuses that too, but from inside the
+Alexandria package, pointing at neither line).
+
+The SI's list is excluded from the SI word count (the `<si-references>` label,
+in `wordcount.typ`), dropped by the readability report and the narrator, and
+omitted from the plain-text review copy, exactly as the main list is. `just
+docx` sets both lists, one citeproc run each. `just docx-html`, the legacy
+route, refuses the manuscript: Typst's HTML export discards the grid
+Alexandria sets the list in, and the fallback would ship a Word file missing
+every SI reference with nothing saying so.
+
+A manuscript that wants one list deletes the show rule and the
+`#bibliographyx` call and writes plain `@key` throughout; every tool then
+behaves as it did before this existed.
 
 ### The `si/` contract: generated tables, never hand-typed numbers
 
@@ -735,12 +905,27 @@ always present and almost never acted on.
 
 ### The Word export is more delicate than it looks
 
+The native paper exporter now uses `word/paper-reference.docx` for reusable Word
+styles. Edit that file in Word to change headings, body text, captions or code;
+builds preserve those changes. The template has single-spaced image paragraphs
+and references, and removes conflicting theme settings where concrete fonts or
+colors are specified. Template edits invalidate the build fingerprint.
+`uv run python tools/paper_word_reference.py` explicitly resets this template;
+normal builds never regenerate it. Older projects without the file retain the
+existing code-style fallback. The legacy HTML exporter does not use this template.
+For multi-chapter Word exports, see [MULTI-DOCUMENT.md](MULTI-DOCUMENT.md).
+
+
 `just docx` goes `just resolve` → pandoc's native Typst reader. The resolver
 replaces every project helper (`#s()`, `fig()`, cross-references, the
 bibliography's style variable) with plain Typst in `paper.resolved.typ`, and
 pandoc — a real evaluator, from `uv` (`pypandoc-binary`), no system install —
 turns that into **native, editable Word equations**, real tables, and a
-reference list set by citeproc from `references.bib`. Citations follow
+reference list set by citeproc from `references.bib`. A manuscript whose SI
+carries its own list gets both: citeproc sets one list per run, so each
+stretch of the projection is converted separately and the Pandoc trees are
+joined, with the second list's anchors renamed so a work cited in both halves
+is not two Word bookmarks with one id. Citations follow
 `<style>.csl` in the manuscript root when present (the scaffold ships
 `american-chemical-society.csl`, matching the default `paper-bib-style`);
 otherwise pandoc's default applies, with a printed note. Every citation key is
@@ -748,7 +933,9 @@ checked against the `.bib` before converting, because citeproc renders a
 missing one as bold prose and still exits 0. When the output looks wrong, read
 `paper.resolved.typ` — it is exactly what pandoc was fed.
 
-`just docx-html` is the old route, kept as a fallback: Typst → HTML → pandoc,
+`just docx-html` refuses a manuscript whose SI sets its own reference list,
+for the reason above. It is the old route, otherwise kept as a fallback:
+Typst → HTML → pandoc,
 with `--input docx=true` bypassing the arkheion template (HTML export silently
 discards its front matter and headings) and `html.frame()` +
 `tools/typst2docx.py` rasterizing equations into images — which is exactly why
@@ -805,7 +992,7 @@ them in two files meant fixing each of those three bugs twice.
 
 ### Reading the prose metrics
 
-Three commands look at the writing rather than the build.
+Four commands look at the writing rather than the build.
 
 `just readability` is Flesch-Kincaid and friends. Useful, but it only knows word
 length and sentence length.
@@ -827,6 +1014,60 @@ numerical order (a copy-editing return at many journals, but a conventions
 paragraph legitimately forward-references, so it does not gate), and an acronym
 used repeatedly but never expanded (what counts as common knowledge is
 field-specific).
+
+### Vocabulary review: `just word-audit`
+
+`just word-audit` reads current sources and watches 111 exact word forms: the
+original 21 from Juzek and Ward's
+[COLING 2025 study](https://aclanthology.org/2025.coling-main.426/), Appendix A,
+Table 2, plus an editorial selection of 45 style words from
+[Kobak et al.'s annotated dataset](https://github.com/berenslab/llm-excess-vocab/blob/main/results/excess_words.csv).
+An author-preference group contains 17 words, including `tractable`, `robust`,
+and `parsimonious`. Another group adds 28 explicit word-family extensions,
+including `leveraged`, `underscored`, and `tractability`. Both are recorded as
+editorial choices without claiming research evidence for each added form.
+Preserve precise technical uses, such as computational tractability; review
+vague uses in context. Editorial sources require a citation, location, and
+explanatory note rather than a research URL.
+
+The original list and the separately attributed `[[extensions]]` groups live in
+`word-watchlist.toml`. JSON findings identify their source groups, and the
+report includes all sources. The expansion is not a published ranking.
+Inflections such as `delve`, `delves`, `delved`, and `delving` remain separate,
+as in the published analysis. Other forms are not silently added or stemmed.
+
+The report combines the abstract, main text, and SI into one manuscript total.
+It shows the total number of flagged word occurrences, the number of distinct
+flagged words, and a per-word count sorted from most to least frequent. Every
+occurrence counts, including a single use and uses spread across paragraphs or
+sections. There are no frequency thresholds, rates, or paragraph-based warnings.
+Matches are case-insensitive whole tokens; hyphenated compounds and words with
+apostrophes stay intact. Counts use letter-based tokens, not the journal word
+count. Headings, citations, references, code, equations, figures, tables, and
+captions are excluded. Literal includes are followed; missing, cyclic, and
+dynamic includes fail visibly. Like the existing prose metrics, this is a
+source scan, not a Typst evaluator: computed prose and custom macros may need
+manual review. The abstract must use `#let paper-abstract = [...]`.
+
+The study concerns scientific abstracts and older models; applying the list to
+full manuscripts is an editorial extension. No finding establishes AI
+authorship, predicts a detector result, or requires changing a technical term.
+
+Run it before and after a wording pass. `just word-audit --json` prints the
+counts and source metadata for comparing drafts (report schema version 2).
+Exceptions belong in the manifest's `[allow]` table, mapping a watched word to
+a written reason. Allowed occurrences remain visible but are excluded from
+the flagged total and counted separately. Manifest schema version 2 removes
+the old `[limits]` table; old threshold configurations are rejected rather than
+silently ignored. No manuscript text is edited and no model or network call is
+made. Counts are advisory, never a pass/fail score; invalid configuration or
+unreadable sources fail. The audit is not part of `verify`.
+
+For `manuscript.toml` projects, the audit combines the default document's declared
+parts. Use `just word-audit --document NAME` or `--document all` to choose targets.
+With `all`, each target gets its own total, so shared parts in alternative exports
+are not added into one inflated total. Abstracts in this mode are counted only
+when they are included in a declared part's body.
 
 ### Suppressing a finding: `prose-check.toml`
 

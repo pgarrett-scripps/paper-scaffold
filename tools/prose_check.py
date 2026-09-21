@@ -33,6 +33,7 @@ from pathlib import Path
 
 import readability
 import typst_prose
+from manuscript_sources import mask, si_bibliography
 from prose_rules import Config, Finding, list_rules, load_config, report
 
 # The manuscript root, one level up: this file lives in tools/.
@@ -664,6 +665,80 @@ def _normalize_doi(doi: str) -> str:
     return d.strip()
 
 
+def check_si_bibliography(root: Path | None = None,
+                          cfg: Config | None = None) -> list[Finding]:
+    """The Supporting Information's own reference list, checked for routing.
+
+    A manuscript whose SI ships to the journal as its own file needs its own
+    reference list, and Typst allows only one native #bibliography per
+    document. The SI's is set by Alexandria instead, which routes a citation
+    to it by PREFIX: `@si-key` in si-body.typ goes to the SI list, `@key`
+    goes to the main one.
+
+    That is the whole failure mode. A bare `@key` in the SI compiles, renders
+    a perfectly ordinary superscript, and quietly adds the work to the MAIN
+    reference list -- where a reader of the separately submitted SI cannot
+    follow it, and where it inflates the main text's numbering. Nothing about
+    the rendered page says so, which is why it is checked here.
+
+    The second rule is the prefix in paper.typ's `#show: alexandria(...)`
+    against the one in si-body.typ's `#bibliographyx(...)`. Typst does refuse
+    to compile them when they disagree, but from inside the Alexandria
+    package ("cannot access fields on type none"), pointing at neither line.
+    """
+    r = root or ROOT
+    si = si_bibliography(r)
+    if si is None:
+        return []
+    out: list[Finding] = []
+    prefix, list_prefix = si["prefix"], si["list_prefix"]
+    if prefix is None:
+        out.append(Finding(
+            "si-bibliography-prefix", "error",
+            f"si-body.typ sets its own reference list with #bibliographyx("
+            f"prefix: {list_prefix!r}), but paper.typ has no matching "
+            f'`#show: alexandria(prefix: "{list_prefix}", read: p => read(p))`, '
+            f"so no citation can reach it",
+            subject=str(list_prefix), where="paper.typ"))
+        return out
+    if list_prefix is None:
+        out.append(Finding(
+            "si-bibliography-prefix", "error",
+            f"paper.typ routes @{prefix}... citations to an Alexandria "
+            f"bibliography, but si-body.typ has no #bibliographyx call to "
+            f"print one",
+            subject=prefix, where="si-body.typ"))
+        return out
+    if prefix != list_prefix:
+        out.append(Finding(
+            "si-bibliography-prefix", "error",
+            f"paper.typ routes @{prefix}... to the SI list but si-body.typ "
+            f"prints one for @{list_prefix}...; the two prefixes must match",
+            subject=prefix, where="si-body.typ"))
+        return out
+
+    bibs = sorted(r.glob("*.bib"))
+    try:
+        known = {e["_key"] for b in bibs for e in _bib_entries(b)}
+    except (OSError, ValueError):
+        return out                      # check_bibliography reports the parse
+    src = (r / si["file"]).read_text()
+    code = mask(src, strings=True)
+    for m in re.finditer(r"(?<![\w\\:./-])" + typst_prose.CITE, mask(src)):
+        if not code[m.start():m.start() + 1].strip():
+            continue                    # inside a string, not a citation
+        key = m.group(0)[1:]
+        if key.startswith(prefix) or key not in known:
+            continue
+        out.append(Finding(
+            "misrouted-citation", "error",
+            f"@{key} in the SI has no {prefix!r} prefix, so it prints in the "
+            f"MAIN reference list, not the SI's own; write @{prefix}{key}",
+            subject=key, where="SI",
+            context=f'{si["file"]}:{src.count(chr(10), 0, m.start()) + 1}'))
+    return out
+
+
 def check_bibliography(root: Path | None = None,
                        cfg: Config | None = None, *, bib_paths=None,
                        cited_keys: set[str] | None = None) -> list[Finding]:
@@ -699,6 +774,13 @@ def check_bibliography(root: Path | None = None,
     if cited_keys is None:
         for src in sorted(r.glob("*.typ")):
             cited |= set(re.findall(r"@([A-Za-z0-9_:-]+)", src.read_text()))
+        # A work cited only in the SI is written @si-key, and the entry it
+        # refers to is `key`. Without this every SI-only reference reads as
+        # uncited -- the warning that says "delete this, nothing prints it".
+        si = si_bibliography(r)
+        prefix = (si or {}).get("prefix")
+        if prefix:
+            cited |= {k[len(prefix):] for k in cited if k.startswith(prefix)}
 
     out: list[Finding] = []
     where = bibs[0].name
@@ -1103,6 +1185,7 @@ def main() -> int:
     findings += check_figure_resolution(cfg=cfg)
     findings += check_table_size(cfg=cfg)
     findings += check_bibliography(cfg=cfg)
+    findings += check_si_bibliography(cfg=cfg)
 
     rc = report(findings, cfg,
                 show_suppressed="--show-suppressed" in sys.argv,

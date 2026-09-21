@@ -24,11 +24,12 @@ from manifest_validation import load
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD_TOOLS = ("render_stats.py", "typst_prose.py", "typst2docx.py",
-               "resolve_typst.py", "export_docx.py", "readability.py",
+               "resolve_typst.py", "export_docx.py", "word_xml.py",
+               "paper_word_reference.py", "readability.py",
                "refs_div.lua", "manuscript_sources.py", "manifest_validation.py",
                "atomic_io.py", "build_state.py", "bibliography.py",
                "manuscript_snapshot.py", "review.py", "paper_report.py",
-               "wordcount.sh", "report.py")
+               "wordcount.sh", "wordcount.py", "report.py")
 INTERMEDIATES = {"stats-rendered.json", "paper.resolved.typ"}
 
 
@@ -42,9 +43,10 @@ def digest(path: Path) -> str:
 
 def snapshot(root: Path, dependencies=()) -> dict[str, str | None]:
     paths = {root / name for name in source_files(root)}
-    paths.update(root / name for name in ("wordcount.typ", "assets.json",
+    paths.update(root / name for name in ("wordcount.typ", "wordcount-sections.typ", "assets.json",
                                          "pyproject.toml", "uv.lock", "justfile"))
     paths.update(root / "tools" / name for name in BUILD_TOOLS)
+    paths.add(root / "word/paper-reference.docx")
     paths.update(root.glob("*.bib"))
     paths.update(root.glob("*.csl"))
     for folder in ("figures", "si", "csl"):
@@ -131,6 +133,21 @@ def prepare_snapshot(root: Path, folder: Path, sources: dict, dependencies: list
 
 def build(mode: str, root: Path = ROOT) -> int:
     output = "paper.pdf" if mode in ("paper", "resolve") else "paper.docx"
+    # The old HTML route cannot carry a second reference list. Typst's HTML
+    # export drops the grid Alexandria sets the SI's list in ("grid was
+    # ignored during HTML export"), so the SI's references would be missing
+    # from the Word file with nothing in the output saying so. `just docx`
+    # converts each list with its own citeproc run and keeps both.
+    if mode == "docx-html":
+        from manuscript_sources import si_bibliography
+        si = si_bibliography(root)
+        if si and si["block"] is not None:
+            raise ValueError(
+                "the Supporting Information sets its own reference list, "
+                "which Typst's HTML export discards -- this fallback route "
+                "would ship a Word file missing every SI reference. Export "
+                "with `just docx` (pandoc's Typst reader), which sets both "
+                "lists.")
     with build_lock(root), tempfile.TemporaryDirectory(dir=root / ".build-state") as tmp:
         staged = Path(tmp) / output
         depfile = Path(tmp) / "deps.json"

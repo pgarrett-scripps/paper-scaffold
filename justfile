@@ -182,16 +182,16 @@ density:
 # dependency meant `just all` broke on a manuscript that had removed a feature it
 # never asked for.
 # Rebuild every artifact this directory owns: PDF, Word, and the audiobooks if audio/ is present
-all: paper docx
+all: paper
   #!/usr/bin/env bash
   set -euo pipefail
   if [ -d audio ]; then
     just audiobook-all
     echo ""
-    echo "PDF, Word and both audiobooks rebuilt from the current source."
+    echo "PDF, Word, review text and both audiobooks rebuilt from the current source."
   else
     echo ""
-    echo "PDF and Word rebuilt from the current source (no audio/, narration skipped)."
+    echo "PDF, Word and review text rebuilt from the current source (no audio/, narration skipped)."
   fi
   just check
 
@@ -214,7 +214,7 @@ all: paper docx
 #
 # fmt-check is skipped rather than failed when typstyle is absent: it is the one
 # optional tool in the set, and a manuscript that never formats is not broken.
-# Run every gate: formatting, extractor tests, prose rules, staleness
+# Run every gate: formatting, extractor tests, prose rules, word limits, staleness
 verify:
   #!/usr/bin/env bash
   set -uo pipefail
@@ -244,6 +244,7 @@ verify:
 
   stage "extractors (just test)"         "" just test
   stage "prose rules (just prose-check)" "" just prose-check
+  stage "word limits (just check-words)" "" just check-words
   # One stage, because both answer the same question -- are the declarations
   # still consistent with what produced them -- and splitting them made verify
   # six blocks of output for a manuscript with one figure and five numbers.
@@ -252,7 +253,7 @@ verify:
 
   echo ""
   if [ $rc -eq 0 ]; then
-    echo "VERIFY OK -- formatting, extractors, prose rules and staleness all pass."
+    echo "VERIFY OK -- formatting, extractors, prose rules, word limits and staleness all pass."
   else
     echo "VERIFY FAILED -- see the stages above. Nothing was rebuilt."
   fi
@@ -275,7 +276,7 @@ verify:
 # rebuild, not a check -- `check-assets` (inside verify) already reports if the
 # analysis moved out from under the committed figures, and names what to re-run.
 # Everything to run before submitting: fresh builds, verify, deep stats, DOI audit
-preflight: paper docx
+preflight: paper
   #!/usr/bin/env bash
   set -uo pipefail
   rc=0
@@ -441,16 +442,34 @@ draft: render-stats
 # gate" -- and on a real manuscript its nine-column table plus the per-section
 # outlier list tripled the build output into a wall nobody read. The two
 # numbers a build should surface (how long, how readable) fit on nine lines.
-# Compile paper.typ -> paper.pdf, then print word counts and readability
+# Build PDF, Word and plain-text review exports, with word counts and readability
 paper:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if [[ -f manuscript.toml ]]; then
+    uv run --quiet python tools/documents.py build all
+    uv run --quiet python tools/document_docx.py
+    uv run --quiet python tools/export_text.py
+  else
+    just pdf
+    just docx
+    just review-text
+  fi
+
+# Build only the PDF, with word counts and readability
+pdf:
   @uv run --quiet python tools/build_state.py paper
   @uv run --quiet python tools/paper_report.py
 
 # See wordcount.typ for exactly what is excluded (refs, figures/tables, captions,
 # math, code) vs. included (headings, inline code).
 # Journal-style word counts (main text / SI / total), without rebuilding the PDF
-wordcount: render-stats
-  @bash tools/wordcount.sh
+wordcount *args: render-stats
+  @bash tools/wordcount.sh "$@"
+
+# Check configured section word limits without rebuilding or regenerating stats
+check-words *args:
+  @uv run --quiet python tools/wordcount.py --check "$@"
 
 # Computed from the Typst source with the same exemptions as the word count. Uses
 # `textstat` if installed, else a built-in estimate. No PDF rebuild.
@@ -585,6 +604,10 @@ watch: render-stats
 prose-check *args:
   @uv run --quiet python tools/prose_check.py "$@"
 
+# Count flagged words across the manuscript without rebuilding
+word-audit *args:
+  @uv run --quiet python tools/word_audit.py "$@"
+
 # Pictures OF the manuscript, for revising it -- not pictures in it. Sentence
 # length, words per section, most-used words, a word cloud, and the age of the
 # bibliography.
@@ -621,6 +644,14 @@ bib-audit *args:
 # Assert the prose extractors handle every construct, before and after a reflow
 test:
   @uv run --quiet python tests/run.py
+  @uv run --quiet python -m unittest discover -s tests -p 'test_export_text.py'
+  @uv run --quiet python -m unittest discover -s tests -p 'test_word_audit.py'
+  @uv run --quiet python -m unittest discover -s tests -p 'test_wordcount.py'
+  @just test-docx
+
+# Plain-text review copy: prose, equations and captions; no images or reference list
+review-text target="":
+  @uv run --quiet python tools/export_text.py {{quote(target)}}
 
 # Rewrite tests/expected/ from the current extractor behaviour. Review the diff:
 # this is how a regression gets blessed into the baseline by accident.
@@ -653,8 +684,36 @@ fmt-check:
 # a printed note. Read paper.resolved.typ when the output looks wrong -- it
 # is exactly what pandoc was fed.
 # Export paper.docx (Word, native equations), for journals/co-authors
-docx:
-  @uv run --quiet python tools/build_state.py docx
+docx target="":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if [[ -f manuscript.toml ]]; then
+    uv run --quiet python tools/document_docx.py {{quote(target)}}
+  elif [[ -n {{quote(target)}} ]]; then
+    echo "Named Word targets require manuscript.toml" >&2
+    exit 2
+  else
+    uv run --quiet python tools/build_state.py docx
+  fi
+
+# Build a named Word document using the dissertation template adapter
+document-docx target="":
+  @uv run --quiet python tools/document_docx.py {{quote(target)}}
+
+# Check named Word freshness without rebuilding
+docx-check target="":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if [[ -f manuscript.toml ]]; then
+    uv run --quiet python tools/document_docx.py {{quote(target)}} --check
+  else
+    uv run --quiet python tools/build_state.py check
+  fi
+
+# Test Word content, formatting, templates and chapter reference isolation
+test-docx:
+  @uv run --quiet python -m unittest discover -s tests -p 'test_document_docx.py'
+  @uv run --quiet python -m unittest discover -s tests -p 'test_paper_word.py'
 
 # The old docx route, kept as a fallback while the pandoc one earns trust.
 # Typst HTML export -> pandoc: --input docx=true bypasses the arkheion

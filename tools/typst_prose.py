@@ -268,6 +268,21 @@ def markup(delim: str) -> str:
     return rf'(?<![A-Za-z0-9_"]){d}(?!\s)({body})(?<!\s){d}(?![A-Za-z0-9_"])'
 
 
+# The reference lists, in both forms this scaffold produces: Typst's own
+# #bibliography for the main text, and Alexandria's #bibliographyx for the
+# Supporting Information's separate list (Typst allows only one native call
+# per document). Neither is prose: a reference list is exempt from a journal
+# word count, scores nothing readable, and must not be read aloud.
+#
+# The main call sits outside the BODY markers and so was never seen here. The
+# SI's sits INSIDE si-body.typ, which is counted and narrated whole, and the
+# first version of it reached all three consumers verbatim -- the narrator
+# read out `#bibliographyx("references.bib", prefix: "si-"...)`. Stripped
+# with the same balanced-paren pass as #figure(, so a reflowed call with its
+# arguments on five lines goes too.
+BIBLIOGRAPHY_CALLS = ("#bibliography(", "#bibliographyx(")
+
+
 def strip_balanced(text: str, opener: str, gap: str = "") -> str:
     """Remove `opener` ... matching-close-paren blocks (e.g. `#figure( ... )`),
     along with any `<label>` that trails the closing paren.

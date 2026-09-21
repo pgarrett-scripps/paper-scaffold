@@ -6,6 +6,50 @@ the overview, [DOCUMENTATION.md](DOCUMENTATION.md) for pipeline details, and
 task is moving an existing manuscript onto this scaffold, follow
 [MIGRATING.md](MIGRATING.md) instead of improvising the order.
 
+## Read and edit the text first
+
+For prose edits, terminology checks, and scientific argument review, read the
+Typst sources directly: `paper.typ`, `config.typ` for the abstract, and
+`si-body.typ` or the included file containing the requested passage. Use shell
+text reads and searches. Do not invoke PDF, image-viewing, or document-rendering
+skills just because the manuscript produces a PDF or Word file.
+
+To read sentences with their numbers filled in, use `paper.resolved.typ` from
+the latest successful build. It is a generated Word adaptation with resolved
+statistics, tables, and reference numbers, not an editable source. The captured
+Typst sources that retain layout and include scopes are under the path recorded
+in `.build-state/manuscript.json`. Never edit either intermediate.
+
+An intermediate describes its last build, not subsequent source edits. Check
+`just check-build` before relying on it as current. While editing, read current
+source alongside `stats.json`, or use `just trace <id> --json` for the displayed
+value and provenance. Do not rebuild merely to read a sentence. `just resolve`
+also compiles a PDF; it is not a cheap text-only command. The final required
+`just paper` refreshes the resolved text for the final prose review.
+
+Build once after the edits, then run the required gate below. Rebuild again only
+when further edits or a reported failure require it. Passing build and text
+checks finish an ordinary prose edit; do not add screenshot or page-by-page
+inspection. Use visual inspection when the user requests it, when changing
+layout, figures, or typesetting, or when diagnosing a specific rendering defect.
+Inspect the affected pages or assets and stop when that issue is resolved.
+
+## Preserve scientific meaning
+
+Follow [STYLE.md](STYLE.md), especially "Scientific terms and concrete claims".
+Before replacing a technical term, search its existing uses and check the
+quantity's definition, units, and analysis. Repeat the established name; do not
+invent a synonym for variety. Mass spectrometry intensity must not become
+"height", "brightness", or "abundance" unless the manuscript explicitly defines
+that relationship and the evidence supports it.
+
+For each edited claim, identify what was measured or done, what it was compared
+with, and what evidence supports the statement. Remove decorative jargon and
+undefined labels. If the intended meaning cannot be established from the source,
+preserve the supported wording and flag the ambiguity instead of supplying a
+plausible-sounding explanation. A clean prose checker does not establish that
+the sentence has a clear or scientifically correct meaning.
+
 ## Never do these
 
 **Never hand-edit `si/*.typ`.** Those files are written by
@@ -63,6 +107,17 @@ unaccounted-number warning at that spot; a global value-level exception goes
 in `prose-check.toml` with a written reason. `lit()` never silences
 `derivable-number` — a computed value wrapped in it still gets flagged.
 
+**Cite in `si-body.typ` as `@si-key`, never `@key`.** The Supporting
+Information has its own reference list, set by Alexandria because Typst allows
+one native `#bibliography` per document, and the `si-` prefix is what routes a
+citation to it. A bare `@key` in the SI compiles, renders an ordinary
+superscript, and quietly joins the MAIN list instead. `just prose-check` reports
+that as `misrouted-citation`, and reports the prefix in paper.typ's
+`#show: alexandria(...)` drifting from the one in si-body.typ's
+`#bibliographyx(...)`. Both lists read `references.bib`; there is one
+bibliography file. `just docx` sets both; `just docx-html` refuses such a
+manuscript, because Typst's HTML export would drop the SI's list silently.
+
 **Never delete the `// >>> BODY START` / `// <<< BODY END` markers** in
 `paper.typ`. The word counter, the readability report, and the narrator all slice
 the prose at them, and each hard-fails without them. Moving them changes what
@@ -74,12 +129,15 @@ before quoting the number.
 
 ## Before saying the work is done
 
-Two commands, in this order:
+After manuscript edits, two commands, in this order:
 
 ```bash
 just paper      # rebuild, and print the current word count and readability
 just verify     # the gate: formatting, extractors, prose rules, staleness
 ```
+
+These are command-line checks, not instructions to open or rasterize the PDF.
+Read the affected passages in the refreshed `paper.resolved.typ` for meaning.
 
 "I edited the text" is not done. "`just verify` is clean" is done. It rebuilds
 nothing, so run it as often as you like; when it reports something stale it also
@@ -121,6 +179,11 @@ What `verify` runs, and what each one is for:
   and uncited figures; reports long sentences, verbosity, repetition,
   unexpanded acronyms, and distinctive numerals that match nothing in
   `stats.json` as warnings you should read rather than silence.
+- **`just check-words`** -- checks the scopes and inclusive word limits in
+  `word-limits.toml`. Use `just wordcount --sections` to find section paths.
+  Excluding a section affects this count only, not other prose checks or exports.
+  Do not change limits or exclusions merely to clear a failure; follow the
+  author's requested scope and journal requirements.
 - **`just check-stats`** -- re-runs every guard in `stats.json` against the
   committed values, checks each generated value against the checksum its
   generator recorded, compares the hashes of the code and data behind them --

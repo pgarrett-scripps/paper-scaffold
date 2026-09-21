@@ -33,6 +33,7 @@ from typst_prose import (
     TODO,
     resolve_lit,
     resolve_stats,
+    BIBLIOGRAPHY_CALLS,
     strip_balanced as _strip_balanced,
     unescape_unicode,
 )
@@ -123,6 +124,10 @@ def clean(text: str, gap: str = " ") -> str:
     # A table written straight into the prose rather than wrapped in a
     # #figure. Legal, and excluded from a journal word count the same way.
     text = _strip_balanced(text, "#table(", gap)
+    # A reference list -- the SI sets its own, inside the file this reads
+    # whole. Exempt from the count, and not something to read aloud.
+    for _call in BIBLIOGRAPHY_CALLS:
+        text = _strip_balanced(text, _call, gap)
     # A generated figure/table referenced by id, outside a #figure block.
     text = re.sub(ASSET, gap, text)
     # generated numbers -> their value. Resolved, never stripped: this text is

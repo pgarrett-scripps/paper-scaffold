@@ -85,6 +85,14 @@ structure: `config.typ` for identity and abstract, the `// >>> BODY START` /
 and `#import "assets.typ": fig, tbl` in `paper.typ` **and in `si-body.typ`**
 (trap 2). `just paper` must build; the extracted text must match the baseline.
 
+If the manuscript had one reference list and you want the scaffold's second
+one for the SI, do it as its own step after the baseline matches: add the
+`#show: alexandria(prefix: "si-", ...)` rule to `paper.typ` and the
+`#bibliographyx(...)` call to `si-body.typ`, then prefix the SI's citation
+keys. The extracted text changes by design at that point — works cited only
+in the SI leave the main list — so diff it deliberately rather than against
+the original baseline. `just prose-check` names any SI citation you missed.
+
 **3. Assets.** Two routes, per figure:
 
 - *Analysis runs:* move it under `analysis/`, add a `record(...)` call per

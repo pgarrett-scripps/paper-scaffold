@@ -63,6 +63,8 @@ FORBIDDEN = [
     "#lit(",           # a vouched literal must resolve to its text, not leak
     "#todo(",          # a note to self must be stripped, not counted or spoken
     "lab notebook",    # nor may the note's TEXT leak into count or narration
+    "fixturebibliography",  # a reference list's own title leaked
+    "bibliographyx",   # the SI's Alexandria list leaked as a call
 ]
 
 
@@ -366,6 +368,7 @@ def structural_cases() -> bool:
         ok = False
     ok &= boundary_cases()
     ok &= bibliography_cases()
+    ok &= si_bibliography_cases()
     ok &= asset_cases()
     ok &= stats_cases()
     ok &= check_stats_cases()
@@ -480,6 +483,141 @@ def new_paper_cases() -> bool:
             if not passed:
                 print(f"  new-paper.sh [{name}]: failed")
                 ok = False
+    return ok
+
+
+# A minimal manuscript whose SI sets its own reference list, as the scaffold
+# writes one: the routing show rule in paper.typ, the list at the foot of
+# si-body.typ, and one prefixed citation.
+SI_PAPER = ('''#import "@preview/alexandria:0.2.0": alexandria
+#show: alexandria(prefix: "si-", read: p => read(p))
+// >>> BODY START
+Main text @a2020.
+// <<< BODY END
+#bibliography("references.bib", title: [References], style: paper-bib-style)
+#include "si-body.typ"
+''')
+
+SI_BODY = ('''#import "@preview/alexandria:0.2.0": bibliographyx
+SI prose @si-b2020.
+#set heading(numbering: none)
+#bibliographyx(
+  "references.bib",
+  prefix: "si-",
+  title: [References],
+  style: paper-bib-style,
+) <si-references>
+''')
+
+
+def si_bibliography_cases() -> bool:
+    """The SI's own reference list, which every text-level tool has to see.
+
+    Typst allows one native #bibliography per document, so an SI that ships
+    to the journal as its own file gets its list from Alexandria and routes
+    citations to it by prefix. Nothing about the rendered page says which
+    list a citation went to, which is why the prefix is checked here rather
+    than left to review.
+    """
+    import prose_check as pc
+    import resolve_typst as rt
+    from manuscript_sources import si_bibliography, without_si_bibliography
+    ok = True
+    sources = {"paper.typ": SI_PAPER, "si-body.typ": SI_BODY}
+
+    si = si_bibliography(sources=sources)
+    if si["prefix"] != "si-" or si["list_prefix"] != "si-":
+        print(f"  si_bibliography: read the prefixes as {si['prefix']!r} / "
+              f"{si['list_prefix']!r}")
+        ok = False
+    if si["paths"] != ["references.bib"]:
+        print(f"  si_bibliography: read the bib paths as {si['paths']!r}")
+        ok = False
+    # The block spans the `#set` line and the trailing label as well as the
+    # call: a `#set heading(numbering: none)` left behind with no list under
+    # it silently unnumbers whatever follows.
+    block = SI_BODY[slice(*si["block"])]
+    if not block.startswith("#set heading") or not block.endswith("<si-references>"):
+        print(f"  si_bibliography: the block is not the whole arrangement: "
+              f"{block!r}")
+        ok = False
+
+    # Removed for the review text; the prefix goes with it, because it is
+    # Alexandria's routing tag and no key in the .bib carries it.
+    stripped = without_si_bibliography(SI_BODY, SI_PAPER)
+    if "#bibliographyx(" in stripped or "<si-references>" in stripped:
+        print(f"  without_si_bibliography: the list survived: {stripped!r}")
+        ok = False
+    if "@b2020" not in stripped or "@si-b2020" in stripped:
+        print(f"  without_si_bibliography: the citation kept its routing "
+              f"prefix: {stripped!r}")
+        ok = False
+
+    # Rewritten for the Word projection: a plain call pandoc can read, with
+    # the style resolved from config.typ, since the #let does not travel.
+    config = '#let paper-bib-style = "american-chemical-society"'
+    out = rt.resolve_si_bibliography(SI_BODY, SI_PAPER, config)
+    if "#bibliographyx(" in out or "#bibliography(" not in out:
+        print(f"  resolve_si_bibliography: the call was not made plain: {out!r}")
+        ok = False
+    if 'style: "american-chemical-society"' not in out or "prefix:" in out:
+        print(f"  resolve_si_bibliography: style/prefix arguments are wrong: "
+              f"{out!r}")
+        ok = False
+
+    # Prefixes that disagree do not compile, but Typst reports it from inside
+    # the Alexandria package, pointing at neither line.
+    try:
+        rt.resolve_si_bibliography(SI_BODY.replace('prefix: "si-"',
+                                                   'prefix: "sup-"'),
+                                   SI_PAPER, config)
+        print("  resolve_si_bibliography: mismatched prefixes were accepted")
+        ok = False
+    except rt.ResolveError:
+        pass
+
+    bib = ("@article{a2020,\n  title = {One},\n  year = {2020},\n"
+           "  doi = {10.1/a},\n}\n@article{b2020,\n  title = {Two},\n"
+           "  year = {2020},\n  doi = {10.1/b},\n}\n")
+    cases = [
+        ("routed correctly", SI_BODY, []),
+        # The failure this exists for: a bare @key in the SI renders a
+        # perfectly ordinary superscript and joins the MAIN reference list.
+        ("bare key in the SI", SI_BODY.replace("@si-b2020", "@b2020"),
+         ["misrouted-citation"]),
+        ("prefixes disagree", SI_BODY.replace('prefix: "si-"', 'prefix: "x-"'),
+         ["si-bibliography-prefix"]),
+    ]
+    for name, si_body, want in cases:
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "references.bib").write_text(bib)
+            (root / "paper.typ").write_text(SI_PAPER)
+            (root / "si-body.typ").write_text(si_body)
+            got = sorted({f.rule for f in pc.check_si_bibliography(root)})
+            if got != sorted(want):
+                print(f"  si bibliography [{name}]: expected {sorted(want)}, "
+                      f"got {got}")
+                ok = False
+            # A work cited ONLY in the SI is cited as @si-key and its entry is
+            # `key`; without the prefix stripped every one reads as uncited.
+            if not want:
+                rules = {f.rule for f in pc.check_bibliography(root)}
+                if "uncited-reference" in rules:
+                    print("  si bibliography: an SI-only citation was reported "
+                          "as an uncited entry")
+                    ok = False
+
+    # A manuscript with no SI list at all -- every project that predates this
+    # -- must look exactly as it did.
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "paper.typ").write_text("Main @a2020.\n")
+        (root / "si-body.typ").write_text("SI prose.\n")
+        if si_bibliography(root) is not None or pc.check_si_bibliography(root):
+            print("  si bibliography: a manuscript with one list was treated "
+                  "as having two")
+            ok = False
     return ok
 
 
@@ -1671,21 +1809,62 @@ def export_cases() -> bool:
         pass
 
     # The exporter swaps the call for its own heading and hands the paths on.
-    src, paths, style = ex.split_bibliography(
+    (seg,) = ex.bibliography_segments(
         'prose\n#bibliography("references.bib", title: [References], '
         'style: "acs")\n')
-    if "= References" not in src or "#bibliography" in src:
-        print("  split_bibliography: the call did not become its heading")
+    if "= References" not in seg.text or "#bibliography" in seg.text:
+        print("  bibliography_segments: the call did not become its heading")
         ok = False
-    if paths != ["references.bib"] or style != "acs":
-        print(f"  split_bibliography: got paths {paths!r}, style {style!r}")
+    if seg.paths != ["references.bib"] or seg.style != "acs":
+        print(f"  bibliography_segments: got paths {seg.paths!r}, "
+              f"style {seg.style!r}")
         ok = False
     # Citeproc puts the reference list inside a Div with id "refs" and
     # otherwise appends it at the very END -- after the entire SI. The
     # heading must carry the anchor refs_div.lua promotes into that Div.
-    if "#block[]<refs>" not in src:
-        print("  split_bibliography: the <refs> anchor is missing -- the "
+    if "#block[]<refs>" not in seg.text:
+        print("  bibliography_segments: the <refs> anchor is missing -- the "
               "reference list would land after the SI")
+        ok = False
+
+    # The SI's own reference list is a SECOND call, and citeproc sets one
+    # list per run: each segment is converted separately and the trees are
+    # joined. A segment that kept the other half's prose would print the
+    # main text's citations in the SI's list.
+    main, si = ex.bibliography_segments(
+        'main @a\n#bibliography("references.bib", style: "acs")\n'
+        'SI prose @b\n#bibliography("si.bib", title: [References], '
+        'style: "acs")\n')
+    if "main @a" not in main.text or "SI prose" in main.text:
+        print(f"  bibliography_segments: the main segment is wrong: "
+              f"{main.text!r}")
+        ok = False
+    if "SI prose @b" not in si.text or "main @a" in si.text:
+        print(f"  bibliography_segments: the SI segment is wrong: "
+              f"{si.text!r}")
+        ok = False
+    if si.paths != ["si.bib"]:
+        print(f"  bibliography_segments: the SI list reads the wrong "
+              f"bibliography: {si.paths!r}")
+        ok = False
+    if main.text.count("<refs>") != 1 or si.text.count("<refs>") != 1:
+        print("  bibliography_segments: each segment needs exactly one "
+              "citeproc anchor")
+        ok = False
+
+    # Prose after the last list still travels, in its own segment.
+    segments = ex.bibliography_segments(
+        'body\n#bibliography("r.bib")\nafterword\n')
+    if len(segments) != 2 or "afterword" not in segments[-1].text:
+        print(f"  bibliography_segments: back matter after the last list was "
+              f"dropped: {[s.text for s in segments]!r}")
+        ok = False
+    # A projection with no bibliography at all is one plain segment, which
+    # is the single conversion this did before segments existed.
+    (plain,) = ex.bibliography_segments("just prose\n")
+    if plain.text != "just prose\n" or plain.paths:
+        print(f"  bibliography_segments: a manuscript with no bibliography "
+              f"changed shape: {plain!r}")
         ok = False
 
     # A cited key with no entry is the failure citeproc ships at exit 0.

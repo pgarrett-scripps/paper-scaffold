@@ -1,0 +1,28 @@
+# Optional word-count checks. Bounds are inclusive; omit either bound when it
+# does not apply. No journal limits are assumed by the scaffold.
+schema_version = 1
+
+# Discover exact, case-sensitive section paths with: just wordcount --sections
+# Selecting a section includes its subsections. Exclusions win; overlaps count
+# once. These selections affect word-count checks only, not the manuscript,
+# readability, spelling, or the standard main/SI totals.
+
+[[checks]]
+name = "Abstract"
+include = ["abstract"]
+# min = 100
+# max = 250
+
+[[checks]]
+name = "Main text"
+include = ["main"]
+exclude = [] # Example: ["main/Methods"]
+# min = 2000
+# max = 4000
+
+# Add independent section checks or combine regions:
+# [[checks]]
+# name = "Results and conclusions"
+# include = ["main/Results", "main/Conclusions"]
+# min = 500
+# max = 2000

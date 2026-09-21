@@ -11,11 +11,15 @@ script feeds pandoc is exactly what a person would read in the source.
 Two adaptations pandoc needs, both made here rather than in the resolver,
 because they are pandoc's quirks and not properties of the manuscript:
 
-  - `#bibliography(...)` is real Typst (the resolved file compiles standalone,
-    references and all), but pandoc's reader parses the call without wiring it
-    into citeproc. The call is swapped for a `= <title>` heading and the .bib
-    paths and CSL style are handed to pandoc as flags; citeproc then sets the
-    reference list under that heading.
+  - `#bibliography(...)` is real Typst, but pandoc's reader parses the call
+    without wiring it into citeproc. Each call is swapped for a `= <title>`
+    heading and the .bib paths and CSL style are handed to pandoc as flags;
+    citeproc then sets the reference list under that heading. A manuscript
+    whose Supporting Information carries its own list has two calls, and
+    citeproc sets one list per run, so each stretch is converted separately
+    and the Pandoc trees joined. (That projection no longer compiles as a
+    standalone Typst document, which a one-list one does: Typst refuses the
+    second call. Nothing in this pipeline compiles it.)
   - The CSL style: Typst bundles styles by name ("american-chemical-society");
     pandoc wants a .csl FILE. If <style>.csl or csl/<style>.csl exists in the
     manuscript root it is used; otherwise pandoc's default (Chicago
@@ -31,6 +35,7 @@ Usage: uv run python tools/export_docx.py     (via `just docx`)
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 import zipfile
@@ -42,10 +47,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
-from resolve_typst import FLOAT_PREFIX, _call_span  # noqa: E402
+from typing import NamedTuple  # noqa: E402
+
+from resolve_typst import FLOAT_PREFIX  # noqa: E402
 from typst_prose import CITE  # noqa: E402
 from bibliography import entries
-from manuscript_sources import mask
+from manuscript_sources import BIBLIOGRAPHY, call_span, mask
+from word_xml import order_properties
 
 SRC = ROOT / "paper.resolved.typ"
 OUT = ROOT / "paper.docx"
@@ -92,35 +100,62 @@ def style_code(path: Path) -> None:
             child(paragraph, "shd", val="clear", fill="F4F6F8")
             child(paragraph, "ind", left=160, right=160)
             child(paragraph, "spacing", before=160, after=160, line=260, lineRule="auto")
+    order_properties(root)
     rendered = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     with zipfile.ZipFile(path, "w") as archive:
         for info, data in entries:
             archive.writestr(info, rendered if info.filename == "word/styles.xml" else data)
 
 
-def split_bibliography(src: str) -> tuple[str, list[str], str | None]:
-    """Swap the #bibliography call for its heading; return (src, paths, style).
+class Segment(NamedTuple):
+    """One stretch of the manuscript and the reference list that closes it."""
+    text: str
+    paths: list[str]
+    style: str | None
 
-    The heading is followed by a `#block[]<refs>` anchor: citeproc sets the
-    reference list inside a Div with id "refs", and WITHOUT one it appends
-    the list at the very end of the document -- which, now that the resolver
-    keeps the call in the PDF's position, would strand the references after
-    the entire SI. Pandoc's Typst reader turns the anchor into a Span, and
-    tools/refs_div.lua promotes it to the Div citeproc looks for.
 
-    Pure and separate from the pandoc run so the tests can hold it still.
-    A resolved file without a bibliography passes through unchanged.
+def bibliography_segments(src: str) -> list[Segment]:
+    """Split the projection at each #bibliography call, one segment apiece.
+
+    Each call is swapped for its heading plus a `#block[]<refs>` anchor:
+    citeproc sets the reference list inside a Div with id "refs", and WITHOUT
+    one it appends the list at the very end of the document -- which, now
+    that the resolver keeps the call in the PDF's position, would strand the
+    references after the entire SI. Pandoc's Typst reader turns the anchor
+    into a Span, and tools/refs_div.lua promotes it to the Div citeproc
+    looks for.
+
+    WHY SEGMENTS. A manuscript whose Supporting Information ships as its own
+    file needs its own reference list, and one citeproc run produces exactly
+    one: every citation in the document lands in a single list. So each list
+    gets its own run over its own stretch of text, and the resulting Pandoc
+    trees are joined. The PDF reaches the same place by a different route --
+    Typst allows one native #bibliography, so the SI's is set by Alexandria
+    and tools/resolve_typst.py rewrites it into the second plain call read
+    here.
+
+    Pure and separate from the pandoc run so the tests can hold it still. A
+    projection with no bibliography is one segment with no paths, which is
+    the same single conversion this did before segments existed.
     """
-    call = _call_span(src, "#bibliography(")
-    if call is None:
-        return src, [], None
-    paths = [p.lstrip("/") for p in re.findall(r'"([^"]+\.(?:bib|yml|yaml|json))"', call)]
-    style = re.search(r'style:\s*"([^"]+)"', call)
-    title = re.search(r"title:\s*\[([^\]]*)\]", call)
-    heading = (f"= {title.group(1) if title else 'Bibliography'}"
-               "\n\n#block[]<refs>")
-    return (src.replace(call, heading), paths,
-            style.group(1) if style else None)
+    out: list[Segment] = []
+    at = 0
+    while (span := call_span(src, BIBLIOGRAPHY, start=at)) is not None:
+        start, end = span
+        call = src[start:end]
+        paths = [p.lstrip("/") for p in
+                 re.findall(r'"([^"]+\.(?:bib|yml|yaml|json))"', call)]
+        style = re.search(r'style:\s*"([^"]+)"', call)
+        title = re.search(r"title:\s*\[([^\]]*)\]", call)
+        heading = (f"= {title.group(1) if title else 'Bibliography'}"
+                   "\n\n#block[]<refs>")
+        out.append(Segment(src[at:start] + heading, paths,
+                           style.group(1) if style else None))
+        at = end
+    tail = src[at:]
+    if tail.strip() or not out:
+        out.append(Segment(tail, [], None))
+    return out
 
 
 def check_citations(src: str, bib_paths: list[Path]) -> list[str]:
@@ -145,46 +180,117 @@ def check_citations(src: str, bib_paths: list[Path]) -> list[str]:
     return sorted(cited - known)
 
 
+def namespace_refs(value, prefix: str) -> None:
+    """Keep citeproc's anchors distinct across two reference lists.
+
+    Each citeproc run numbers from 1 and names its entries `ref-<key>`, so a
+    work cited in both the main text and the SI would otherwise land in the
+    Word file as two bookmarks with one id, and every link to it would jump
+    to whichever Word kept. The same rename as
+    tools/document_docx.py:namespace_ids, which does this per chapter;
+    the two paths share the constraint, not the code, because that one
+    carries the dissertation template with it.
+
+    Renaming the "refs" Div also drops pandoc's own styling of it, so the
+    Word Bibliography style is named explicitly in its place.
+    """
+    if isinstance(value, list):
+        for child in value:
+            namespace_refs(child, prefix)
+    elif isinstance(value, dict):
+        kind, c = value.get("t"), value.get("c")
+        if kind == "Div" and c[0][0] == "refs":
+            c[0][2].append(["custom-style", "Bibliography"])
+        if kind in ("Div", "Span", "CodeBlock", "Code", "Link", "Image",
+                    "Table", "Figure") and (
+                c[0][0] == "refs" or c[0][0].startswith("ref-")):
+            c[0][0] = prefix + c[0][0]
+        if kind == "Link" and c[2][0].startswith("#ref-"):
+            c[2][0] = "#" + prefix + c[2][0][1:]
+        for child in value.values():
+            namespace_refs(child, prefix)
+
+
+def document(src: str, root: Path, *, note=print) -> dict:
+    """The projection as one Pandoc tree, one citeproc run per reference list.
+
+    Raises ValueError naming every citation with no entry: citeproc renders
+    one as bold text plus a warning and still exits 0, which is exactly the
+    kind of shipped-anyway failure this pipeline exists to refuse.
+    """
+    import pypandoc
+    segments = bibliography_segments(src)
+    merged: dict | None = None
+    seen: set[str] = set()
+    for i, seg in enumerate(segments):
+        args = ["--fail-if-warnings", "--resource-path", str(root)]
+        if seg.paths:
+            missing = check_citations(seg.text, [root / b for b in seg.paths])
+            if missing:
+                raise ValueError(
+                    "cited but not in the bibliography: "
+                    + ", ".join(f"@{k}" for k in missing)
+                    + " -- citeproc would ship each as bold prose and exit 0.")
+            # The Lua filter must precede --citeproc: pandoc applies filters
+            # in command-line order, and the refs anchor has to be a Div
+            # before citeproc goes looking for one. Taken from the snapshot
+            # when there is one -- it materializes tools/ alongside its
+            # sources, so a review of an older version filters the way that
+            # version did -- and otherwise from beside this file, which is
+            # right wherever the manuscript root has been pointed.
+            lua = root / "tools" / "refs_div.lua"
+            if not lua.is_file():
+                lua = Path(__file__).resolve().parent / "refs_div.lua"
+            args += ["--lua-filter", str(lua)]
+            args += ["--citeproc"]
+            args += [f"--bibliography={root / b}" for b in seg.paths]
+            csl = next((p for p in (root / f"{seg.style}.csl",
+                                    root / "csl" / f"{seg.style}.csl")
+                        if seg.style and p.is_file()), None)
+            if csl:
+                args += ["--csl", str(csl)]
+            elif seg.style and seg.style not in seen:
+                seen.add(seg.style)
+                note(f'note: no {seg.style}.csl in the manuscript root; '
+                     f"citations use pandoc's default style (Chicago "
+                     f"author-date). Drop the CSL file there to match the PDF.")
+        tree = json.loads(pypandoc.convert_text(seg.text, "json",
+                                                format="typst",
+                                                extra_args=args))
+        # The first list keeps citeproc's own ids, so a manuscript with one
+        # bibliography -- every project that predates the SI's own list --
+        # converts to exactly the bytes it did before.
+        if i:
+            namespace_refs(tree["blocks"], f"s{i}-")
+        if merged is None:
+            merged = tree
+        else:
+            merged["blocks"] += tree["blocks"]
+    return merged
+
+
 def main() -> int:
     if not SRC.is_file():
         print("error: paper.resolved.typ is missing -- run: just resolve",
               file=sys.stderr)
         return 1
-    src, bib, style = split_bibliography(SRC.read_text())
+    src = SRC.read_text()
+    bib = sorted({b for seg in bibliography_segments(src) for b in seg.paths})
+    try:
+        tree = document(src, ROOT)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
     args = ["--fail-if-warnings", "--resource-path", str(ROOT)]
-    if bib:
-        try:
-            missing = check_citations(src, [ROOT / b for b in bib])
-        except (OSError, ValueError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
-        if missing:
-            print("error: cited but not in the bibliography: "
-                  + ", ".join(f"@{k}" for k in missing)
-                  + " -- citeproc would ship each as bold prose and exit 0.",
-                  file=sys.stderr)
-            return 1
-        # The Lua filter must precede --citeproc: pandoc applies filters in
-        # command-line order, and the refs anchor has to be a Div before
-        # citeproc goes looking for one.
-        args += ["--lua-filter", str(ROOT / "tools" / "refs_div.lua")]
-        args += ["--citeproc"]
-        args += [f"--bibliography={ROOT / b}" for b in bib]
-        csl = next((p for p in (ROOT / f"{style}.csl",
-                                ROOT / "csl" / f"{style}.csl")
-                    if style and p.is_file()), None)
-        if csl:
-            args += ["--csl", str(csl)]
-        elif style:
-            print(f'note: no {style}.csl in the manuscript root; citations '
-                  f"use pandoc's default style (Chicago author-date). Drop "
-                  f"the CSL file there to match the PDF.")
-
+    reference = ROOT / "word/paper-reference.docx"
+    if reference.is_file():
+        args += ["--reference-doc", str(reference)]
     import pypandoc
-    pypandoc.convert_text(src, "docx", format="typst",
+    pypandoc.convert_text(json.dumps(tree), "docx", format="json",
                           outputfile=str(OUT), extra_args=args)
-    style_code(OUT)
+    if not reference.is_file():
+        style_code(OUT)
 
     # Trust, then verify: count what actually landed in the file.
     with zipfile.ZipFile(OUT) as z:

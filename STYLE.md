@@ -99,6 +99,49 @@ Cut the intensifiers and the throat-clearing: "very", "quite", "clearly",
 "obviously", "importantly", "it should be noted that", "in order to". They add
 words and never add evidence.
 
+## Scientific terms and concrete claims
+
+**Keep the quantity's name attached to its definition.** Before changing a
+technical noun, search the manuscript, captions, statistic descriptions, and
+relevant analysis for its established meaning and units. Repeat that name even
+in neighboring sentences. Readability scores and repetition warnings are not
+reasons to rename a measured quantity.
+
+In mass spectrometry, retain "intensity" when that is the defined measurement.
+Do not substitute "height", "brightness", "signal strength", or "abundance"
+for variety. Peak height and integrated peak area can describe different
+measurements; abundance may require an inference beyond the measured intensity.
+Use those terms only when the method and manuscript define them accordingly.
+
+**Write claims a reader can interpret literally.** Name the object, operation
+or observation, and relevant comparison. A phrase such as "signal landscape",
+"analytical leverage", "information-rich regime", or "robust performance"
+does not explain a result by itself. State the measured property or omit the
+phrase. Do not coin a label or stack abstract nouns to make a sentence sound
+academic. Introduce a new term only when the argument needs a distinct concept,
+and define it before using it.
+
+These examples illustrate edits; they do not authorize adding the claims:
+
+| Vague or misleading wording | Concrete wording, if supported |
+|---|---|
+| "Peak height decreased" when the reported quantity is intensity | "Peak intensity decreased" |
+| "The method leveraged the signal landscape" | Name the data the method used and the operation it performed |
+| "Filtering enhanced analytical performance" | "Filtering reduced file size" if file size was the measured outcome |
+| "The results demonstrated robust agreement" | Name the compared measurements and report the agreement metric and its uncertainty |
+
+**Preserve the strength and scope of the evidence.** An observation does not
+establish its mechanism; detection does not establish identification; a smaller
+file does not establish better analytical performance. Keep relevant uncertainty,
+conditions, and comparisons. Do not replace an unsupported adjective with an
+invented measurement, mechanism, or stronger conclusion.
+
+Before finishing, read each edited sentence and its neighboring paragraph.
+Check that each technical noun has a known referent and each conclusion follows
+from the cited result. If a phrase cannot be explained in plain words from the
+available evidence, delete it if dispensable; otherwise flag the unclear meaning
+for the author. Automated style checks cannot perform this scientific review.
+
 ## Numbers and units
 
 Give units on first mention of every quantity, and keep significant figures
@@ -139,6 +182,11 @@ observed and let the discussion propose the mechanism.
 One claim per paragraph, stated in the first sentence. If a paragraph needs two
 topic sentences it is two paragraphs.
 
+Develop each prose paragraph with multiple related sentences. Merge isolated
+one-sentence paragraphs into the argument they belong to; do not add filler to
+lengthen them. Check neighboring paragraphs for repeated explanations or
+conclusions before finishing an edit.
+
 Prefer prose to bullet lists in the main text. A bulleted manuscript reads as
 slides, and journals typeset lists unpredictably. Lists are fine in the SI for
 genuinely enumerable things such as parameter settings.
@@ -150,6 +198,17 @@ prior".
 Figure and table captions should stand alone. A reader who jumps to the figure
 should learn what it shows and what to conclude without hunting for the paragraph
 that cites it.
+
+## Citations
+
+Cite in the main text as `@key`. **Cite in `si-body.typ` as `@si-key`.** The
+Supporting Information carries its own reference list, because it is submitted
+as its own file, and the `si-` prefix is what routes a citation to it. A bare
+`@key` in the SI compiles and prints in the main text's list instead, where a
+reader of the SI alone cannot follow it; `just prose-check` reports one.
+
+Cite the work, not the list: both lists read the same `references.bib`, so a
+work cited in both halves is one entry with two numbers, not two entries.
 
 ## Mechanics
 

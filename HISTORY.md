@@ -42,6 +42,56 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## Unreleased
+
+The Supporting Information carries its own reference list, for journals that
+take the SI as a separate file. Typst allows one native `#bibliography` per
+document, so the SI's is set by Alexandria: `#show: alexandria(prefix: "si-",
+read: p => read(p))` in `paper.typ`, `#bibliographyx(..., prefix: "si-")` at
+the foot of `si-body.typ`, and every SI citation written `@si-key`. Both lists
+number from 1 and each prints only the works its own half cites. The Word
+export converts each list with its own citeproc run and joins the trees;
+`just docx-html`, the legacy HTML route, refuses such a manuscript rather than
+shipping a file with the SI's references silently missing. `just prose-check`
+reports a bare `@key` in the SI, which compiles and quietly joins the MAIN
+list, and prefixes that disagree between the two files.
+
+Upgrade: nothing to do. A manuscript with one bibliography behaves exactly as
+before, down to the bytes of its Word export. To adopt the second list, copy
+the Alexandria show rule into `paper.typ` and the `#bibliographyx` call into
+`si-body.typ` from the scaffold, then prefix the SI's citation keys.
+
+Word generation now carries the dissertation pipeline's reusable reference
+styles, full-caption front lists, page-number caching, independent chapter
+bibliographies, proportional table columns and OOXML property-order fixes.
+`examples/dissertation/` supplies the supported template contract and a small
+working example. `just paper` selects the document pipeline when a manifest is
+present. Single papers use `word/paper-reference.docx`; custom styles survive
+builds and template edits invalidate freshness.
+
+Upgrade: copy the new `tools/document_docx.py`, `tools/word_*.py`,
+`tools/paper_word_reference.py`, updated exporter/build-state tools, `word/`, ACS
+CSL, tests and justfile recipes together. Existing dissertation templates need
+the documented capture contract; arbitrary multi-document layouts are not
+silently adapted. Full Word contents pagination also needs LibreOffice and
+Poppler. Existing local template edits should be merged rather than replaced.
+
+
+Optional `word-limits.toml` defines independent word-count checks with section
+inclusions, exclusions, and inclusive minimum/maximum bounds. `just wordcount
+--sections` lists paths from evaluated Typst content, including nested headings
+and includes. Overlaps count once; unknown or ambiguous selections fail.
+Standard journal totals and content exemptions are unchanged.
+
+`just check-words` enforces the configured limits inside `verify` and
+`preflight`; draft builds report length violations without refusing to build.
+The shipped configuration leaves all bounds unset. This applies to the
+single-paper workflow; named document part scopes are unchanged.
+
+Upgrade: copy `wordcount.typ`, `wordcount-sections.typ`, `tools/wordcount.py`,
+`tools/wordcount.sh`, and the updated build-state tool, tests, and justfile
+recipes together. Add `word-limits.toml` to enable checks in an existing paper.
+
 ## 3.19.0
 
 Optional `manuscript.toml` declares named PDF targets and counted chapter parts.

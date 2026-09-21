@@ -32,7 +32,8 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import readability  # noqa: E402
 import typst_prose  # noqa: E402
-from manuscript_sources import mask
+from manuscript_sources import (
+    call_span, mask, si_bibliography, without_si_bibliography)
 from atomic_io import write_text
 
 OUT = ROOT / "paper.resolved.typ"
@@ -538,18 +539,69 @@ def bibliography_line(paper_src: str, config_src: str) -> str:
     call = _call_span(_strip_comments(paper_src), "#bibliography(")
     if call is None:
         return ""
+    return _bib_style(call, config_src, "#bibliography")
+
+
+def _bib_style(call: str, config_src: str, where: str) -> str:
+    """`style: paper-bib-style` -> `style: "american-chemical-society"`.
+
+    A bibliography call usually names a config.typ variable for its style, and
+    the `#let` behind it does not travel into the projection. Pandoc is handed
+    the CSL by name downstream, so the name has to be a literal by then.
+    """
     m = re.search(r"style:\s*([A-Za-z_][A-Za-z0-9_-]*)\b", call)
-    if m and m.group(1) != "none":
-        let = re.search(
-            rf'#let\s+{re.escape(m.group(1))}\s*=\s*"([^"]+)"',
-            _strip_comments(config_src))
-        if not let:
-            raise ResolveError(
-                f"#bibliography(style: {m.group(1)}): no "
-                f'`#let {m.group(1)} = "..."` in config.typ to resolve it '
-                f"from. Name a string literal, or define the variable there.")
-        call = call.replace(m.group(0), f'style: "{let.group(1)}"')
-    return call
+    if not m or m.group(1) == "none":
+        return call
+    let = re.search(rf'#let\s+{re.escape(m.group(1))}\s*=\s*"([^"]+)"',
+                    _strip_comments(config_src))
+    if not let:
+        raise ResolveError(
+            f"{where}(style: {m.group(1)}): no "
+            f'`#let {m.group(1)} = "..."` in config.typ to resolve it '
+            f"from. Name a string literal, or define the variable there.")
+    return call.replace(m.group(0), f'style: "{let.group(1)}"')
+
+
+def resolve_si_bibliography(si_src: str, paper_src: str, config_src: str) -> str:
+    """The SI's Alexandria reference list, rewritten as plain Typst.
+
+    The SI carries its own reference list because it is submitted as its own
+    file. Typst allows one native #bibliography per document, so the PDF sets
+    the SI's with Alexandria: `#show: alexandria(prefix: "si-")` in paper.typ,
+    `#bibliographyx(..., prefix: "si-")` in si-body.typ, and every SI citation
+    written `@si-key`.
+
+    None of that means anything to pandoc, and the prefix is not part of any
+    citation key: `si-hopper1952` is in no .bib file, and citeproc would set
+    it as bold prose. So here the call becomes an ordinary #bibliography and
+    the SI's citations lose the prefix, leaving two plain bibliography calls
+    in the projection for export_docx.py to convert one at a time.
+
+    The projection consequently no longer compiles as a standalone Typst
+    document -- Typst refuses the second call. It is read by pandoc, by the
+    review diff, and by a person checking the prose, none of which compile it.
+
+    A manuscript with no SI bibliography is returned unchanged.
+    """
+    si = si_bibliography(sources={"paper.typ": paper_src, "si-body.typ": si_src})
+    if si is None or si["span"] is None:
+        return si_src
+    if si["prefix"] and si["list_prefix"] and si["prefix"] != si["list_prefix"]:
+        raise ResolveError(
+            f'paper.typ routes @{si["prefix"]}... to the SI bibliography but '
+            f'si-body.typ prints one for @{si["list_prefix"]}...; the two '
+            f"prefixes must match (`just prose-check` reports this too)")
+
+    call = si["call"]
+    plain = call.replace("#bibliographyx(", "#bibliography(", 1)
+    plain = re.sub(r"\s*prefix:\s*\"[^\"\n]*\"\s*,?", "", plain, count=1)
+    plain = _bib_style(plain, config_src, "#bibliographyx")
+
+    # The label and the heading-numbering switch are layout, not content: the
+    # label is wordcount.typ's exclusion handle and the `#set` keeps the SI's
+    # S1/S2 numbering off the reference heading. Both would reach pandoc as
+    # stray markup, so the rewrite takes the whole arrangement.
+    return without_si_bibliography(si_src, paper_src, replacement=plain)
 
 
 def _back_matter(paper_src: str, assets: dict) -> str:
@@ -684,7 +736,8 @@ def build(front_matter: dict | None = None) -> str:
     back = _back_matter(paper_src, assets)
     if back:
         body += "\n\n" + back
-    bib = bibliography_line(paper_src, (ROOT / "config.typ").read_text())
+    config_src = (ROOT / "config.typ").read_text()
+    bib = bibliography_line(paper_src, config_src)
     if bib:
         body += "\n\n" + bib
 
@@ -704,6 +757,7 @@ def build(front_matter: dict | None = None) -> str:
         # The marker sits on its own line so the SI's first heading still
         # starts a line, which is what the heading scan anchors on.
         si_src = export_includes(si.read_text(), si) if NATIVE_NUMBERING is not None else si.read_text()
+        si_src = resolve_si_bibliography(si_src, paper_src, config_src)
         body += ("\n\n" + _SI_MARK + "\n" + _si_title(meta)
                  + resolve_notation(si_src, assets, "si-body.typ"))
 
@@ -715,8 +769,12 @@ def build(front_matter: dict | None = None) -> str:
         target = ROOT / m.group(1).lstrip("/")
         if not target.is_file():
             raise ResolveError(f"paper.typ includes {m.group(1)}, which is missing")
-        mark = _SI_MARK + "\n" + _si_title(meta) if target == si else ""
-        return mark + resolve_notation(target.read_text(), assets, m.group(1))
+        src = target.read_text()
+        mark = ""
+        if target == si:
+            mark = _SI_MARK + "\n" + _si_title(meta)
+            src = resolve_si_bibliography(src, paper_src, config_src)
+        return mark + resolve_notation(src, assets, m.group(1))
 
     body = re.sub(r'#include\s+"([^"]+)"', inline, body)
 

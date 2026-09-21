@@ -25,24 +25,18 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def make_document(folder: Path) -> dict:
-    """Read the Word projection structurally, including tables, math and citations."""
-    import pypandoc
-    from export_docx import split_bibliography, check_citations
-    src, bib, style = split_bibliography((folder / "paper.word.typ").read_text())
-    missing = check_citations(src, [folder / b for b in bib])
-    if missing:
-        raise ValueError("undefined citations: " + ", ".join(missing))
-    args = ["--resource-path", str(folder)]
-    if bib:
-        args += ["--lua-filter", str(folder / "tools/refs_div.lua"), "--citeproc"]
-        args += [f"--bibliography={folder / b}" for b in bib]
-        csl = next((p for p in (folder / f"{style}.csl", folder / "csl" / f"{style}.csl")
-                    if style and p.is_file()), None)
-        if csl:
-            args += ["--csl", str(csl)]
-        elif style:
-            print(f"note: no {style}.csl; review uses Pandoc's default citation style")
-    return json.loads(pypandoc.convert_text(src, "json", format="typst", extra_args=args))
+    """Read the Word projection structurally, including tables, math and citations.
+
+    One Pandoc tree, however many reference lists the manuscript sets: the
+    Supporting Information carries its own, and citeproc produces one list
+    per run. export_docx.document does the splitting, so a review diff sees
+    the same structure the Word export ships.
+    """
+    from export_docx import document
+    return document((folder / "paper.word.typ").read_text(), folder,
+                    note=lambda msg: print(msg.replace(
+                        "citations use pandoc's default style",
+                        "review uses pandoc's default style")))
 
 
 def image_path(folder: Path, name: str) -> Path:

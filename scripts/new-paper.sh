@@ -160,6 +160,7 @@ tar -C "$SCAFFOLD" -cf - \
     --exclude='./paper.docx' \
     --exclude='./paper.docx.html' \
     --exclude='./paper.resolved.typ' \
+    --exclude='*.review.txt' \
     --exclude='./.text-baseline' \
     --exclude='./.edit-guard' \
     --exclude='./.review' \
@@ -297,17 +298,12 @@ PY
 built=0
 if [ "$DO_BUILD" = 1 ]; then
   echo ""
-  echo "building the first PDF"
+  echo "building the first PDF, Word and review-text exports"
   if (cd "$DEST" && just paper >/dev/null 2>&1); then
     built=1
-    echo "  wrote paper.pdf"
-    if (cd "$DEST" && just docx >/dev/null 2>&1); then
-      echo "  wrote paper.docx"
-    else
-      echo "  note: the Word export did not build; run 'just docx' to see why"
-    fi
+    echo "  wrote paper.pdf, paper.docx and paper.review.txt"
   else
-    echo "  could not build yet (typst, uv, or the network). Run: just doctor"
+    echo "  exports did not all build; run 'just paper' to see why"
   fi
 fi
 
@@ -341,7 +337,7 @@ echo "next:"
 echo "  cd $DEST"
 echo "  just doctor      # confirm the toolchain"
 echo "  just setup       # build the Python environment"
-[ "$built" = 1 ] || echo "  just paper       # first PDF"
+[ "$built" = 1 ] || echo "  just paper       # PDF, Word and review text"
 echo "  just verify      # the gate: formatting, extractors, prose rules, staleness"
 echo ""
 echo "then replace the placeholder prose in paper.typ and si-body.typ, the"

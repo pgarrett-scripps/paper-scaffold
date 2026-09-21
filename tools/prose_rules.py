@@ -65,6 +65,8 @@ RULES: dict[str, tuple[str, str]] = {
     "bibliography-parse":  ("error", ""),
     "duplicate-reference": ("error", "the shared DOI"),
     "uncited-reference":  ("warn",  "the entry key"),
+    "misrouted-citation": ("error", "the entry key"),
+    "si-bibliography-prefix": ("error", "the prefix"),
     "missing-doi":        ("warn",  "the entry key"),
     "implausible-year":   ("warn",  "the entry key"),
 }

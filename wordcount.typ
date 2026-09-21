@@ -21,7 +21,8 @@
 // resolve. The SI is the standalone appendix body si-body.typ.
 
 #import "@preview/wordometer:0.1.4": word-count-of
-#import "config.typ": paper-title, paper-abstract
+#import "config.typ": paper-abstract, paper-title
+#import "wordcount-sections.typ": section-counts
 
 // Helper used inside the main text (defined in paper.typ's preamble); injected
 // into the eval scope so the sliced body evaluates.
@@ -50,23 +51,45 @@
 #let main-body = eval(
   src.slice(start-m.end, end-m.start),
   mode: "markup",
-  scope: (refn: refn, s: s, n: n, lit: lit, todo: (msg) => none, fig: asset-fig, tbl: asset-tbl),
+  scope: (
+    refn: refn,
+    s: s,
+    n: n,
+    lit: lit,
+    todo: msg => none,
+    fig: asset-fig,
+    tbl: asset-tbl,
+  ),
 )
 #let si-body = include "si-body.typ"
 
 // wordometer already ignores citations, references, equations, images, and
 // metadata by default; we additionally drop whole figures (caption + table +
 // image) and block code / config dumps, while keeping inline `code`.
-#let excludes = (figure, raw.where(block: true))
+//
+// <si-references> is the SI's own reference list (set by Alexandria, since
+// Typst allows only one native #bibliography). It is excluded for the same
+// reason the main list is: a reference list is not prose and no journal counts
+// one. Belt and braces today -- Alexandria renders inside a `context`, which
+// wordometer cannot see into, so the list already counts zero -- but the
+// exclusion states the intent rather than relying on that.
+#let excludes = (figure, raw.where(block: true), <si-references>)
 #let a = word-count-of(paper-abstract, exclude: excludes)
 #let m = word-count-of(main-body, exclude: excludes)
 #let s = word-count-of(si-body, exclude: excludes)
 
 #metadata((
-  abstract_words: a.words, abstract_chars: a.characters,
-  main_words: m.words, main_chars: m.characters,
-  si_words: s.words, si_chars: s.characters,
-  total_words: m.words + s.words, total_chars: m.characters + s.characters,
+  abstract_words: a.words,
+  abstract_chars: a.characters,
+  main_words: m.words,
+  main_chars: m.characters,
+  si_words: s.words,
+  si_chars: s.characters,
+  total_words: m.words + s.words,
+  total_chars: m.characters + s.characters,
+  sections: section-counts(paper-abstract, "abstract")
+    + section-counts(main-body, "main")
+    + section-counts(si-body, "si"),
 )) <wc>
 
 #set page(width: 13cm, height: auto, margin: 1.2cm)
@@ -86,4 +109,4 @@
 )
 #v(4pt)
 #text(8pt, fill: gray)[Excludes references, citations, figures/tables and their
-captions, math, images, and block code. Includes headings and inline `code`.]
+  captions, math, images, and block code. Includes headings and inline `code`.]

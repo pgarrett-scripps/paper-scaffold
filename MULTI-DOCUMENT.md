@@ -5,12 +5,73 @@ can have a full-document target and one target per chapter, all using the same
 chapter sources and one copy of the tooling. Existing paper projects need no
 manifest or source changes; their commands keep the original behavior.
 
-This first release supports native PDF builds, counted parts, readability,
-chapter prose/bibliography checks, and scoped wording-edit guards. It does not
-adapt chapter bibliographies or custom dissertation templates to Word, resolved
-version review, visualization, or narration. The existing `docx`, `review`, `viz`,
-and audio commands remain single-paper commands. Do not run them against a
-chapter project and assume they cover it.
+Native PDF builds support counted parts, readability, chapter checks, and
+scoped wording-edit guards. Word export additionally supports the explicit
+**dissertation template contract** in `examples/dissertation/`; arbitrary custom
+Typst templates need their own capture adapter. `examples/chapters/` remains a
+PDF-only example. Word export refuses an unsupported layout rather than
+silently dropping front matter. Review visualization and narration still use
+the single-paper path.
+
+## Dissertation Word export
+
+The dissertation adapter was ported from a working eight-chapter manuscript.
+It evaluates Typst content, resolves each chapter's bibliography independently,
+joins Pandoc trees, and writes one editable DOCX. It never converts a PDF into
+Word. The included ACS CSL supplies matching numeric chapter references.
+
+Try the complete example from the scaffold root:
+
+```bash
+uv run python tools/document_docx.py --root examples/dissertation
+uv run python tools/document_docx.py first --root examples/dissertation
+uv run python tools/document_docx.py --check --root examples/dissertation
+```
+
+In a project with the scaffold tools and justfile, `just paper` detects
+`manuscript.toml`, builds all named PDFs, the default document's DOCX, and its
+plain-text review copy. `just docx first` exports one chapter; `just docx all`
+exports every target. `just document-docx` is an explicit equivalent for the
+default Word target, and `just docx-check` checks its freshness without building.
+`just document all` remains the PDF-only command.
+
+Copy the example's `lib/`, `code.typ`, `word/reference.docx`, ACS CSL, manifest,
+and wrappers together, then replace the example chapter content. The adapter
+expects `lib/template.typ` with `dissertation` and `chapter-title-page` wrappers,
+`lib/supplements.typ`, chapter IDs and citation prefixes, and an `abstract` part
+in the full document's entrypoint. Keep the template's capture points aligned
+with `tools/word_capture.py` when changing its implementation. Unknown semantic
+constructs fail the export and preserve the last successful DOCX. The example
+layout is a starting point, not a claim of compliance with any institution.
+
+The Word template controls paragraph and character styles. Edit
+`word/reference.docx` in Word to customize them; normal builds never overwrite
+it. `uv run python tools/word_reference.py --root PROJECT` deliberately resets
+it to the provided dissertation styles. Page sections, figure bounds and table
+geometry are handled by the adapter and need code changes for a different page
+layout. The defaults use Letter paper with one-inch margins, a full title page,
+a separate copyright page, Roman front matter, and Arabic numbering from the
+abstract. Major front-matter sections, chapter openings, chapter abstracts,
+supplemental sections, and reference lists start on new pages. The first section
+after each chapter abstract also starts on a new page; ordinary sections flow
+continuously, with headings kept with their following content. These boundaries
+and recalculated page numbers are automatic on every build.
+The contents has linked page numbers, and the figure/table lists
+retain complete captions with each opening sentence (the title) bold and the
+remaining explanation in regular weight, preserving italics and equations;
+bold emphasis stays in the body captions. Explicit table proportions, native equations, chapter
+references and verbatim code remain editable.
+
+Full front-matter pagination requires LibreOffice (`soffice`) and Poppler
+(`pdfinfo`) on PATH. Page numbers are calculated from a temporary DOCX render;
+only cached numbers are copied back. The original DOCX is never resaved through
+LibreOffice. Font availability affects pagination, and final Microsoft Word
+layout still needs review in Word. Failed pagination does not replace the last
+good output. Changes to the Word template, CSL, tools, inputs or output invalidate
+its separate `.build-state/word/` record.
+
+Run `just test-docx` for the content, layout and template regression checks.
+The complete scaffold `just test` also includes these checks.
 
 ## Try the example
 

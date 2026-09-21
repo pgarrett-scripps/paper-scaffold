@@ -1,0 +1,79 @@
+# Exact surface forms from Juzek & Ward (COLING 2025), Appendix A, Table 2.
+# Inflections are separate observations in the study, not inferred word families.
+# These are review prompts, not banned words or validated detector triggers.
+schema_version = 2
+words = [
+  "delves", "delved", "delving", "showcasing", "delve", "boasts",
+  "underscores", "comprehending", "intricacies", "surpassing", "intricate",
+  "underscoring", "garnered", "showcases", "emphasizing", "underscore",
+  "realm", "surpasses", "groundbreaking", "advancements", "aligns",
+]
+
+[source]
+citation = 'Juzek, Tom S. and Zina B. Ward (2025). Why Does ChatGPT "Delve" So Much? Exploring the Sources of Lexical Overrepresentation in Large Language Models. COLING, 6397–6411.'
+url = "https://aclanthology.org/2025.coling-main.426/"
+location = "Appendix A, Table 2 (page 6408)"
+repository = "https://github.com/tjuzek/delve"
+study_period = "PubMed frequency comparison: 2020 versus 2024 (through May)"
+model = "ChatGPT-3.5; scientific abstracts"
+note = "Population-level lexical associations; not evidence of authorship or detector behavior for an individual manuscript."
+
+[[extensions]]
+id = "kobak-style-selection"
+words = [
+  "pivotal", "remarkable", "impressive", "invaluable", "transformative",
+  "comprehensive", "multifaceted", "nuanced", "meticulous", "meticulously",
+  "leveraging", "harnessing", "fostering", "bolstering", "elucidating",
+  "seamlessly", "unparalleled", "unlocking", "unveiling", "revolutionize",
+  "streamlined",
+  "compelling", "crucial", "exceptional", "exceptionally", "innovative",
+  "impactful", "imperative", "noteworthy", "notable", "notably",
+  "burgeoning", "foundational", "interplay", "interconnectedness", "avenues",
+  "endeavors", "illuminates", "illuminating", "encapsulates", "propelling",
+  "orchestrating", "poised", "uncharted", "unraveling",
+]
+
+[extensions.source]
+citation = "Kobak, Dmitry, Rita González-Márquez, Emőke-Ágnes Horvát, and Jan Lause (2025). Delving into LLM-assisted writing in biomedical publications through excess vocabulary. Science Advances 11(27), eadt3813."
+url = "https://doi.org/10.1126/sciadv.adt3813"
+location = "results/excess_words.csv; entries annotated as style"
+repository = "https://github.com/berenslab/llm-excess-vocab"
+data_url = "https://github.com/berenslab/llm-excess-vocab/blob/main/results/excess_words.csv"
+study_period = "PubMed excess vocabulary, 2013–2024"
+note = "Editorial selection of 45 style words from the annotated dataset, not a published ranking or validated detector-trigger list."
+
+[[extensions]]
+id = "author-preferences"
+words = [
+  "tractable", "amenable", "actionable", "robust", "scalable",
+  "principled", "parsimonious", "elegant", "sophisticated", "intuitive",
+  "versatile", "holistic", "synergistic", "synergy", "tapestry", "cornerstone",
+  "linchpin",
+]
+
+[extensions.source]
+kind = "editorial"
+citation = "Author-requested vocabulary review, 2026-09-16"
+location = "Conversation approvals of tractable and related editorial vocabulary"
+note = "Personal style preference, not a claim of measured LLM overuse. Retain precise technical uses, such as computational tractability; review vague claims of manageability in context."
+
+[[extensions]]
+id = "word-form-extensions"
+words = [
+  "leverage", "leveraged", "leverages", "harness", "harnessed", "harnesses",
+  "foster", "fostered", "fosters", "bolster", "bolstered", "bolsters",
+  "elucidate", "elucidated", "elucidates", "streamline", "streamlines",
+  "streamlining", "showcase", "showcased", "underscored", "revolutionized",
+  "revolutionizes", "revolutionizing", "tractability", "scalability",
+  "robustly", "robustness",
+]
+
+[extensions.source]
+kind = "editorial"
+citation = "Author-approved extensions of watched word families, 2026-09-16"
+location = "Conversation approval of the proposed missing word forms"
+note = "Explicit editorial additions for exact-word matching. These forms are not claimed to have been individually validated by the original studies; preserve supported technical meanings."
+
+# Keep exceptions visible and give each a reason, e.g.:
+# aligns = "Established description of the sequence alignment operation."
+[allow]
