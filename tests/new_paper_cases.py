@@ -95,6 +95,13 @@ def run_cases() -> bool:
             ("stats.json copied", (dest / "stats.json").is_file()),
             ("analysis/ copied", (dest / "analysis" / "justfile").is_file()),
             ("tools/ copied", (dest / "tools" / "prose_check.py").is_file()),
+            # docs/ travels because CLAUDE.md links into it; the migration
+            # guide and the pre-3.20 release notes do not, since a new paper
+            # is neither migrating nor older than any release.
+            ("docs/ copied", (dest / "docs" / "README.md").is_file()),
+            ("no docs/migrating.md", not (dest / "docs" / "migrating.md").exists()),
+            ("no docs/history-archive.md",
+             not (dest / "docs" / "history-archive.md").exists()),
             # A bare `--exclude=__pycache__` only matched at the top level, so
             # the caches under tools/ rode along the moment the toolchain moved
             # one directory down.

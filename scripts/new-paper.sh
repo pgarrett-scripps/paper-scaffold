@@ -129,13 +129,17 @@ esac
 #
 # What is left out: the scaffold's git history (the whole point), both
 # virtualenvs and every cache (rebuilt by `just setup`), this scripts/ directory
-# (it makes new papers, and a paper does not make papers), MIGRATING.md (a new
-# paper is not migrating; the guide describes moving onto the scaffold, not
-# living on it), local state (.build-stamp, .hash-cache.json, viz/, the
-# rendered stats) and the built artifacts, which describe the scaffold's demo
-# paper and not yours. figures/, si/, assets.json and stats.json DO come along,
+# (it makes new papers, and a paper does not make papers), docs/migrating.md (a
+# new paper is not migrating; the guide describes moving onto the scaffold, not
+# living on it), docs/history-archive.md (release notes before 3.20.0; a new
+# paper starts past all of them, and `just upgrade-plan` reads them from the
+# scaffold clone, not the paper), local state (.build-stamp, .hash-cache.json,
+# viz/, the rendered stats) and the built artifacts, which describe the
+# scaffold's demo paper and not yours. figures/, si/, assets.json and stats.json DO come along,
 # so the copy compiles and `just check` is clean before the analysis has ever
-# run.
+# run. The rest of docs/ DOES come along: CLAUDE.md links into it for the
+# reasons behind its rules, and a paper's agent should not need the scaffold
+# checkout to read them.
 # ---------------------------------------------------------------------------
 echo ""
 echo "copying scaffold -> $DEST"
@@ -178,7 +182,8 @@ tar -C "$SCAFFOLD" -cf - \
     --exclude='./audio/*.opus' \
     --exclude='./audio/paper_prose.txt' \
     --exclude='./audio/cover_*.png' \
-    --exclude='./MIGRATING.md' \
+    --exclude='./docs/migrating.md' \
+    --exclude='./docs/history-archive.md' \
     --exclude='./CITATION.cff' \
     --exclude='./.zenodo.json' \
     . | tar -C "$DEST" -xf -

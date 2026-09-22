@@ -203,6 +203,6 @@ Builds share the existing project lock, so simultaneous publishers are refused.
 
 Keep one toolchain per dissertation. Upgrade tooling together, preserving the
 manifest, prose, templates, bibliography rules, and local exceptions. Follow
-`MIGRATING.md`: build a baseline, compare extracted PDF text at each phase, and
-inspect rendered pages. Record the imported scaffold version and any modified
+`docs/migrating.md`: build a baseline, compare extracted PDF text at each
+phase, and inspect rendered pages. Record the imported scaffold version and any modified
 tool hashes. This release does not introduce an automatic upgrade/merge command.

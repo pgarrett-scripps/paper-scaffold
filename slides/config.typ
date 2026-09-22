@@ -9,7 +9,7 @@
 // that five manuscript tools read in order to rename a talk.
 //
 // It also lets a deck build in a project with no root config.typ at all, which a
-// manuscript.toml project (see MULTI-DOCUMENT.md) legitimately does not have:
+// manuscript.toml project (see docs/multi-document.md) legitimately does not have:
 // its front matter comes from its own template instead.
 //
 // THE TRADE, STATED PLAINLY. A deck can now disagree with the paper about the

@@ -74,8 +74,9 @@ built to disarm.
 
 Each phase ends with a build and a diff against the baseline.
 
-**1. Toolchain.** Copy `tools/`, `justfile`, `tests/`, `pyproject.toml`,
-`uv.lock`, `CLAUDE.md`, `HISTORY.md` (start a fresh "migrated onto
+**1. Toolchain.** Copy `tools/`, `justfile`, `tests/`, `docs/` (without
+`migrating.md` and `history-archive.md`), `pyproject.toml`, `uv.lock`,
+`CLAUDE.md`, `HISTORY.md` (start a fresh "migrated onto
 paper-scaffold X.Y.Z" entry), `.gitignore`. `just doctor`, then `just setup`.
 Nothing manuscript-facing has changed yet; the old build should still work.
 

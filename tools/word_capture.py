@@ -42,7 +42,7 @@ def capture(project, document, destination):
     for name in ('lib/template.typ', 'lib/supplements.typ'):
         if not (project.root / name).is_file():
             raise ValueError('This Word adapter requires the dissertation template contract; '
-                             'see MULTI-DOCUMENT.md and examples/dissertation (missing ' + name + ')')
+                             'see docs/multi-document.md and examples/dissertation (missing ' + name + ')')
     sources = project.sources(document)
     overlay(project.root, destination, sources)
     for identifier in document.parts:

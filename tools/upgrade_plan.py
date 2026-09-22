@@ -13,8 +13,9 @@ a merge at all.
 
 So this tool answers two questions and changes nothing unless asked:
 
-  1. What do the HISTORY.md "Upgrade:" lines say, for every release between the
-     project's version and the target, in order?
+  1. What do the "Upgrade:" lines in HISTORY.md and docs/history-archive.md
+     say, for every release between the project's version and the target, in
+     order?
   2. For each scaffold-owned file, is it pristine (identical to upstream at the
      project's CURRENT version, so replacing it with the target loses nothing),
      customized (needs a hand merge; a three-way summary says how much each
@@ -76,7 +77,8 @@ OWNED_DIRS = ("tools/", "tests/", "journals/", "word/", "audio/")
 # Fallback when a release predates scripts/new-paper.sh.
 DEFAULT_EXCLUDES = ("./.git", "./.github", "./scripts", "./plugins",
                     "./.claude-plugin", "./examples", "./REVIEW.md",
-                    "./MIGRATING.md", "*__pycache__*", "*.pyc")
+                    "./MIGRATING.md", "./docs/migrating.md",
+                    "./docs/history-archive.md", "*__pycache__*", "*.pyc")
 
 VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 CLASSES = ("customized", "pristine", "new-upstream", "removed-upstream",
@@ -437,6 +439,34 @@ def history_sections(history: str) -> list[tuple[str, str]]:
     return out
 
 
+# Older entries move out of HISTORY.md into an archive (3.23.0 moved 1.0.0
+# through 3.19.0). A project upgrading from one of those releases still needs
+# their Upgrade: lines, so both files are read; a version heading that appears
+# in both is taken once, from HISTORY.md.
+HISTORY_FILES = ("HISTORY.md", "docs/history-archive.md")
+
+
+def release_notes(blobs: "Blobs", ref: str) -> str:
+    """HISTORY.md followed by every archive the ref carries, as one text."""
+    seen: set[str] = set()
+    parts: list[str] = []
+    for path in HISTORY_FILES:
+        text = (blobs.show(ref, path) or b"").decode()
+        if not text:
+            continue
+        kept: list[str] = []
+        skip = False
+        for line in text.splitlines():
+            m = _SECTION.match(line)
+            if m:
+                skip = m.group(1) in seen
+                seen.add(m.group(1))
+            if not skip:
+                kept.append(line)
+        parts.append("\n".join(kept))
+    return "\n\n".join(parts)
+
+
 def upgrade_lines(history: str, current: str, target: str,
                   include_unreleased: bool) -> list[UpgradeLine]:
     lo, hi = vkey(current), vkey(target) if VERSION_RE.match(target) else None
@@ -625,7 +655,7 @@ def build_plan(project: Path, scaffold: Path, target: str | None,
     rows = classify(project, blobs, cur_files, tgt_files,
                     project_listing(project))
 
-    history = (blobs.show(tgt_ref, "HISTORY.md") or b"").decode()
+    history = release_notes(blobs, tgt_ref)
     target_version = tgt_ref.lstrip("v") if tagged else tgt_ref
     ups = upgrade_lines(history, current, target_version,
                         include_unreleased=not tagged)

@@ -1,403 +1,180 @@
 # Working in this directory
 
-Instructions for an agent editing the manuscript. Read [README.md](README.md) for
-the overview, [DOCUMENTATION.md](DOCUMENTATION.md) for pipeline details, and
-[STYLE.md](STYLE.md) for prose conventions. If the
-task is moving an existing manuscript onto this scaffold, follow
-[MIGRATING.md](MIGRATING.md) instead of improvising the order.
+Rules for an agent editing this manuscript, each stated once. The reasons and
+full recipe descriptions are in [docs/](docs/README.md); prose conventions are
+in [STYLE.md](STYLE.md). To move an existing manuscript onto the scaffold,
+follow the scaffold's `docs/migrating.md` instead of improvising the order.
 
 ## Paper scaffold
 
 Built on [paper-scaffold](https://github.com/pgarrett-scripps/paper-scaffold)
 SCAFFOLD_VERSION (`just version`; upstream is your local clone of that
 repository). The scaffold owns the toolchain: `justfile`, `tools/`, `tests/`,
-`journals/`, `word/` and the staleness records in `.build-state/`. This project
-owns the manuscript: `paper.typ`, `config.typ`, `si-body.typ`, `analysis/`,
-and the declarations in `stats.json` and `assets.json`. Every number and float
-is declared by the analysis and read by id, `#s("id")` and `#fig("id")`, never
-typed. `just paper` builds, `just verify` is the gate, and journal limits come
-from `journal.toml` and `journals/<profile>.toml`, never from memory. There is
-no automatic merge: to move to a newer scaffold, run `just upgrade-plan`,
-which lists the "Upgrade:" line of each HISTORY.md entry above this version
-and says which scaffold files are pristine (safe to replace, `--apply-pristine`)
-and which are customized; merge those by hand, keeping this project's
-customizations.
+`journals/`, `word/`, `docs/` and the staleness records in `.build-state/`.
+This project owns the manuscript: `paper.typ`, `config.typ`, `si-body.typ`,
+`analysis/`, and the declarations in `stats.json` and `assets.json`. To move
+to a newer scaffold, run `just upgrade-plan`: it lists the "Upgrade:" line of
+each HISTORY.md entry above this version and classes each scaffold file as
+pristine (replace with `--apply-pristine`) or customized (merge by hand,
+keeping this project's customizations). There is no automatic merge.
 
-## Read and edit the text first
+## Read the text first
 
-For prose edits, terminology checks, and scientific argument review, read the
-Typst sources directly: `paper.typ`, `config.typ` for the abstract, and
-`si-body.typ` or the included file containing the requested passage. Use shell
-text reads and searches. Do not invoke PDF, image-viewing, or document-rendering
-skills just because the manuscript produces a PDF or Word file.
-
-To read sentences with their numbers filled in, use `paper.resolved.typ` from
-the latest successful build. It is a generated Word adaptation with resolved
-statistics, tables, and reference numbers, not an editable source. The captured
-Typst sources that retain layout and include scopes are under the path recorded
-in `.build-state/manuscript.json`. Never edit either intermediate.
-
-An intermediate describes its last build, not subsequent source edits. Check
-`just check-build` before relying on it as current. While editing, read current
-source alongside `stats.json`, or use `just trace <id> --json` for the displayed
-value and provenance. Do not rebuild merely to read a sentence. `just resolve`
-also compiles a PDF; it is not a cheap text-only command. The final required
-`just paper` refreshes the resolved text for the final prose review.
-
-Build once after the edits, then run the required gate below. Rebuild again only
-when further edits or a reported failure require it. Passing build and text
-checks finish an ordinary prose edit; do not add screenshot or page-by-page
-inspection. Use visual inspection when the user requests it, when changing
-layout, figures, or typesetting, or when diagnosing a specific rendering defect.
-Inspect the affected pages or assets and stop when that issue is resolved.
+- For prose, terminology and argument work, read the Typst sources with shell
+  reads and searches: `paper.typ`, `config.typ` (abstract), `si-body.typ` or
+  the included file. Do not invoke PDF, image or document-rendering skills
+  just because the manuscript produces a PDF or Word file.
+- `paper.resolved.typ` is the last build's text with numbers, tables and
+  reference numbers filled in; the captured sources are under the path in
+  `.build-state/manuscript.json`. Both are generated: never edit them. They
+  describe the last build, so check `just check-build` before relying on
+  them; while editing, read the source with `stats.json` or
+  `just trace <id> --json`. Do not rebuild to read a sentence (`just resolve`
+  compiles a PDF too). In trace output, `status: incomplete` means a check
+  could not be established; trace never re-runs the analysis.
+- Build once after the edits, then run the gate. Inspect pages or images only
+  when the user asks, when changing layout, figures or typesetting, or when
+  diagnosing a specific rendering defect; stop when that issue is resolved.
 
 ## Preserve scientific meaning
 
-Follow [STYLE.md](STYLE.md), especially "Scientific terms and concrete claims".
-Before replacing a technical term, search its existing uses and check the
-quantity's definition, units, and analysis. Repeat the established name; do not
-invent a synonym for variety. Mass spectrometry intensity must not become
-"height", "brightness", or "abundance" unless the manuscript explicitly defines
-that relationship and the evidence supports it.
+Follow STYLE.md, especially "Scientific terms and concrete claims". Before
+replacing a technical term, search its uses and check the quantity's
+definition, units and analysis; repeat the established name, never a synonym
+for variety. Mass spectrometry intensity must not become "height",
+"brightness" or "abundance" unless the manuscript defines that relationship
+and the evidence supports it. For each edited claim, know what was measured,
+what it was compared with, and what supports it. Remove decorative jargon and
+undefined labels. If the meaning cannot be established from the source, keep
+the supported wording and flag the ambiguity; do not invent a plausible
+explanation. A clean prose check does not make a sentence clear or correct.
 
-For each edited claim, identify what was measured or done, what it was compared
-with, and what evidence supports the statement. Remove decorative jargon and
-undefined labels. If the intended meaning cannot be established from the source,
-preserve the supported wording and flag the ambiguity instead of supplying a
-plausible-sounding explanation. A clean prose checker does not establish that
-the sentence has a clear or scientifically correct meaning.
+## Numbers, figures and tables
 
-## Never do these
+Details: [docs/numbers.md](docs/numbers.md), [docs/assets.md](docs/assets.md).
 
-**Never hand-edit `si/*.typ`.** Those files are written by
-`analysis/scripts/gen_*_table.py` and carry an "AUTO-GENERATED, do not edit by
-hand" header. An edit survives until the next `just assets` and then vanishes,
-usually unnoticed. Change the generator or the data it reads.
-`just check-assets` catches it now, and names the file.
+- **Never type a result into the prose.** Declare it in
+  `analysis/scripts/gen_stats.py` and read it as `#s("id")`. Guard what the
+  sentence assumes in the entry's `expect` (prose says "fell": `"sign": "-"`);
+  seed the guard in `gen_stats.py` for a new value, edit `expect` in
+  `stats.json` for an existing one.
+- **Four tiers**, weakest claim to strongest: a computed number is
+  `#s("id")`; one no script can compute but worth an audit trail is a hand
+  entry in `stats.json` with a note; a deliberate prose literal ("40 °C") is
+  vouched in place with `#lit("40")`; a global value-level exception goes in
+  `prose-check.toml` with a written reason. `lit()` never silences
+  `derivable-number`.
+- **`stats.json` you MAY edit, by field.** The script owns `value`,
+  `checksum` and `origin`; `fmt`, `unit`, `desc` and `expect` are yours and
+  survive `just assets` (`gen_stats.py` arguments only seed a NEW entry). To
+  change a number, change the analysis; never edit a generated `value`. A
+  hand entry has `origin.by = "hand"`, an `origin.note` naming the source, a
+  `value` and a `fmt`. Files no generator declares can be watched under a
+  top-level `"pinned"` block, recorded with `just pin`.
+- **Never edit or commit `stats-rendered.json`** (a build artifact).
+- **Never hand-edit `si/*.typ` or `figures/`.** Change the generator
+  (`analysis/scripts/gen_*_table.py`, the plotting script) or its data, then
+  `just assets`.
+- **Never name a generated figure or table by filename.** Reference the id
+  declared in `assets.json`: `#figure(fig("fig.x"), caption: [...])`.
+- **Adding one:** copy `analysis/scripts/gen_example_table.py` or
+  `gen_example_figure.py`, keeping the `gen_*_table.py` / `gen_*_figure.py`
+  name. A table writes a bare `#table(...)` into `si/` and gets its
+  `#figure(tbl("tbl.x"), caption: [...]) <tbl:x>` in `si-body.typ`. A figure
+  sets `metadata={"Software": None}` and seeds any RNG. End the generator
+  with `record(id, path, kind=..., inputs=[data it read], desc=...)`, paths
+  relative to the manuscript root. Then
+  `just assets && git add figures si assets.json stats.json`.
+  `/paper:new-figure` does every step.
 
-**`stats-rendered.json` is a build artifact — never edit or commit it.** It is
-written by `tools/render_stats.py` from `stats.json` and regenerated by every
-recipe that compiles. Edit `stats.json`.
+## Manuscript rules
 
-**`stats.json` is the exception: you MAY edit it.** The split is by field, not
-by file. In every entry the generating script owns only `value` (plus its
-`checksum` and `origin`); `fmt`, `unit`, `desc` and `expect` are the author's,
-edited here, and survive `just assets`. So: to change how a number is shown or
-what the prose assumes about it (its guard), edit `stats.json` — the arguments
-in `gen_stats.py` only seed a NEW entry and are ignored afterwards. To change
-the number itself, change the analysis. Do not edit a generated `value` by
-hand: the checksum catches it. A number no script can compute — a protocol
-figure, a vendor spec, a value from a paper — is added by hand with
-`origin.by = "hand"` and an `origin.note` saying where it came from. Give it a
-`value` and a `fmt`; there is no rendered string in this file.
+- **Cite in `si-body.typ` as `@si-key`, never `@key`.** A bare key in the SI
+  silently joins the main reference list (`misrouted-citation`).
+- **Never delete the `// >>> BODY START` / `// <<< BODY END` markers** in
+  `paper.typ`; moving them changes what the word count means.
+- **Notes to self are `#todo("...")`, never a comment.** `just paper` refuses
+  to build with one open; `just prose-check` lists them.
+- **Journal limits come from `journals/<profile>.toml`, never from memory.**
+  `journal.toml` selects the profile. To change a limit, re-read its
+  `source`, change the number, move `checked`. The graphical abstract is
+  `toc-graphic` in `paper.typ`; `[placement]` decides where it lands, so do
+  not move the block. See [docs/journals.md](docs/journals.md).
+- **A stale slide deck is not a `verify` failure.** Do not fix decks during a
+  verify pass or add `slides/*.typ` to `typst_sources`; check one on request
+  with `just slides-check`. Decks use `#s()`/`#fig()` too, never typed
+  numbers. A talk's identity is `slides/config.typ`, not `config.typ`.
+- **Typst gotchas.** A method chain broken across lines after `#let x =` or
+  inside `[...]` ends at the newline (`unknown variable: a`): wrap it in
+  `{ ... }`. `#include` gives the file its own scope, so a new `.typ` file
+  using `s()`, `n()`, `fig()` or `tbl()` needs its own
+  `#import "stats.typ": s, n` and `#import "assets.typ": fig, tbl`.
+- **Word export never compiles the preamble.** If you change the preamble or
+  the resolver, run `just docx` and confirm the headings, abstract and
+  equations survive, not just the exit code.
 
-You may also declare files worth watching under a top-level `pinned` block:
-`"pinned": {"analysis/data/raw.csv": null}`, then `just pin` to record the
-hash. `just check-stats` reports when a pinned file changes; re-run `just pin`
-to accept it deliberately. This is for files no generator declares — nothing
-finds them programmatically, which is the point.
-
-**Never hand-edit files under `figures/`.** They are written by `analysis/`.
-Change the script that produces the plot and run `just assets`.
-
-**Never name a generated figure or table by filename.** They are declared in
-`assets.json` by the script that writes them and referenced by id:
-`#figure(fig("fig.example"), caption: [...])`. Naming the path directly bypasses
-the manifest, so it stops describing the manuscript; `just prose-check` reports
-that as an error. Add a new one by calling `record(...)` in the generator.
-
-**Never type a result into the prose.** Declare it in
-`analysis/scripts/gen_stats.py` and read it back as `#s("id")`. A typed numeral
-drifts from the table beside it and nothing notices; `just prose-check` reports
-one that matches a declared value. Guard anything the sentence assumes: if the
-prose says "fell", the entry's `expect` should carry `"sign": "-"` so a re-run
-that reverses the sign fails the build instead of shipping "fell by -3.1%".
-Seed the guard from `gen_stats.py` for a new value; edit `expect` in
-`stats.json` for an existing one. If a number is worth stating, it is worth
-being traceable.
-
-Four tiers, weakest claim to strongest: a number the analysis computes is
-`#s("id")`; one no script can compute but that deserves an audit trail is a
-hand entry in `stats.json` with a note; a deliberate prose literal ("40 °C")
-is vouched in place with `#lit("40")`, which silences only the
-unaccounted-number warning at that spot; a global value-level exception goes
-in `prose-check.toml` with a written reason. `lit()` never silences
-`derivable-number` — a computed value wrapped in it still gets flagged.
-
-**A stale slide deck is not a `verify` failure.** Decks live in `slides/`, are
-built by name (`just slides talk`), and sit outside the gate on purpose: `just
-check` and `just verify` say nothing about them, and `just fmt` does not touch
-them. Do not "fix" a deck during a verify pass, and do not add `slides/*.typ` to
-`typst_sources`. Check one when the user asks, or before a talk: `just
-slides-check`. A deck reuses the paper's declarations -- `#s("id")`,
-`#fig("id")`, `config.typ`, `references.bib` -- so never type a number onto a
-slide, for the same reason you never type one into the prose. The talk's own
-identity -- title, author line, institution, date -- is `slides/config.typ`, NOT
-the manuscript's `config.typ`: renaming a talk must not touch the file five
-manuscript tools read. `slides/theme.typ` is the only place Touying is
-configured, and neither of those two shared files is a deck `just slides`
-builds.
-
-**A journal's limit comes from `journals/<profile>.toml`, never from memory.**
-`journal.toml` selects the profile; its word limits join `just check-words`,
-its resolution floor joins `just prose-check`, and `just check-journal` (in
-`verify`) covers keywords, main-text figure and table counts, and the
-graphical abstract's size. Every profile carries `source`, `guidelines-dated`
-and `checked`, and does not load without them: to change a limit, re-read the
-source, change the number, move `checked`. A section the profile names by
-role is mapped in `[sections]`. The graphical abstract is declared once in
-`paper.typ` as `toc-graphic`; `[placement]` puts it under the abstract in the
-PDF and on the last page of the Word file by default, and the build passes
-that choice, so do not move the block in the source to change where it lands.
-
-**Cite in `si-body.typ` as `@si-key`, never `@key`.** The Supporting
-Information has its own reference list, set by Alexandria because Typst allows
-one native `#bibliography` per document, and the `si-` prefix is what routes a
-citation to it. A bare `@key` in the SI compiles, renders an ordinary
-superscript, and quietly joins the MAIN list instead. `just prose-check` reports
-that as `misrouted-citation`, and reports the prefix in paper.typ's
-`#show: alexandria(...)` drifting from the one in si-body.typ's
-`#bibliographyx(...)`. Both lists read `references.bib`; there is one
-bibliography file. `just docx` sets both.
-
-**Never delete the `// >>> BODY START` / `// <<< BODY END` markers** in
-`paper.typ`. The word counter, the readability report, and the narrator all slice
-the prose at them, and each hard-fails without them. Moving them changes what
-the word count MEANS, not just its value: the convention here is that back
-matter (the bibliography above all) sits outside the markers and is not
-counted. A count that used to include it will drop on migration to this
-scaffold without a word of prose changing -- expected, and worth knowing
-before quoting the number.
-
-## Before saying the work is done
-
-After manuscript edits, two commands, in this order:
+## Done means `just verify` is clean
 
 ```bash
-just paper      # rebuild, and print the current word count and readability
+just paper      # rebuild; prints word count and readability
 just verify     # the gate: formatting, extractors, prose rules, staleness
 ```
 
-These are command-line checks, not instructions to open or rasterize the PDF.
-Read the affected passages in the refreshed `paper.resolved.typ` for meaning.
+- Quote the word count and readability `just paper` prints; never estimate.
+  Read the edited passages in the refreshed `paper.resolved.typ` for meaning.
+- A wording-only pass is bracketed by `just edit-baseline` and
+  `just edit-check` (numbers may be dropped, never invented; references,
+  floats and headings survive). Still read the edited sentences.
+- `verify` rebuilds nothing and names the recipe that clears each stale
+  item. What each stage checks:
+  [docs/build-and-staleness.md](docs/build-and-staleness.md).
+- A concurrent build or a source edit during compilation is a failed build,
+  not permission to weaken the check.
+- Do not change word limits or exclusions just to clear `check-words`. Do not
+  silence a prose-check finding by editing `tools/prose_check.py`: add it to
+  `prose-check.toml` with a comment saying why.
+- `just check` ignores the audiobooks on purpose, and there is no upstream
+  figure copy to compare; read HISTORY.md's "Decisions reversed" before
+  adding either back.
+- Before submission: `just preflight` (fresh builds, the `just submission`
+  upload set, `verify`, `check-submission`, `check-stats-deep`, `bib-audit`).
+  The upload set lands in `submission/`; single parts are `just main-pdf`,
+  `si-pdf`, `main-docx`, `si-docx`, `toc-graphic`, `cover-letter`. See
+  [docs/submission.md](docs/submission.md).
 
-"I edited the text" is not done. "`just verify` is clean" is done. It rebuilds
-nothing, so run it as often as you like; when it reports something stale it also
-names the recipe that clears it.
+## Skills
 
-Quote the word count and readability numbers `just paper` prints. Do not
-estimate them.
+Twelve workflows ship as the `paper` plugin (from the scaffold's
+`plugins/paper/skills/`, enabled by `.claude/settings.json`; Codex reads the
+same files through the `.agents/skills` symlink as `$copy-edit` and so on).
+Prefer a skill over improvising its steps.
 
-Before a wording-only pass (yours or an agent's): `just edit-baseline`, edit,
-`just edit-check`. It checks mechanical invariants -- a number may be dropped,
-never invented; references, floats and headings must survive exactly. Read the
-edited sentences for meaning even when the guard passes.
+- Edit: `/paper:copy-edit`, `/paper:fix-verify`, `/paper:declare-number`,
+  `/paper:new-figure`.
+- Review, read-only, findings under `reviews/`: `/paper:claim-audit`,
+  `/paper:methods-vs-code`, `/paper:figure-review`, `/paper:prose-review`,
+  `/paper:literature-check` (network), `/paper:story-review`,
+  `/paper:peer-review`. `/paper:review-all` runs them and merges the findings
+  (literature check only on request, story review never). A review skill
+  never edits the manuscript.
 
-Twelve packaged workflows ship as the `paper` plugin (`plugins/paper/skills/` in the
-scaffold, enabled per repo by `.claude/settings.json`). Four edit:
-`/paper:copy-edit` (a wording pass bracketed by the edit guard), `/paper:fix-verify`
-(clear a failing gate the intended way), `/paper:declare-number` (route a typed
-numeral through the four tiers), `/paper:new-figure` (all four steps, including the
-wordcount scope). Seven review and are read-only, each writing a findings file
-under `reviews/` that routes every fix to one of the editing skills:
-`/paper:claim-audit` (each quantitative claim against the code that computes it),
-`/paper:methods-vs-code` (the methods section against the analysis, parameter by
-parameter), `/paper:figure-review` (each figure and table against its caption, its
-citing sentences, and its statistics), `/paper:prose-review` (vague, decorative,
-or machine-sounding language, with concrete replacements the evidence
-supports), `/paper:literature-check` (each citation against what the cited work
-says, missing foundational or competing work, citation hygiene; needs the
-network and never proposes a reference it did not resolve online),
-`/paper:story-review` (the developmental pass: message, structure, which floats
-to add, merge, or cut, and what analysis is missing, ranked by cost against
-acceptance with the aim of a defensible paper that gets published, not a
-perfect one), `/paper:peer-review` (a small panel of
-reviewer personas and an editor's decision, with loose parameters for scope,
-panel, journal, and depth). `/paper:review-all` runs them in parallel, the
-literature check only on request and the story review never (its output is
-a plan to discuss, not a fix list), and merges their findings into one ranked list with a ship verdict. The review
-skills run forked, as their own agents, pinned to Opus by `model: opus` in
-their frontmatter; `/paper:review-all` passes the same default to each launch. A
-review skill never edits the manuscript.
-Claude Code loads them from the `paper-scaffold` marketplace (register once:
-`claude plugin marketplace add pgarrett-scripps/paper-scaffold`, or the local
-checkout path). Codex discovers the same files through `.agents/skills`, a
-symlink into the scaffold checkout. Use `/paper:copy-edit` in Claude Code or
-`$copy-edit` in Codex (likewise for the other names), or select the skill from
-a matching request. The only copy of the instructions is in the scaffold; a
-paper never carries its own. Prefer the relevant skill over improvising its steps.
+What each does: [docs/working-with-ai.md](docs/working-with-ai.md).
 
-Leave a note to self as `#todo("...")`, never as a comment. It renders as a
-loud marker in `just draft` and REFUSES to build in `just paper`, so an
-unresolved note cannot ship; a `// FIXME` comment survives to submission
-silently. `just prose-check` lists open ones.
+## Toolchain
 
-What `verify` runs, and what each one is for:
-
-- **`just fmt-check`** -- the hand-written sources are reflowed to 80 columns.
-  Skipped with a note if typstyle is not installed.
-- **`just test`** -- the prose extractors still handle every construct, before
-  and after a reflow. This is the one that matters when you touch inline markup,
-  math, links, or cross-references: those are recognized by regexes in
-  `tools/typst_prose.py` that a reflow can break silently, which has happened three
-  times (see that file for the cases).
-- **`just prose-check`** -- fails on em dashes, British spellings, doubled words,
-  and uncited figures; reports long sentences, verbosity, repetition,
-  unexpanded acronyms, and distinctive numerals that match nothing in
-  `stats.json` as warnings you should read rather than silence.
-- **`just check-words`** -- checks the scopes and inclusive word limits in
-  `word-limits.toml`. Use `just wordcount --sections` to find section paths.
-  Excluding a section affects this count only, not other prose checks or exports.
-  Do not change limits or exclusions merely to clear a failure; follow the
-  author's requested scope and journal requirements.
-- **`just check-stats`** -- re-runs every guard in `stats.json` against the
-  committed values, checks each generated value against the checksum its
-  generator recorded, compares the hashes of the code and data behind them --
-  and of every `pinned` file -- insists a hand-entered number carries a note,
-  and reports ids nothing reads. Reads files only; it does **not** re-run the
-  analysis.
-- **`just check-stats-deep`** -- the same plus re-running `gen_stats.py` and
-  diffing every value it owns. Stronger and as slow as your analysis, so it is
-  NOT in `verify`. Run it before submitting.
-- **`just check-assets`** -- per generated file: does it still hash to
-  what was recorded, does its generator still exist, have its declared inputs
-  changed, and does anything reference it.
-- **`just check`** -- a `paper.pdf` or `paper.docx` built from sources that have
-  since changed, and `figures/` and `si/` older than the `analysis/` code behind
-  them. Neither output is tracked in git; `just paper` and `just docx` record what
-  they rendered in `.build-state/` and `just check-build` recompares it. No check
-  reads git history, so they all work outside a repository.
-
-`just check` deliberately does not check the audiobooks, and there is no upstream
-figure copy to compare against any more. See HISTORY.md's "Decisions reversed"
-before adding either back.
-
-Before an actual submission, run `just preflight` instead: fresh builds of both
-outputs and the upload set in `submission/` (`just submission`: main text and SI
-apart as PDF and Word, the graphical abstract, the cover letter), then `verify`,
-`check-submission`, `check-stats-deep`, then `bib-audit`. It is as slow
-as the analysis plus the network, which is why it is its own command and not
-part of `verify`.
-
-Do not silence a prose-check finding by editing `tools/prose_check.py`. Add it to
-`prose-check.toml` with a comment saying why, so the exception is reviewable, and
-run `just prose-check --show-suppressed` occasionally to see what has
-accumulated.
-
-## Inspecting declarations
-
-Before changing a claim, use `just trace <id> --json` to find its source sites,
-value or asset, guards, inputs, and recorded consistency checks. Inspect the
-`status` field: `incomplete` means a check could not be established. Trace does
-not re-run analysis and cannot establish scientific correctness. Its usage
-index covers literal calls and literal Typst includes/imports.
-
-The edit guard now also checks statistic/asset calls, repeated citations,
-declarations, and the abstract. Old snapshots must be renewed before a new
-pass. It checks mechanical invariants; read the edited sentences for meaning.
-
-Build state lives under `.build-state/`, one record per output. Upgrading from
-`.build-stamp` requires fresh PDF and Word builds. A concurrent build or source
-edit during compilation is a failed build, not permission to weaken the check.
-
-## Numbers about the draft
-
-`just viz` writes `viz/report.json` alongside its plots. Read it rather than
-re-deriving anything from the source: it already holds the section metrics, the
-longest sentences with their text, which floats are cited once or not at all,
-and the bibliography's age and self-citation share. Deriving those separately
-gets a different answer, because this pipeline strips citations, math, code and
-captions before measuring anything and an ad-hoc count does not.
-
-Two more worth running by hand, not part of the gate: `just density` shows which
-section is densest relative to the rest of the paper, and `just doctor` reports
-whether the external toolchain is present and new enough.
-
-If you taught an extractor to handle a new construct, add a case for it to
-`tests/fixture.typ` and regenerate the golden files with `just test-update`,
-reading the diff before you commit it. Anything that is not an extractor case
-goes in the case module for its subject under `tests/` -- one file per subject,
-each exporting `run_cases() -> bool` and listed in `tests/run.py`'s
-`CASE_MODULES`. Add a module there rather than growing `run.py`, and run the one
-you are working on directly (`uv run python tests/stats_cases.py`). Do not add coverage by putting the
-construct in `paper.typ`: that prose is placeholder and gets deleted.
-
-## When adding a table or figure
-
-A table: copy `analysis/scripts/gen_example_table.py`, keep the filename pattern
-`gen_*_table.py` so `just assets` picks it up with no wiring, and write a bare
-`#table(...)` into `../../si/` with the auto-generated header and no caption or
-label. Then wrap it in a `#figure` in `si-body.typ`, where the caption and label
-live:
-
-```typst
-#figure(tbl("tbl.yourname"), caption: [...]) <tbl:yourname>
-```
-
-A figure: copy `analysis/scripts/gen_example_figure.py`, keep the pattern
-`gen_*_figure.py`, and write straight into `../../figures/`. Set
-`metadata={"Software": None}` and seed any RNG, or every regeneration churns the
-PNG bytes and shows up as a diff that is not a real change. Reference it as
-`#figure(fig("fig.yourname", width: 70%), caption: [...]) <fig:yourname>`.
-
-**Either way, call `record(...)` at the end of the generator**, which is what
-declares the id the manuscript uses:
-
-```python
-from _assets import record
-record("fig.yourname", str(OUT.relative_to(PAPER)), kind="figure",
-       inputs=[str(SRC.relative_to(PAPER))], desc="what it shows")
-```
-
-`inputs` is the DATA it read; the script and its imports are recorded
-automatically. Paths are relative to the manuscript root, not to `analysis/`.
-
-Then `just assets && git add figures si assets.json stats.json`, because all
-of those are tracked.
-
-## Editing the Typst preamble
-
-`just docx` goes through `just resolve` and pandoc's native Typst reader:
-real, editable Word equations, and a reference list set by citeproc from
-`references.bib` (matching `<style>.csl` in the root if present). It never
-compiles the preamble: the resolver reads the `#let` bindings in `config.typ`
-and synthesizes the front matter and the SI title block itself, so the arkheion
-template is the PDF's alone. If you change the preamble or the resolver, run
-`just docx` and confirm the headings, abstract, and equations survive, not
-just that the command exits 0.
-
-Typst gotcha worth knowing: a method chain broken across lines after `#let x =`
-or inside `[...]` ends at the first newline, and the continuation is parsed as
-literal text. The error points at a closure parameter and reads
-`unknown variable: a`. Wrap the chain in a code block `{ ... }`.
-
-Second gotcha: `#include` gives the included file its OWN scope -- it does not
-inherit the includer's imports. A new `.typ` file that uses `s()`, `n()`,
-`fig()` or `tbl()` needs its own `#import "stats.typ": s, n` and
-`#import "assets.typ": fig, tbl` lines, exactly as `si-body.typ` carries. The
-failure reads `unknown variable: tbl` pointing into the included file, not at
-the missing import.
-
-## Python
-
-One environment per concern, both managed by uv. The manuscript toolchain is
-`pyproject.toml` at the root; the analysis has its own in `analysis/`. Run things
-with `uv run`, never a bare `python3` that picks up whatever is on PATH, and never
-`uv run --with X` inline: add the dependency to the right pyproject so the lock
-stays honest.
-
-**Every tool lives in `tools/`, not the root.** The root is for what a person
-edits and what a build produces. A new checker or metric goes in `tools/` and
-gets a `just` recipe; adding one to the root is how this directory got cluttered
-the first time.
-
-Each tool sits one level down, so it resolves paths against the manuscript root
-with `ROOT = Path(__file__).resolve().parent.parent`, not `.parent`. Copy that
-line from an existing one rather than writing `Path(".")`, which works when you
-run it by hand from the root and breaks under `just` from anywhere else.
-
-## Scope
-
-Do not restructure the pipeline to fix a one-off problem. The staleness checks,
-the generated-table contract, and the docx bypass each exist because a specific
-failure happened. Ask before removing one.
+- **Python goes through uv.** Root `pyproject.toml` is the toolchain,
+  `analysis/pyproject.toml` the analysis. Use `uv run`, never a bare
+  `python3`, never `uv run --with X`: add the dependency to the right
+  pyproject.
+- **Every tool lives in `tools/`**, with a `just` recipe, and resolves paths
+  with `ROOT = Path(__file__).resolve().parent.parent`.
+- **Tests:** a new extractor construct gets a case in `tests/fixture.typ`,
+  then `just test-update` (read the diff). Anything else goes in the per-subject
+  case module listed in `tests/run.py`'s `CASE_MODULES`. Never add coverage
+  through `paper.typ`: that prose is placeholder.
+- **Draft metrics:** read `viz/report.json` from `just viz` rather than
+  re-deriving section metrics, long sentences or float citations.
+  `just density` and `just doctor` are useful, outside the gate.
+- **Scope:** do not restructure the pipeline to fix a one-off problem. Ask
+  before removing a staleness check, the generated-table contract or the
+  docx bypass.

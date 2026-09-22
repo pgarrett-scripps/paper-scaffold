@@ -134,7 +134,7 @@ class SlideCases(unittest.TestCase):
     def test_the_decks_identity_is_not_the_papers(self):
         """The whole point of slides/config.typ: a deck builds where the
         manuscript's own config.typ does not exist at all, which is what a
-        manuscript.toml project (MULTI-DOCUMENT.md) looks like."""
+        manuscript.toml project (docs/multi-document.md) looks like."""
         theme = (ROOT / "slides/theme.typ").read_text()
         self.assertIn('#import "config.typ"', theme)
         self.assertNotIn('"/config.typ"', theme)

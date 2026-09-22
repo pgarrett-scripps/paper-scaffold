@@ -62,6 +62,10 @@ Unrelated. Upgrade: nothing to do.
 """, 1)
 
 
+def v1_pyproject() -> str:
+    return '[project]\nname = "paper-scaffold"\nversion = "1.0.0"\n'
+
+
 def sh(cwd: Path, *args: str) -> str:
     return subprocess.run(["git", *IDENT, *args], cwd=cwd, check=True,
                           capture_output=True, text=True).stdout
@@ -257,6 +261,27 @@ def run_cases() -> bool:
         check("re-plan shows them at target",
               c2["tools/a.py"] == "at-target" and c2["tools/c.py"] == "at-target",
               c2)
+
+        # A release that moves old entries into docs/history-archive.md (as
+        # 3.23.0 did for 1.0.0-3.19.0). A project on 1.0.0 must still get the
+        # 1.1.0 lines, and a heading left in both files is read once, from
+        # HISTORY.md.
+        release(scaffold, "v1.3.0", {
+            "HISTORY.md": "# History\n\n---\n\n## 1.3.0\n\nUpgrade: copy "
+                          "`docs/`.\n\n" + HISTORY_V12.split("---\n\n", 1)[1]
+                          .split("## 1.1.0")[0],
+            "docs/history-archive.md": "# Archive\n\n---\n\n## 1.2.0\n\n"
+                                       "Upgrade: stale duplicate.\n\n## 1.1.0"
+                                       + HISTORY_V11.split("## 1.1.0", 1)[1],
+            "pyproject.toml": v1_pyproject().replace("1.0.0", "1.3.0"),
+        })
+        arch = up.build_plan(project, scaffold, "1.3.0")
+        vers = [u["version"] for u in arch["upgrade_lines"]]
+        texts = [u["text"] for u in arch["upgrade_lines"]]
+        check("archived Upgrade: lines still read",
+              vers == ["1.1.0", "1.1.0", "1.2.0", "1.2.0", "1.3.0"], vers)
+        check("a heading in both files is read once, from HISTORY.md",
+              "stale duplicate." not in texts, texts)
 
     if ok:
         print("  upgrade-plan: classification, Upgrade: lines, apply guard ok")

@@ -11,8 +11,9 @@ a text-based typesetting system, connect your results to the text, and build
 PDF and editable Word files from the same source. It includes a manuscript
 template, example analysis, and checks that catch outdated results and exports.
 
-[Start a paper](#quick-start) · [Bring an existing manuscript](MIGRATING.md) ·
-[Read the documentation](DOCUMENTATION.md)
+[Start a paper](#quick-start) ·
+[Bring an existing manuscript](docs/migrating.md) ·
+[Read the documentation](docs/README.md)
 
 ## Why use it?
 
@@ -47,15 +48,16 @@ change during drafting or several people edit the paper.
 
 You will use a terminal and edit Typst files. The project includes worked
 examples for connecting your analysis. Shared editing workflows are also
-available for [Claude Code and Codex](DOCUMENTATION.md#working-with-an-ai).
-For a dissertation or book, see the [multi-document guide](MULTI-DOCUMENT.md).
+available for [Claude Code and Codex](docs/working-with-ai.md).
+For a dissertation or book, see the
+[multi-document guide](docs/multi-document.md).
 
 ## Quick start
 
 You need **Typst 0.14+, just, uv, Python 3.10+, and Git** for this walkthrough.
 `just` runs the project's commands; `uv` manages its Python dependencies.
-See [requirements](DOCUMENTATION.md#requirements) for setup details. The first
-build needs internet access to download dependencies and the Typst template.
+See [requirements](docs/getting-started.md#requirements) for setup details.
+The first build needs internet access to download dependencies and the Typst template.
 
 1. **Get the scaffold and check your tools.**
 
@@ -96,7 +98,7 @@ build needs internet access to download dependencies and the Typst template.
    `paper.typ`; both read `references.bib`.
 
    Replace the examples in `analysis/` when you are ready to connect your own
-   results. The [documentation](DOCUMENTATION.md#the-parts-worth-understanding)
+   results. The [documentation](docs/README.md)
    explains how to add numbers, figures, and tables.
 
 4. **Build and check your changes.**
@@ -116,11 +118,11 @@ build needs internet access to download dependencies and the Typst template.
 
 | You want to… | Start here |
 |---|---|
-| Find a command or understand the files | [Documentation](DOCUMENTATION.md) |
-| Move an existing manuscript into the scaffold | [Migration guide](MIGRATING.md) |
-| Write a dissertation or book | [Multi-document guide](MULTI-DOCUMENT.md) |
+| Find a command or understand the files | [Documentation](docs/README.md) |
+| Move an existing manuscript into the scaffold | [Migration guide](docs/migrating.md) |
+| Write a dissertation or book | [Multi-document guide](docs/multi-document.md) |
 | Set your writing conventions | [Prose style](STYLE.md) |
-| Include/exclude sections and set word limits | [Word-count configuration](DOCUMENTATION.md#word-count-scopes-and-limits) |
+| Include/exclude sections and set word limits | [Word-count configuration](docs/journals.md#word-count-scopes-and-limits) |
 | See changes and upgrade guidance | [Version history](HISTORY.md) |
 
 ## License
