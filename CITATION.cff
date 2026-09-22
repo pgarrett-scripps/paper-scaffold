@@ -19,6 +19,7 @@ authors:
     family-names: Garrett
     orcid: "https://orcid.org/0000-0002-8434-9693"
     affiliation: The Scripps Research Institute
+doi: 10.5281/zenodo.22905759
 repository-code: "https://github.com/pgarrett-scripps/paper-scaffold"
 url: "https://github.com/pgarrett-scripps/paper-scaffold"
 license: MIT

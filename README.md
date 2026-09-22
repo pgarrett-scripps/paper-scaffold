@@ -1,129 +1,97 @@
 # paper-scaffold
 
 [![CI](https://github.com/pgarrett-scripps/paper-scaffold/actions/workflows/ci.yml/badge.svg)](https://github.com/pgarrett-scripps/paper-scaffold/actions/workflows/ci.yml)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22905759.svg)](https://doi.org/10.5281/zenodo.22905759)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Typst 0.14+](https://img.shields.io/badge/Typst-0.14%2B-239dad)
 
 **Keep your paper connected to the analysis behind it.**
 
-paper-scaffold is a starting project for research manuscripts. Write in Typst,
-a text-based typesetting system, connect your results to the text, and build
-PDF and editable Word files from the same source. It includes a manuscript
-template, example analysis, and checks that catch outdated results and exports.
+paper-scaffold is a starting project for research manuscripts written in
+Typst. Your analysis declares its results; the manuscript reads them by name;
+one command builds the PDF and an editable Word file; another checks that
+nothing has gone stale.
 
 [Start a paper](#quick-start) ·
 [Bring an existing manuscript](docs/migrating.md) ·
-[Read the documentation](docs/README.md)
+[Documentation](docs/README.md)
 
 ## Why use it?
 
-Re-run an analysis, and the figure changes. The number you copied into the
-Results section may not. As a paper goes through revisions, those small
-mismatches become hard to spot.
+Re-run an analysis and the figure changes, but the number you copied into the
+Results section does not. paper-scaffold removes the copying:
 
-paper-scaffold gives results a name that the manuscript reads directly.
-Regenerate the analysis outputs and rebuild the paper, and linked numbers,
-figures, and tables update together. Checks report when declared inputs have
-changed or an export needs rebuilding.
+- **Numbers by name.** Write `#s("recall.gain")`, not `12.4%`. The value comes
+  from the analysis, with a checksum, the code and data behind it, and guards
+  on what the sentence assumes ("fell" fails the build if the sign flips).
+- **Figures and tables by name.** Generators declare their outputs, and
+  `just verify` reports any that are older than their code or data.
+- **PDF and Word from one source.** Word export has native equations and
+  references, for co-authors and journals that want `.docx`.
+- **Journal-ready.** Word limits, figure counts and graphical-abstract size
+  come from a journal profile; `just submission` writes the upload set.
+- **Safe to hand to an AI.** An edit guard lets a wording pass drop a number
+  but never invent one. Packaged skills for Claude Code and Codex audit claims
+  and methods against the code that computes them ([details](docs/working-with-ai.md)).
 
-- **Less copying between analysis and prose.** Reference a computed result
-  wherever you discuss it, with formatting you control.
-- **Results you can trace.** Look up the script, declared inputs, or documented
-  source behind a number or figure.
-- **PDF and Word from one manuscript.** Share an editable Word export with
-  co-authors, including equations, tables, and references.
-- **Checks before you share.** Find stale outputs, broken references, and prose
-  issues; get word counts and readability reports when you build.
-- **Support for revision.** Compare saved versions, guard numbers and citations
-  during wording edits, or listen to a draft as an audiobook.
-
-The checks help keep the manuscript consistent with its declared sources.
-Scientific interpretation and correctness still need your review.
-
-## Who is it for?
-
-Researchers who write in plain-text files and want their manuscript, analysis,
-and revision history in one project. It is especially useful when results
-change during drafting or several people edit the paper.
-
-You will use a terminal and edit Typst files. The project includes worked
-examples for connecting your analysis. Shared editing workflows are also
-available for [Claude Code and Codex](docs/working-with-ai.md).
-For a dissertation or book, see the
-[multi-document guide](docs/multi-document.md).
+The checks keep the manuscript consistent with its sources. Whether the
+science is right is still your call.
 
 ## Quick start
 
-You need **Typst 0.14+, just, uv, Python 3.10+, and Git** for this walkthrough.
-`just` runs the project's commands; `uv` manages its Python dependencies.
-See [requirements](docs/getting-started.md#requirements) for setup details.
-The first build needs internet access to download dependencies and the Typst template.
+You need **Typst 0.14+, just, uv, Python 3.10+ and Git**
+([requirements](docs/getting-started.md#requirements)). The first build
+downloads the Typst template.
 
-1. **Get the scaffold and check your tools.**
+```bash
+git clone https://github.com/pgarrett-scripps/paper-scaffold
+cd paper-scaffold
+just doctor                              # reports any missing tool
+./scripts/new-paper.sh ~/papers/my-paper # asks for title and authors, builds a first PDF
+cd ~/papers/my-paper
+```
 
-   ```bash
-   git clone https://github.com/pgarrett-scripps/paper-scaffold
-   cd paper-scaffold
-   just doctor
-   ```
+Then edit:
 
-   Install any tools reported as missing before continuing.
+| File | What goes there |
+|---|---|
+| `config.typ` | Title, authors, abstract, keywords |
+| `paper.typ` | Main text |
+| `si-body.typ` | Supporting Information (cite as `@si-key`; it has its own reference list) |
+| `references.bib` | Bibliography for both lists |
+| `journal.toml` | Which journal profile in `journals/` the paper is held to |
+| `analysis/` | Your analysis; replace the examples when you connect real results |
 
-2. **Create your manuscript.**
+And build:
 
-   ```bash
-   ./scripts/new-paper.sh ~/papers/my-paper
-   cd ~/papers/my-paper
-   ```
-
-   The script asks for your title and author details, creates a separate project
-   with its own Git history, and builds the first PDF and Word files. Open
-   `paper.pdf` to see the example manuscript. If a build could not finish, run
-   `just doctor` and follow its guidance.
-
-3. **Make it yours.**
-
-   | File | What to put there |
-   |---|---|
-   | `config.typ` | Title, authors, abstract, and keywords |
-   | `paper.typ` | Main text |
-   | `si-body.typ` | Supporting information |
-   | `references.bib` | Bibliography, for both reference lists |
-   | `journal.toml` | Which journal's limits the paper is held to, from `journals/` |
-   | `slides/` | Talk decks, built from the same figures and numbers |
-   | `slides/config.typ` | The talks' title, authors and date, separate from the paper's |
-
-   The Supporting Information prints its own reference list, since journals
-   take it as a separate file. Cite `@si-key` in `si-body.typ` and `@key` in
-   `paper.typ`; both read `references.bib`.
-
-   Replace the examples in `analysis/` when you are ready to connect your own
-   results. The [documentation](docs/README.md)
-   explains how to add numbers, figures, and tables.
-
-4. **Build and check your changes.**
-
-   ```bash
-   just paper     # PDF, editable Word, review text, and prose metrics
-   just verify    # Local consistency checks
-   ```
-
-   After changing your analysis, run `just assets` before rebuilding. Before
-   submission, run `just preflight` for fresh exports, analysis checks, and an
-   online bibliography audit. It also builds the upload set in `submission/`:
-   main text and SI as separate PDF and Word files, the graphical abstract in
-   the journal's format, and a cover letter.
+```bash
+just assets     # after changing the analysis: regenerate figures, tables, numbers
+just paper      # PDF, Word, review text, word counts and readability
+just verify     # the gate: formatting, prose rules, limits, staleness
+just preflight  # before submitting: fresh builds, deep checks, DOI audit, submission/
+```
 
 ## Go further
 
 | You want to… | Start here |
 |---|---|
 | Find a command or understand the files | [Documentation](docs/README.md) |
-| Move an existing manuscript into the scaffold | [Migration guide](docs/migrating.md) |
+| Move an existing manuscript in | [Migration guide](docs/migrating.md) |
 | Write a dissertation or book | [Multi-document guide](docs/multi-document.md) |
-| Set your writing conventions | [Prose style](STYLE.md) |
-| Include/exclude sections and set word limits | [Word-count configuration](docs/journals.md#word-count-scopes-and-limits) |
-| See changes and upgrade guidance | [Version history](HISTORY.md) |
+| Build talk slides from the same numbers | [Slides and audio](docs/slides-and-audio.md) |
+| Upgrade a paper to a newer scaffold | [Upgrading](docs/upgrading.md) (`just upgrade-plan`) |
+| See what changed | [Version history](HISTORY.md) |
+
+## Citing
+
+If paper-scaffold helped with your manuscript, please cite it:
+
+> Garrett, P. T. *paper-scaffold: provenance-checked Typst manuscripts that
+> are safe for AI agents to edit.* Zenodo.
+> [doi:10.5281/zenodo.22905759](https://doi.org/10.5281/zenodo.22905759)
+
+The DOI always resolves to the latest release; [CITATION.cff](CITATION.cff)
+has the full metadata.
 
 ## License
 
