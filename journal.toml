@@ -1,0 +1,30 @@
+# Which journal this manuscript is held to. The limits themselves live in
+# journals/<profile>.toml, each with the URL they were read from and the date;
+# this file only picks one and says how it maps onto THIS manuscript.
+#
+#   just journals        the profiles available
+#   just journal         everything the profile says, against the manuscript
+#   just check-journal   the part of that which is a check (inside `just verify`)
+#
+# The word limits join `just check-words`, the figure resolution floor joins
+# `just prose-check`, and the graphical abstract's placement steers `just
+# paper` and `just docx`. Set profile = "" to hold the manuscript to nothing.
+schema_version = 1
+profile = "jpr-article"
+
+# The sections a profile refers to by role, as section paths in this
+# manuscript (`just wordcount --sections`). JPR leaves the experimental section
+# out of its word count; say which section that is here. Use "" if the
+# manuscript has no such section.
+[sections]
+methods = "main/Methods"
+
+# Where the graphical abstract (the TOC graphic) is rendered in each output.
+#   "preprint"  after the abstract, front and center, as an archive server shows it
+#   "journal"   on the last page of the main manuscript, labeled as the journal asks
+#   "none"      left out
+# The PDF defaults to the preprint layout and the Word export to the journal's,
+# because the PDF is what goes to an archive and the Word file to the journal.
+[placement]
+pdf = "preprint"
+docx = "journal"

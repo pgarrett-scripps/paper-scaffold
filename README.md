@@ -87,6 +87,7 @@ build needs internet access to download dependencies and the Typst template.
    | `paper.typ` | Main text |
    | `si-body.typ` | Supporting information |
    | `references.bib` | Bibliography, for both reference lists |
+   | `journal.toml` | Which journal's limits the paper is held to, from `journals/` |
    | `slides/` | Talk decks, built from the same figures and numbers |
    | `slides/config.typ` | The talks' title, authors and date, separate from the paper's |
 

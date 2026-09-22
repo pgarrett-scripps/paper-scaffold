@@ -51,6 +51,32 @@
 // "Section" prefix, for enumerations like "Figures 2 and 3".
 #let refn(l) = ref(l, supplement: none)
 
+// Graphical abstract -- the journal's "TOC graphic". Declared once, here, and
+// PLACED by `toc-placement`: "preprint" puts it under the abstract, where an
+// archive server shows it; "journal" puts it on the last page of the main
+// manuscript under the label ACS prescribes; "none" leaves it out. The build
+// passes the placement from journal.toml as `--input toc=...`, so the PDF and
+// the Word export differ without this file changing; the Word resolver reads
+// the same two bindings. `just check-journal` measures the file against the
+// journal's box. Set toc-graphic to `none` if the paper has no graphic.
+#let toc-graphic = fig("fig.toc", width: 3.25in)
+#let toc-caption = [
+  The pipeline in one picture. Replace the graphic with the paper's own; see
+  analysis/scripts/gen_toc_figure.py.
+]
+#let toc-placement = sys.inputs.at("toc", default: "preprint")
+#if toc-placement not in ("preprint", "journal", "none") {
+  panic("--input toc must be preprint, journal or none, got " + toc-placement)
+}
+#let toc-block = if toc-graphic == none [] else [
+  #align(center)[
+    #toc-graphic
+    #v(4pt)
+    #text(9pt, style: "italic", toc-caption)
+  ]
+]
+#if toc-placement == "preprint" { toc-block }
+
 // >>> BODY START -- everything from here to BODY END is counted as prose and narrated.
 
 = Introduction
@@ -135,6 +161,15 @@ Funding sources and acknowledgments go here. If any part of the work used
 generative AI tooling, disclose it in this paragraph.
 
 #bibliography("references.bib", title: [References], style: paper-bib-style)
+
+// The graphical abstract in the journal's layout: the last page of the main
+// manuscript, before the SI, under the label the ACS guideline prescribes.
+#if toc-placement == "journal" {
+  pagebreak()
+  heading(level: 1, numbering: none, outlined: false)[For Table of Contents
+    Only]
+  toc-block
+}
 
 // ===================== Supporting Information (appendix) =====================
 // The SI is appended here as an appendix so the whole manuscript is a single

@@ -23,7 +23,7 @@ from manuscript_sources import source_files
 from manifest_validation import load
 
 ROOT = Path(__file__).resolve().parent.parent
-BUILD_TOOLS = ("render_stats.py", "typst_prose.py",
+BUILD_TOOLS = ("render_stats.py", "typst_prose.py", "journal.py",
                "resolve_typst.py", "export_docx.py", "word_xml.py",
                "paper_word_reference.py", "readability.py",
                "refs_div.lua", "manuscript_sources.py", "manifest_validation.py",
@@ -44,7 +44,10 @@ def digest(path: Path) -> str:
 def snapshot(root: Path, dependencies=()) -> dict[str, str | None]:
     paths = {root / name for name in source_files(root)}
     paths.update(root / name for name in ("wordcount.typ", "wordcount-sections.typ", "assets.json",
-                                         "pyproject.toml", "uv.lock", "justfile"))
+                                         "pyproject.toml", "uv.lock", "justfile", "journal.toml"))
+    # The selected journal profile steers where the graphical abstract lands,
+    # so a placement change is a source change to both outputs.
+    paths.update(root.glob("journals/*.toml"))
     paths.update(root / "tools" / name for name in BUILD_TOOLS)
     paths.add(root / "word/paper-reference.docx")
     paths.update(root.glob("*.bib"))
@@ -120,7 +123,8 @@ def build_lock(root: Path):
                 fcntl.flock(stream, fcntl.LOCK_UN)
 
 
-def prepare_snapshot(root: Path, folder: Path, sources: dict, dependencies: list) -> dict:
+def prepare_snapshot(root: Path, folder: Path, sources: dict, dependencies: list, *,
+                     toc_pdf: str = "preprint", toc_word: str = "journal") -> dict:
     from manuscript_snapshot import materialize, query_numbers, project_word, seal
     from review import make_document
     materialize(root, folder, sources)
@@ -129,13 +133,16 @@ def prepare_snapshot(root: Path, folder: Path, sources: dict, dependencies: list
     # Join even on failure before the caller removes the temporary tree;
     # sealing and publication require both paths to have succeeded.
     with ThreadPoolExecutor(max_workers=1) as pool:
+        # The graphical abstract's placement is the one thing journal.toml
+        # changes about the OUTPUT: the PDF and the Word file each get theirs.
         pdf = pool.submit(subprocess.run,
                          ["typst", "compile", "--root", str(folder),
+                          "--input", f"toc={toc_pdf}",
                           str(folder / "paper.typ"), str(folder / "paper.pdf")],
                          cwd=folder, check=True)
         front_matter = folder / "front-matter.json"
         numbers = query_numbers(folder, front_matter=front_matter)
-        project_word(folder, numbers, front_matter=front_matter)
+        project_word(folder, numbers, front_matter=front_matter, toc=toc_word)
         write_text(folder / "document.json", json.dumps(make_document(folder), ensure_ascii=False))
         pdf.result()
     return seal(folder, sources, dependencies)
@@ -143,6 +150,8 @@ def prepare_snapshot(root: Path, folder: Path, sources: dict, dependencies: list
 
 def build(mode: str, root: Path = ROOT) -> int:
     output = "paper.pdf" if mode in ("paper", "resolve") else "paper.docx"
+    from journal import placement as toc_placement
+    toc_pdf, toc_word = toc_placement(root, "pdf"), toc_placement(root, "docx")
     with build_lock(root), tempfile.TemporaryDirectory(dir=root / ".build-state") as tmp:
         staged = Path(tmp) / output
         depfile = Path(tmp) / "deps.json"
@@ -158,13 +167,15 @@ def build(mode: str, root: Path = ROOT) -> int:
             run(sys.executable, str(root / "tools/render_stats.py"))
             # Discover actual inputs before capturing them, including dynamic
             # image/data paths. This probe is never published as the final PDF.
-            run("typst", "compile", "--deps", str(depfile), "paper.typ", str(Path(tmp) / "probe.pdf"))
+            run("typst", "compile", "--deps", str(depfile), "--input", f"toc={toc_pdf}",
+                "paper.typ", str(Path(tmp) / "probe.pdf"))
             dependencies = json.loads(depfile.read_text())["inputs"]
             after = snapshot(root, dependencies)
             write_text(root / ".build-state" / f"{output}.deps.json", json.dumps(dependencies))
             if before == after:
                 folder = Path(tmp) / "manuscript"
-                manifest = prepare_snapshot(root, folder, before, dependencies)
+                manifest = prepare_snapshot(root, folder, before, dependencies,
+                                            toc_pdf=toc_pdf, toc_word=toc_word)
                 if mode in ("paper", "resolve"):
                     shutil.copyfile(folder / "paper.pdf", staged)
                 else:

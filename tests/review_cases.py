@@ -319,7 +319,7 @@ We measured #s("count") samples.
                 Path(args[-1]).write_text("probe")
                 Path(args[args.index("--deps") + 1]).write_text('{"inputs":["paper.typ"]}')
 
-        def capture(root, folder, sources, dependencies):
+        def capture(root, folder, sources, dependencies, **_kw):
             folder.mkdir()
             (folder / "paper.pdf").write_text("New PDF.")
             (root / "paper.typ").write_text("Edited during snapshot.")

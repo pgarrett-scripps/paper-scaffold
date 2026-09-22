@@ -153,7 +153,7 @@ class Hardening(unittest.TestCase):
                 Path(args[-1]).write_text("complete output")
                 Path(args[args.index("--deps") + 1]).write_text('{"inputs": ["paper.typ", "dynamic.csv"]}')
 
-        def capture(root, folder, sources, dependencies):
+        def capture(root, folder, sources, dependencies, **_kw):
             # The dependency retry belongs to the build coordinator. The
             # snapshot renderer has its own real-compiler tests.
             folder.mkdir()

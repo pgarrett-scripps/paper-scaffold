@@ -95,6 +95,7 @@ CASE_MODULES = (
     "document_cases",         # manuscript.toml projects
     "code_cases",             # native code through every output
     "slide_cases",            # slide decks
+    "journal_cases",          # journal profiles and the graphical abstract
 )
 
 

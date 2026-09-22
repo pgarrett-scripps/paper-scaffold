@@ -37,6 +37,8 @@
 #   --keywords A,B,C      Comma-separated
 #   --date TEXT           e.g. "January 2026"
 #   --bib-style NAME      Typst CSL style name (default american-chemical-society)
+#   --journal NAME        Journal profile from journals/ (e.g. jpr-article), or ""
+#                         to hold the paper to none; default keeps the scaffold's
 #   -y, --yes             Never prompt; take defaults for anything not passed
 #   --no-build            Skip the first `just paper`
 #   --no-git              Do not run git init / the first commit
@@ -45,7 +47,7 @@ set -euo pipefail
 
 SCAFFOLD="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-usage() { sed -n '2,42p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,44p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -54,7 +56,7 @@ die() { echo "error: $*" >&2; exit 1; }
 # ---------------------------------------------------------------------------
 DEST=""
 TITLE=""; WORDMARK=""; SUBTITLE=""; AUTHOR=""; EMAIL=""; AFFILIATION=""
-INSTITUTION=""; KEYWORDS=""; PDATE=""; BIBSTYLE=""
+INSTITUTION=""; KEYWORDS=""; PDATE=""; BIBSTYLE=""; JOURNAL="__keep__"
 ASSUME_YES=0; DO_BUILD=1; DO_GIT=1
 
 while [ $# -gt 0 ]; do
@@ -69,6 +71,7 @@ while [ $# -gt 0 ]; do
     --keywords)    KEYWORDS="${2:?}"; shift 2 ;;
     --date)        PDATE="${2:?}"; shift 2 ;;
     --bib-style)   BIBSTYLE="${2:?}"; shift 2 ;;
+    --journal)     JOURNAL="${2?--journal needs a value (\"\" for none)}"; shift 2 ;;
     -y|--yes)      ASSUME_YES=1; shift ;;
     --no-build)    DO_BUILD=0; shift ;;
     --no-git)      DO_GIT=0; shift ;;
@@ -287,6 +290,27 @@ if deck.is_file():
     sub_let("deck-bib-style", tstr(env["BIBSTYLE"]))
     deck.write_text(src)
 PY
+
+# The journal the paper is held to. journal.toml is copied as the scaffold has
+# it; --journal overrides the profile line, and "" selects none. The name is
+# checked against journals/ so a typo does not become a manuscript held to
+# nothing without anyone noticing.
+if [ "$JOURNAL" != "__keep__" ]; then
+  if [ -n "$JOURNAL" ] && [ ! -f "$DEST/journals/$JOURNAL.toml" ]; then
+    echo "error: no journal profile '$JOURNAL' under journals/ (have: $(ls "$DEST/journals" | sed 's/\.toml$//' | tr '\n' ' '))" >&2
+    exit 1
+  fi
+  echo "selecting journal profile: ${JOURNAL:-none}"
+  JOURNAL="$JOURNAL" python3 - "$DEST/journal.toml" <<'PY2'
+import os, re, sys
+from pathlib import Path
+p = Path(sys.argv[1]); src = p.read_text()
+new, n = re.subn(r'(?m)^profile = ".*"$', 'profile = "%s"' % os.environ["JOURNAL"], src, count=1)
+if not n:
+    sys.exit("error: no `profile = ...` line in journal.toml")
+p.write_text(new)
+PY2
+fi
 
 # pyproject's `name` is cosmetic here (package = false, nothing is built), but it
 # shows up in uv's output, so a directory-shaped slug beats "paper" everywhere.

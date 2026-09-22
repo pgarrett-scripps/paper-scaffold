@@ -121,6 +121,18 @@ manuscript tools read. `slides/theme.typ` is the only place Touying is
 configured, and neither of those two shared files is a deck `just slides`
 builds.
 
+**A journal's limit comes from `journals/<profile>.toml`, never from memory.**
+`journal.toml` selects the profile; its word limits join `just check-words`,
+its resolution floor joins `just prose-check`, and `just check-journal` (in
+`verify`) covers keywords, main-text figure and table counts, and the
+graphical abstract's size. Every profile carries `source`, `guidelines-dated`
+and `checked`, and does not load without them: to change a limit, re-read the
+source, change the number, move `checked`. A section the profile names by
+role is mapped in `[sections]`. The graphical abstract is declared once in
+`paper.typ` as `toc-graphic`; `[placement]` puts it under the abstract in the
+PDF and on the last page of the Word file by default, and the build passes
+that choice, so do not move the block in the source to change where it lands.
+
 **Cite in `si-body.typ` as `@si-key`, never `@key`.** The Supporting
 Information has its own reference list, set by Alexandria because Typst allows
 one native `#bibliography` per document, and the `si-` prefix is what routes a

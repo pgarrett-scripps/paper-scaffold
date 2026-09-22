@@ -714,7 +714,25 @@ def _toc_block(paper_src: str, assets: dict) -> str:
     return block
 
 
-def build(front_matter: dict | None = None) -> str:
+PLACEMENTS = ("preprint", "journal", "none")
+TOC_LABEL = "For Table of Contents Only"
+
+
+def _toc_section(toc: str) -> str:
+    """The graphical abstract in the journal's layout: its own labeled
+    section on the last page of the main manuscript. A #heading CALL, as the
+    SI title is, so the crossref pass does not number it."""
+    return ("#heading(level: 1, numbering: none, outlined: false)"
+            f"[{TOC_LABEL}]\n\n{toc}")
+
+
+def build(front_matter: dict | None = None, placement: str = "preprint") -> str:
+    """The Word projection. `placement` is where the graphical abstract goes:
+    "preprint" under the abstract, "journal" after the references and before
+    the SI, "none" nowhere. build_state.py passes journal.toml's choice."""
+    if placement not in PLACEMENTS:
+        raise ResolveError(f"toc placement must be one of {', '.join(PLACEMENTS)}, "
+                           f"got {placement!r}")
     if not ASSETS.is_file():
         assets = {}
     else:
@@ -739,6 +757,9 @@ def build(front_matter: dict | None = None) -> str:
     bib = bibliography_line(paper_src, config_src)
     if bib:
         body += "\n\n" + bib
+    toc = _toc_block(paper_src, assets)
+    if toc and placement == "journal":
+        body += "\n\n" + _toc_section(toc)
 
     # The SI is read as its own file, exactly as readability.py and the
     # narrator read it. paper.typ DOES `#include "si-body.typ"`, but that line
@@ -784,7 +805,6 @@ def build(front_matter: dict | None = None) -> str:
     if NATIVE_NUMBERING is not None:
         abstract = export_includes(abstract, ROOT / "config.typ")
     keywords = ", ".join(meta.get("keywords") or [])
-    toc = _toc_block(paper_src, assets)
 
     head = (
         f"{ABOUT}\n"
@@ -793,14 +813,14 @@ def build(front_matter: dict | None = None) -> str:
         f"{affils}\n\n"
         f"== Abstract\n\n{abstract}\n\n"
         + (f"*Keywords:* {keywords}\n\n" if keywords else "")
-        + (toc + "\n\n" if toc else "")
+        + (toc + "\n\n" if toc and placement == "preprint" else "")
     )
     return resolve_crossrefs(head, body, NATIVE_NUMBERING) + "\n"
 
 
-def main(front_matter: dict | None = None) -> int:
+def main(front_matter: dict | None = None, placement: str = "preprint") -> int:
     try:
-        write_text(OUT, build(front_matter))
+        write_text(OUT, build(front_matter, placement))
     except ResolveError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
@@ -816,6 +836,8 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, default=OUT)
     parser.add_argument("--numbers", type=Path)
     parser.add_argument("--front-matter", type=Path)
+    parser.add_argument("--toc", default="preprint", choices=PLACEMENTS,
+                        help="where the graphical abstract goes in the Word file")
     args = parser.parse_args()
     if args.numbers is None:
         # Direct invocations use the shared build too. Only the internal Word
@@ -827,4 +849,4 @@ if __name__ == "__main__":
     typst_prose.STATS_JSON = ROOT / "stats.json"
     NATIVE_NUMBERING = json.loads(args.numbers.read_text()) if args.numbers else None
     front_matter = json.loads(args.front_matter.read_text()) if args.front_matter else None
-    raise SystemExit(main(front_matter))
+    raise SystemExit(main(front_matter, args.toc))

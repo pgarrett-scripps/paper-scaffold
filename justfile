@@ -240,6 +240,7 @@ verify:
   stage "extractors (just test)"         "" just test
   stage "prose rules (just prose-check)" "" just prose-check
   stage "word limits (just check-words)" "" just check-words
+  stage "journal (just check-journal)"   "" just check-journal
   # One stage, because both answer the same question -- are the declarations
   # still consistent with what produced them -- and splitting them made verify
   # six blocks of output for a manuscript with one figure and five numbers.
@@ -248,7 +249,7 @@ verify:
 
   echo ""
   if [ $rc -eq 0 ]; then
-    echo "VERIFY OK -- formatting, extractors, prose rules, word limits and staleness all pass."
+    echo "VERIFY OK -- formatting, extractors, prose rules, word limits, journal rules and staleness all pass."
   else
     echo "VERIFY FAILED -- see the stages above. Nothing was rebuilt."
   fi
@@ -465,6 +466,26 @@ wordcount *args: render-stats
 # Check configured section word limits without rebuilding or regenerating stats
 check-words *args:
   @uv run --quiet python tools/wordcount.py --check "$@"
+
+# Journal profiles. journals/<name>.toml carries one venue's limits together
+# with the URL they were read from and the date; journal.toml picks one and
+# maps its section roles onto this manuscript. Nothing here is a second
+# checker: the word limits join check-words, the figure resolution floor joins
+# prose-check, and check-journal covers what neither does -- the keyword
+# count, figure and table counts in the main text, and the graphical abstract
+# measured against the journal's box. `journal` prints the whole card, with
+# the journal's own wording beside each rule.
+# Everything the selected journal profile says, against the manuscript
+journal *args: render-stats
+  @uv run --quiet python tools/journal.py report "$@"
+
+# The checkable part of the journal profile: keywords, float counts, graphical abstract
+check-journal *args:
+  @uv run --quiet python tools/journal.py check "$@"
+
+# List the profiles under journals/ and which one journal.toml selects
+journals:
+  @uv run --quiet python tools/journal.py list
 
 # Computed from the Typst source with the same exemptions as the word count. Uses
 # `textstat` if installed, else a built-in estimate. No PDF rebuild.

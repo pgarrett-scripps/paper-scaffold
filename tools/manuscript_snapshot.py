@@ -210,13 +210,16 @@ def query_numbers(folder: Path, *, front_matter: Path | None = None) -> list[dic
         probe.unlink(missing_ok=True)
 
 
-def project_word(folder: Path, numbers: list[dict], *, front_matter: Path | None = None) -> None:
+def project_word(folder: Path, numbers: list[dict], *, front_matter: Path | None = None,
+                 toc: str | None = None) -> None:
     write_text(folder / "numbering.json", json.dumps(numbers, indent=2))
     args = [sys.executable, str(ROOT / "tools/resolve_typst.py"),
             "--root", str(folder), "--numbers", str(folder / "numbering.json"),
             "--output", str(folder / "paper.word.typ")]
     if front_matter is not None:
         args.extend(["--front-matter", str(front_matter)])
+    if toc is not None:
+        args.extend(["--toc", toc])
     subprocess.run(args, check=True, cwd=folder)
 
 

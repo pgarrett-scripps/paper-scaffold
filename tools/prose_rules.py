@@ -155,6 +155,21 @@ def _bad(msg: str) -> None:
     sys.exit(f"error: {CONFIG_NAME}: {msg}")
 
 
+def _journal_limits(root: Path) -> dict[str, int]:
+    """Limits the selected journal profile sets, beneath the project's own.
+
+    Today that is one number: the figure resolution floor. It sits between the
+    shipped default and prose-check.toml's [limits], so a project can still
+    override it, and a project with no journal.toml sees nothing new.
+    """
+    from journal import JournalError, min_figure_dpi
+    try:
+        dpi = min_figure_dpi(root)
+    except JournalError as e:
+        sys.exit(f"error: {e}")
+    return {"min-figure-dpi": dpi} if dpi else {}
+
+
 def load_config(root: Path) -> Config:
     """Read prose-check.toml, or return defaults if the project has none.
 
@@ -164,7 +179,7 @@ def load_config(root: Path) -> Config:
     """
     path = root / CONFIG_NAME
     if not path.exists():
-        return Config()
+        return Config(limits={**DEFAULT_LIMITS, **_journal_limits(root)})
 
     # A malformed file is a typo in a config, not a bug in the checker, so it
     # gets the same one-line treatment as every other bad entry here. The common
@@ -198,7 +213,7 @@ def load_config(root: Path) -> Config:
                  f"value, so put it in `disable` instead")
     allow = {r: {str(v).lower() for v in vs} for r, vs in allow_raw.items()}
 
-    limits = dict(DEFAULT_LIMITS)
+    limits = {**DEFAULT_LIMITS, **_journal_limits(root)}
     limits_raw = raw.get("limits", {})
     bad = set(limits_raw) - set(DEFAULT_LIMITS)
     if bad:

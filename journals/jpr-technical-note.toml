@@ -1,0 +1,46 @@
+# Journal of Proteome Research (ACS), Technical Note.
+#
+# Every number here was read from the source below on the date in `checked`,
+# and the source printed the date in `guidelines-dated`. Do not edit a limit
+# from memory: re-read the source, change the number, and move `checked`.
+# `just journals` lists the profiles; `just journal` reports this one against
+# the manuscript. The words quoted under [notes] are the journal's own.
+schema_version = 1
+label = "JPR Technical Note"
+journal = "Journal of Proteome Research"
+type = "Technical Note"
+source = "https://researcher-resources.acs.org/publish/author_guidelines?coden=jprobs"
+guidelines-dated = "2026-08-27"
+checked = "2026-09-22"
+
+[words]
+main-max = 4500
+# Roles the journal leaves out of the count. journal.toml says which section
+# of THIS manuscript plays each role. Acknowledgments, the SI availability
+# statement and the reference list sit outside the BODY markers and are never
+# counted, so only the experimental section needs mapping.
+excludes = ["methods"]
+abstract-max = 200
+keywords-max = 10
+
+[floats]
+# The guidelines set no figure or table count for a Technical Note.
+
+[figures]
+min-dpi = 300   # color art; line art 1200 dpi, grayscale 600 dpi
+
+[graphical-abstract]
+required = true
+width-in = 3.25
+height-in = 1.75
+min-dpi = 300
+label = "For Table of Contents Only"
+source = "https://pubsapp.acs.org/paragonplus/submission/toc_abstract_graphics_guidelines.pdf"
+guidelines-dated = "2024-02-28"
+
+[notes]
+words = "Technical Notes are brief descriptions of novel instrumentation methodologies or software advances. Technical Notes should not exceed 4,500 words. The word count limit does not include the experimental section, acknowledgments, supporting information availability statement, and list of references."
+abstract = "All manuscripts must contain an Abstract (200 words maximum)."
+keywords = "Author(s) should supply no more than 10 keywords per manuscript."
+figures = "Digital graphics pasted into manuscripts should have the following minimum resolutions: black and white line art, 1200 dpi; grayscale art, 600 dpi; color art, 300 dpi."
+graphical-abstract = "Submit the graphic at the actual size to be used for the TOC so that it will fit in an area no larger than 3.25 inches by 1.75 inches. Label the graphic \"For Table of Contents Only\" and provide it on the last page of the submitted manuscript."

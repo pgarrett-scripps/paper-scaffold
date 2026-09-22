@@ -1,5 +1,6 @@
 # Optional word-count checks. Bounds are inclusive; omit either bound when it
-# does not apply. No journal limits are assumed by the scaffold.
+# does not apply. A journal's limits are not typed here: journal.toml selects
+# a profile under journals/, and its checks join these in `just check-words`.
 schema_version = 1
 
 # Discover exact, case-sensitive section paths with: just wordcount --sections

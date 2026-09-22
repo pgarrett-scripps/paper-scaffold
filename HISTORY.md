@@ -44,6 +44,48 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ## Unreleased
 
+Journal profiles. `journals/<name>.toml` carries one venue's limits for one
+manuscript type -- word limits and what they exclude, abstract and keyword
+caps, figure and table counts, the figure resolution floor, and the graphical
+abstract's box -- together with the URL they were read from, the date the
+journal printed on its guidelines, and the date they were read. A profile
+without that provenance does not load. `journal.toml` selects one and maps the
+roles it names (the experimental section JPR leaves out of its count) onto
+this manuscript's section paths. Four ship, read from the ACS guidelines
+dated 2026-08-27: JPR Article and Technical Note, JASMS Article and Technical
+Note.
+
+Nothing is a second checker: the profile's word limits join `just
+check-words`, its resolution floor joins `just prose-check` beneath the
+project's own `min-figure-dpi`, and `just check-journal` (in `verify`) covers
+keywords, main-text float counts, and the graphical abstract measured against
+the journal's box. `just journal` prints the whole card with the journal's own
+wording; `just journals` lists the profiles.
+
+The graphical abstract is declared once in `paper.typ` (`toc-graphic`,
+`toc-caption`) and placed per output by `journal.toml`'s `[placement]`: under
+the abstract for a preprint, on the last page of the main manuscript under
+"For Table of Contents Only" for the journal, or nowhere. The PDF defaults to
+the preprint layout and the Word file to the journal's, the build passes each
+its choice, and a placement change marks both outputs stale. A shipped
+generator draws a placeholder at exactly the ACS box (975 x 525 px); a drawn
+graphic is adopted with `just adopt` and referenced the same way.
+
+Also fixed on the way: `just prose-check`'s figure resolution check only ever
+measured `image("literal")` calls, so a figure placed through `fig("id")` --
+every figure in this scaffold -- was never measured, while the generator's
+comment said it was. It now resolves ids through `assets.json` and reads
+absolute widths (`width: 3.25in`) as well as percentages.
+
+Upgrade: copy `journals/`, `journal.toml`, `tools/journal.py`,
+`tests/journal_cases.py`, the `journal*` recipes and the `verify` stage, and
+the updated `tools/wordcount.py`, `tools/prose_rules.py`,
+`tools/prose_check.py`, `tools/resolve_typst.py`, `tools/manuscript_snapshot.py`
+and `tools/build_state.py`. Add the `toc-graphic` block to `paper.typ` (the
+scaffold's shows where) or set `toc-graphic = none`. A project with no
+`journal.toml` behaves as before, except that its `fig()` figures are now
+measured.
+
 The HTML Word route is gone. `just docx-html`, `tools/typst2docx.py`, the
 `docx-mode` conditionals in `paper.typ` and the `paper-author-line` binding
 they read from `config.typ` are removed; `just docx` through pandoc's Typst

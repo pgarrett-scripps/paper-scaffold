@@ -125,6 +125,8 @@ def print_checks(rows: list[dict]) -> None:
         print(f"  {row['name']}: {row['words']:,} words; {limits or 'unbounded'}; {message}")
         print("    include: " + ", ".join(row["include"])
               + ("; exclude: " + ", ".join(row["exclude"]) if row["exclude"] else ""))
+        if row.get("note"):
+            print(f"    note: {row['note']}")
 
 
 def print_counts(data: dict) -> None:
@@ -151,7 +153,10 @@ def main(argv=None) -> int:
         if args.check and args.sections:
             raise ValueError("--sections lists paths; use it separately from --check")
         root = args.root.resolve()
-        checks = load_checks(root)
+        # The selected journal profile's limits join the project's own, so one
+        # table answers "am I within limits" whoever set them.
+        from journal import word_checks
+        checks = load_checks(root) + word_checks(root)
         if args.check and not checks:
             data = {"checks": [], "status": "unconfigured"}
         else:

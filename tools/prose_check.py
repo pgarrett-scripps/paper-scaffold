@@ -428,7 +428,15 @@ def check_reference_order(sources: dict[str, str]) -> list[Finding]:
 # An `image("...")` call and whatever arguments follow it, which may include a
 # `width:`. `[^)]` rather than `.` so a reflowed multi-line call still matches.
 IMAGE_CALL = re.compile(r'image\(\s*"([^"]+)"([^)]*)\)')
+# A generated figure by id. The path comes from assets.json, which is how the
+# compile finds it too; without this the scaffold's own figures -- every one of
+# which goes through fig() -- were never measured, while the comment in the
+# generator said they were.
+FIG_CALL = re.compile(r'\bfig\(\s*"([^"]+)"([^)]*)\)')
 WIDTH_PCT = re.compile(r"width:\s*([\d.]+)%")
+# An absolute width, as a TOC graphic placed at the journal's box size is.
+WIDTH_ABS = re.compile(r"width:\s*([\d.]+)\s*(in|cm|mm|pt)\b")
+_TO_INCHES = {"in": 1.0, "cm": 1 / 2.54, "mm": 1 / 25.4, "pt": 1 / 72}
 
 # Formats with no pixels to count. A DPI figure for them is meaningless.
 VECTOR_SUFFIXES = {".svg", ".pdf", ".eps"}
@@ -470,9 +478,11 @@ def check_figure_resolution(root: Path | None = None,
     paper however crisp it was on screen. Journals reject for this late, after
     acceptance, when regenerating figures is most annoying.
 
-    The rendered width comes from the `width: NN%` in the `image(...)` call. A
-    call with no width is treated as spanning the full text block, which is what
-    Typst does when it scales an image to its container.
+    The rendered width comes from the `width:` in the `image(...)` or `fig(...)`
+    call: a percentage of the text block, or an absolute length. A call with no
+    width is treated as spanning the full text block, which is what Typst does
+    when it scales an image to its container. A fig("id") call is resolved to
+    its file through assets.json, exactly as the compile resolves it.
 
     Vector formats are skipped: they have no resolution to be below.
     """
@@ -482,17 +492,41 @@ def check_figure_resolution(root: Path | None = None,
     width_mm = c.limit("figure-text-width-mm")
     text_in = width_mm / 25.4
 
+    declared: dict[str, str] = {}
+    manifest = r / "assets.json"
+    if manifest.is_file():
+        try:
+            values = json.loads(manifest.read_text()).get("values", {})
+            declared = {id: rec["path"] for id, rec in values.items()
+                        if isinstance(rec, dict) and isinstance(rec.get("path"), str)}
+        except (OSError, ValueError):
+            declared = {}
+
+    def printed(args: str) -> tuple[float, str]:
+        a = WIDTH_ABS.search(args)
+        if a:
+            return (float(a.group(1)) * _TO_INCHES[a.group(2)],
+                    f"{a.group(1)} {a.group(2)}")
+        w = WIDTH_PCT.search(args)
+        pct = float(w.group(1)) / 100 if w else 1.0
+        return text_in * pct, f"{pct * 100:.0f}% of a {width_mm} mm text block"
+
     out: list[Finding] = []
     seen: set[str] = set()
     for src in sorted(r.glob("*.typ")):
-        for m in IMAGE_CALL.finditer(src.read_text()):
-            rel, args = m.group(1), m.group(2)
-            p = r / rel
+        # Comment lines are dropped first: assets.typ documents its own usage
+        # with a `fig("fig.example")` in a comment, which is not a placement.
+        text = "\n".join(line for line in src.read_text().splitlines()
+                         if not line.lstrip().startswith("//"))
+        sites = [(m.group(1), m.group(2)) for m in IMAGE_CALL.finditer(text)]
+        sites += [(declared[m.group(1)], m.group(2)) for m in FIG_CALL.finditer(text)
+                  if m.group(1) in declared]
+        for rel, args in sites:
+            p = r / rel.lstrip("/")
             if not p.is_file() or p.suffix.lower() in VECTOR_SUFFIXES:
                 continue
-            w = WIDTH_PCT.search(args)
-            pct = float(w.group(1)) / 100 if w else 1.0
-            key = f"{rel}@{pct}"
+            inches, how = printed(args)
+            key = f"{rel}@{inches:.4f}"
             if key in seen:
                 continue
             seen.add(key)
@@ -505,14 +539,13 @@ def check_figure_resolution(root: Path | None = None,
                     f"is unchecked",
                     subject=Path(rel).name, where=src.name))
                 continue
-            dpi = px / (text_in * pct)
+            dpi = px / inches
             if dpi < min_dpi:
                 out.append(Finding(
                     "low-resolution-figure", "warn",
-                    f"{rel} prints at ~{dpi:.0f} dpi ({px} px across "
-                    f"{pct * 100:.0f}% of a {width_mm} mm text block), below the "
-                    f"{min_dpi} dpi limit -- regenerate it at a higher savefig "
-                    f"dpi, or place it smaller",
+                    f"{rel} prints at ~{dpi:.0f} dpi ({px} px across {how}), "
+                    f"below the {min_dpi} dpi limit -- regenerate it at a higher "
+                    f"savefig dpi, or place it smaller",
                     subject=Path(rel).name, where=src.name))
     return out
 

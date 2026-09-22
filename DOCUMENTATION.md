@@ -95,6 +95,9 @@ have to drop their import. The exact edits are under
 | `just slides-list` | What decks exist, and whether each is current |
 | `just review-text [target]` | Export a compact `.review.txt` with prose, equations and numbered captions for AI review |
 | `just wordcount` | Journal-style counts and configured section checks without rebuilding |
+| `just journal` | Everything the selected journal profile says, against the manuscript |
+| `just check-journal` | Keyword count, figure and table counts, graphical abstract size. In `verify` |
+| `just journals` | The profiles under `journals/` and which one `journal.toml` selects |
 | `just wordcount --sections` | List exact section paths available for word-count checks |
 | `just check-words` | Enforce configured minimum/maximum word counts; also runs in `verify` |
 | `just readability` | Flesch-Kincaid / reading ease / fog without rebuilding |
@@ -613,6 +616,63 @@ Touying's nicer citation mode â€” a footnote on the slide that makes the claim â
 is deliberately not used: touying 0.6.1 targets Typst 0.12 and recovers the
 entries through a `grid` show rule that Typst 0.14 no longer produces. The note
 in `slides/theme.typ` says what to change when that is fixed upstream.
+
+### Journal profiles: the venue's limits, with their source
+
+A journal's rules are numbers an author carries in their head and discovers
+at submission. Here they live in one file per venue and manuscript type under
+`journals/`, and `journal.toml` picks one:
+
+```toml
+profile = "jpr-article"
+[sections]
+methods = "main/Methods"     # the section JPR leaves out of its word count
+[placement]
+pdf = "preprint"             # graphical abstract under the abstract
+docx = "journal"             # ... or on the last page, labeled as ACS asks
+```
+
+Four ship: `jpr-article`, `jpr-technical-note`, `jasms-article`, and
+`jasms-technical-note`. Every profile carries the URL its numbers were read
+from, the date the journal printed on those guidelines, and the date they were
+read; a profile without all three does not load. When a limit changes, re-read
+the source, change the number, and move `checked`. `[notes]` quotes the
+journal's own sentence beside each rule, so `just journal` can show the rule
+and its wording together.
+
+Nothing here is a second checker. The profile's word limits join
+`word-limits.toml`'s checks in `just check-words`, so one table answers "am I
+within limits" whoever set them. Its figure resolution floor joins
+`prose-check.toml`'s `min-figure-dpi` in `just prose-check`, beneath the
+project's own value. `just check-journal`, inside `verify`, covers what neither
+does: the keyword count in `config.typ`, the figures and tables in the main
+text (the SI does not count, which is the journal's own distinction and the
+BODY markers' too), and the graphical abstract measured against the journal's
+box. A section a profile refers to by role, such as the experimental section
+JPR excludes, is mapped to this manuscript's section path in `[sections]`, and
+an unmapped role is a loud error naming the fix. A limit that covers the
+reference list, as JASMS's Technical Note limit does, is reported with a note
+that the count shown is low, because nothing here counts a rendered list.
+
+**The graphical abstract** is the one thing a profile changes about the output
+rather than the checks. `paper.typ` declares it once, as `#let toc-graphic =
+fig("fig.toc", width: 3.25in)` with an optional `toc-caption`, and
+`[placement]` says where each output renders it: `preprint` under the abstract,
+front and center, as an archive server shows it; `journal` on the last page of
+the main manuscript, before the SI, under the heading "For Table of Contents
+Only" that ACS prescribes; `none` nowhere. The build passes the choice to the
+PDF as `--input toc=...` and to the Word resolver as `--toc`, so the two
+outputs differ without the source changing, and a placement change marks both
+outputs stale. The defaults are preprint for the PDF and journal for the Word
+file, because that is where each one goes. The shipped graphic is generated
+by `analysis/scripts/gen_toc_figure.py` at exactly the ACS box, 975 x 525 px;
+a graphic drawn by hand goes under `figures/`, is declared with `just adopt`,
+and is referenced the same way.
+
+What is deliberately not checked: figure widths against the journal's column
+sizes. The PDF here is the arkheion layout, not the journal's, so a physical
+width check would be noise until production; the resolution floor covers the
+part that actually bites.
 
 ### The `si/` contract: generated tables, never hand-typed numbers
 
