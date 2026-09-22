@@ -80,7 +80,7 @@ have to drop their import. The exact edits are under
 | Command | Does |
 |---|---|
 | `just verify` | **The gate.** Formatting, extractors, prose rules and staleness, in one pass |
-| `just preflight` | **The submission gate.** Fresh builds + `verify` + deep stats + DOI audit |
+| `just preflight` | **The submission gate.** Fresh builds and upload set + `verify` + deep stats + DOI audit |
 | `just doctor` | Are the external tools installed and new enough? |
 | `just paper` | Build `paper.pdf`, `paper.docx`, and `paper.review.txt`, with word counts and readability |
 | `just pdf` | Build only `paper.pdf`, with word counts and readability |
@@ -88,6 +88,10 @@ have to drop their import. The exact edits are under
 | `just watch` | Live preview, recompiling on save |
 | `just fmt` | Reflow the hand-written Typst sources (typstyle, 80 cols) |
 | `just docx` | Export `paper.docx` for journals and co-authors |
+| `just submission` | The journal upload set in `submission/`: main text and SI apart (PDF and Word), graphical abstract, cover letter, `manifest.json` |
+| `just main-pdf` / `si-pdf` / `main-docx` / `si-docx` | One half of the manuscript, cut from the last `just paper` build |
+| `just toc-graphic` / `cover-letter` | The graphical abstract in the profile's format and box; `cover-letter.typ` as a PDF |
+| `just check-submission` | Fail if a file in `submission/` is behind its source. Not in `verify`; in `preflight` |
 | `just slides [name]` | Build a slide deck from `slides/` -> `slides/<name>.pdf` (all decks with no name) |
 | `just slides-handout [name]` | Build the handout form, with every `#pause` reveal flattened |
 | `just slides-check [name]` | Deck staleness plus the four slide-only prose rules. Not in `verify` |
@@ -121,7 +125,7 @@ have to drop their import. The exact edits are under
 | `just upgrade-plan [vX.Y.Z]` | Upgrade: lines since this version, and each scaffold file classed pristine or customized; read-only unless `--apply-pristine` |
 | `just audio-setup` | One-time: install the audio deps and download the voice model |
 | `just audiobook` | Chaptered `.m4b` of the main text |
-| `just all` | PDF + Word + both audiobooks, then `just check` |
+| `just all` | PDF + Word + both audiobooks + the upload set, then `just check` |
 
 ## Word-count scopes and limits
 
@@ -1054,6 +1058,34 @@ report every other checkout stale.
 The audiobooks are deliberately not checked. Every prose edit would mark them
 stale and clearing that costs minutes of narration, so the warning was almost
 always present and almost never acted on.
+
+### The upload set: `just submission`
+
+A journal's form wants the manuscript, the SI, the graphical abstract and a
+cover letter as separate files. `just submission` writes them to `submission/`
+with a `manifest.json` (each file's role, hash, and the manuscript it came
+from), after a fresh `just paper`:
+
+- `manuscript.pdf` and `supporting-information.pdf` are page ranges of ONE
+  compile of the captured manuscript, cut at the `<si-start>` probe in
+  `paper.typ`. The SI is still an appendix of the same document, so its
+  numbering and every cross-reference match `paper.pdf`. The graphical
+  abstract lands per `[placement].submission` in `journal.toml` (default
+  `journal`: the last page of the main text).
+- `manuscript.docx` and `supporting-information.docx` are the Word projection
+  split at its SI heading, each converted by the ordinary Word export.
+- `toc-graphic.<fmt>` is the declared `toc-graphic` in the profile's
+  `[graphical-abstract] file-format`, flattened to RGB, with its resolution set
+  so it fits the journal's box, and refused below `min-dpi`.
+- `cover-letter.pdf` is `cover-letter.typ`, which reads the title and authors
+  from `config.typ`, numbers through `#s()`, and the journal name from the
+  profile. Delete the file and the step is skipped.
+
+The split files refuse to build while the source differs from the last
+`just paper` capture. Each output is recorded in `.build-state/submission.json`.
+The set is outside `verify` for the audiobooks' reason: `just check` notes a
+stale set, `just check-submission` fails on it, and `just preflight` rebuilds
+and checks it.
 
 ### The Word export is more delicate than it looks
 

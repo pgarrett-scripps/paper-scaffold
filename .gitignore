@@ -33,6 +33,10 @@ stats-rendered.json
 # just viz diagnostics: regenerated on demand, never part of the manuscript
 viz/
 paper.docx
+# The journal upload set from `just submission`: split PDFs and Word files, the
+# graphical abstract and the cover letter, each rebuilt from the source and
+# recorded in .build-state/submission.json. Derived output, like paper.pdf.
+submission/
 
 # Audio toolchain: voice models and every generated audio file. The engine is a
 # uv dependency now (piper-tts), so there is no downloaded binary to ignore.

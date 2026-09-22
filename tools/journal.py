@@ -48,7 +48,10 @@ from document_project import keys as _keys, tomllib  # noqa: E402
 CONFIG = "journal.toml"
 PROFILES = "journals"
 PLACEMENTS = ("preprint", "journal", "none")
-DEFAULT_PLACEMENT = {"pdf": "preprint", "docx": "journal"}
+# "submission" is the split main-text PDF that `just submission` builds for the
+# journal's upload form (tools/submission.py): the journal's layout by default,
+# because that file goes to the journal, like the Word one.
+DEFAULT_PLACEMENT = {"pdf": "preprint", "docx": "journal", "submission": "journal"}
 # Section roles a profile may name. journal.toml maps each to a section path
 # of the manuscript at hand, because "the experimental section" is called
 # Methods in one paper and Experimental Procedures in the next.
@@ -65,7 +68,11 @@ WORD_KEYS = {"main-max", "counts", "excludes", "abstract-max", "keywords-max"}
 FLOAT_KEYS = {"figures-max", "tables-max", "figures-and-tables-max"}
 FIGURE_KEYS = {"min-dpi"}
 GRAPHIC_KEYS = {"required", "width-in", "height-in", "min-dpi", "label",
-                "source", "guidelines-dated"}
+                "file-format", "source", "guidelines-dated"}
+# The standalone graphical-abstract file `just toc-graphic` can write. The
+# journal's accepted list is longer (ACS also takes EPS); these are the ones
+# a raster can become without inventing vector content.
+GRAPHIC_FORMATS = ("tif", "png", "jpg")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -185,6 +192,9 @@ def load_profile(root: Path, id: str) -> Profile:
     _positive(graphic, "min-dpi", where)
     if ("width-in" in graphic) != ("height-in" in graphic):
         raise JournalError(f"{where}: [graphical-abstract] needs both width-in and height-in")
+    if "file-format" in graphic and graphic["file-format"] not in GRAPHIC_FORMATS:
+        raise JournalError(f"{where}: [graphical-abstract].file-format must be one of "
+                           f"{', '.join(GRAPHIC_FORMATS)}, got {graphic['file-format']!r}")
     if "guidelines-dated" in graphic and not DATE.match(str(graphic["guidelines-dated"])):
         raise JournalError(f"{where}: [graphical-abstract].guidelines-dated must be YYYY-MM-DD")
 
@@ -245,7 +255,7 @@ def current(root: Path = ROOT) -> tuple[Profile | None, dict | None]:
 # ------------------------------------------ what the other checkers read ---
 
 def placement(root: Path = ROOT, output: str = "pdf") -> str:
-    """Where the graphical abstract goes in `output` ("pdf" or "docx")."""
+    """Where the graphical abstract goes in `output` ("pdf", "docx" or "submission")."""
     sel = load_selection(root)
     table = sel["placement"] if sel else DEFAULT_PLACEMENT
     return table[output]
@@ -613,7 +623,10 @@ def _print_report(r: dict) -> None:
                if g.get("width_in") else "no size given")
         print(f"Graphical abstract: {where}; box {box}")
         pl = r["placement"]
-        print(f"  placed: PDF {pl['pdf']}, Word {pl['docx']}  ({CONFIG} [placement])")
+        print(f"  placed: PDF {pl['pdf']}, Word {pl['docx']}, submission PDF "
+              f"{pl.get('submission', 'journal')}  ({CONFIG} [placement])")
+        if g.get("file_format"):
+            print(f"  standalone file: {g['file_format'].upper()} (just toc-graphic)")
     print()
     if r["findings"]:
         _print_findings([Finding(**f) for f in r["findings"]])

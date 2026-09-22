@@ -179,6 +179,14 @@ generative AI tooling, disclose it in this paragraph.
 // number S1, S2, ...  (page and line numbering stay continuous.)
 #pagebreak()
 
+// The first page of the SI, for `just main-pdf` and `just si-pdf`
+// (tools/submission.py), which read it back with `typst query` and compile
+// the two halves as page ranges. Never hardcode the number: it moves whenever
+// the main text changes length. Emits no layout. Keep it directly after the
+// pagebreak above, and keep the journal-layout graphical abstract before it,
+// so the main text ends with that page and the SI starts cleanly after it.
+#context [#metadata(here().page()) <si-start>]
+
 #counter(figure.where(kind: image)).update(0)
 #counter(figure.where(kind: table)).update(0)
 #counter(heading).update(0)

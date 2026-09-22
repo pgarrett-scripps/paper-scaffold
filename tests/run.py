@@ -97,6 +97,7 @@ CASE_MODULES = (
     "slide_cases",            # slide decks
     "journal_cases",          # journal profiles and the graphical abstract
     "upgrade_plan_cases",     # tools/upgrade_plan.py against a throwaway scaffold
+    "submission_cases",       # the journal upload set in submission/
 )
 
 

@@ -108,7 +108,9 @@ build needs internet access to download dependencies and the Typst template.
 
    After changing your analysis, run `just assets` before rebuilding. Before
    submission, run `just preflight` for fresh exports, analysis checks, and an
-   online bibliography audit.
+   online bibliography audit. It also builds the upload set in `submission/`:
+   main text and SI as separate PDF and Word files, the graphical abstract in
+   the journal's format, and a cover letter.
 
 ## Go further
 
