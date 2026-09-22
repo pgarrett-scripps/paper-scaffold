@@ -59,6 +59,12 @@ DECK_TOOLS = ("slides.py", "render_stats.py", "typst_prose.py",
               "manuscript_sources.py", "manifest_validation.py",
               "atomic_io.py", "build_state.py")
 
+# A deck's handout and draft forms are written beside it as <name>-handout.pdf
+# and <name>-draft.pdf, so a deck whose own name ends that way would share an
+# output path with another deck's variant, and the second build would silently
+# replace the first. Refused by name, in source(), before anything is built.
+RESERVED_SUFFIXES = ("-handout", "-draft")
+
 
 def source(root: Path, name: str) -> Path:
     """slides/<name>.typ, or a ValueError naming what does exist.
@@ -70,6 +76,13 @@ def source(root: Path, name: str) -> Path:
     test let it through, and the result was a one-slide PDF of nothing.
     """
     path = root / SLIDES / f"{name}.typ"
+    for suffix in RESERVED_SUFFIXES:
+        if name.endswith(suffix):
+            raise ValueError(
+                f"deck name {name!r} ends in {suffix!r}, which is the suffix "
+                f"`just slides{suffix}` gives the {suffix[1:]} form of "
+                f"{name[:-len(suffix)]!r}: the two would write the same "
+                f"{SLIDES}/{name}.pdf -- rename the deck")
     if name not in slide_targets(root):
         known = ", ".join(slide_targets(root)) or "none"
         shared = (f"; {SLIDES}/{name}.typ is shared by every deck, not one"
@@ -290,8 +303,10 @@ def check_prose(root: Path = ROOT, name: str | None = None, *,
                if k.startswith(f"{SLIDES}/")}
     if name:
         source(root, name)
-        # The shared files come along with any single deck: a talk title with an
-        # em dash in it is written in slides/config.typ, not in the deck.
+        # The shared files come along with any single deck, so anything a rule
+        # reads in them is reported under the deck asked about. Their `#let`
+        # strings are code, not prose, and are not checked -- the same holds
+        # for paper-title in the manuscript's config.typ.
         keep = {name} | {Path(n).stem for n in SLIDE_SHARED}
         sources = {k: v for k, v in sources.items() if Path(k).stem in keep}
     findings = prose_check.check_slides(sources, cfg)

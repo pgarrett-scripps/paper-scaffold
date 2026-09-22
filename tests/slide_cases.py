@@ -242,6 +242,19 @@ class SlideCases(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "talk"):
             slides.source(self.root, "keynote")
 
+    def test_a_deck_named_like_a_variant_is_refused(self):
+        """slides/talk-handout.typ would write slides/talk-handout.pdf, the
+        same file `just slides-handout talk` writes; whichever built second
+        silently replaced the other."""
+        self.put("slides/talk-handout.typ", DECK)
+        self.put("slides/talk-draft.typ", DECK)
+        for name in ("talk-handout", "talk-draft"):
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(ValueError, "rename the deck"):
+                    slides.source(self.root, name)
+        # The plain deck beside them is still accepted.
+        self.assertTrue(slides.source(self.root, "talk").is_file())
+
     # --- the real deck ------------------------------------------------------
 
     def test_touying_pin_is_exact(self):
