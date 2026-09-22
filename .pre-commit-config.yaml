@@ -1,0 +1,36 @@
+# Fast gates that run on every commit. The full set (extractor tests, prose
+# rules, word limits, staleness) is `just verify`; this is only what finishes in
+# a few seconds. Install once per clone with `pre-commit install`.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-json
+        exclude: '^\.vscode/'   # JSONC with comments
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+        exclude: '\.(typ|bib|csl|svg)$'
+      - id: trailing-whitespace
+        exclude: '\.(typ|bib|csl|md)$'
+      - id: check-added-large-files
+        args: [--maxkb=5000]
+  # No ruff hooks yet: tools/ has not had a lint and format pass (38 lint
+  # errors, 44 files to reformat). When they are added, keep them to tools/:
+  # analysis/scripts/ must stay excluded, because stats.json and assets.json
+  # record the sha256 of each generator, so a formatter touching those files
+  # marks every number and figure stale (verified: it does).
+  - repo: local
+    hooks:
+      - id: typstyle
+        name: typstyle (just fmt-check)
+        entry: just fmt-check
+        language: system
+        files: '\.typ$'
+        pass_filenames: false
+      - id: check-declared
+        name: stats.json and assets.json match their producers
+        entry: just check-declared
+        language: system
+        files: '^(stats\.json|assets\.json|analysis/|tools/)'
+        pass_filenames: false

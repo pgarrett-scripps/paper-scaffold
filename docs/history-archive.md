@@ -743,4 +743,3 @@ identity source; `analysis/` inside the manuscript writing directly to
 `figures/` and `si/`; word counts, readability, density, prose-check;
 typstyle formatting pinned to the same width as the editor; staleness checks;
 offline Piper audiobooks.
-
