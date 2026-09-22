@@ -70,6 +70,14 @@ version:
     [ "$dirty" -gt 0 ] && echo "  tree    $dirty uncommitted change(s)" || echo "  tree    clean"
   fi
 
+# Run from a derived manuscript: HISTORY.md's Upgrade: lines since this version,
+# and each scaffold-owned file classed pristine (safe to replace) or customized
+# (merge by hand). Read-only; --apply-pristine copies only the pristine and new
+# files. The upstream clone is --scaffold PATH, $PAPER_SCAFFOLD, or found.
+# Plan an upgrade to a newer scaffold release (default: the latest tag)
+upgrade-plan *args:
+  @uv run --quiet python tools/upgrade_plan.py "$@"
+
 # One-time (and after any pyproject change): build the Python environment. uv
 # resolves and locks it, so every machine gets the same versions. The analysis has
 # its own separate environment; `just assets` builds it on demand.

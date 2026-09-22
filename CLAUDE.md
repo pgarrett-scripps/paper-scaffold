@@ -17,9 +17,11 @@ declarations in `stats.json` and `assets.json`. Every number and float is
 declared by the analysis and read by id, `#s("id")` and `#fig("id")`, never
 typed. `just paper` builds, `just verify` is the gate, and journal limits come
 from `journal.toml` and `journals/<profile>.toml`, never from memory. There is
-no upgrade script: to move to a newer scaffold, read the "Upgrade:" line of
-each HISTORY.md entry above this version and apply it by hand, keeping this
-project's customizations.
+no automatic merge: to move to a newer scaffold, run `just upgrade-plan`,
+which lists the "Upgrade:" line of each HISTORY.md entry above this version
+and says which scaffold files are pristine (safe to replace, `--apply-pristine`)
+and which are customized; merge those by hand, keeping this project's
+customizations.
 
 ## Read and edit the text first
 
