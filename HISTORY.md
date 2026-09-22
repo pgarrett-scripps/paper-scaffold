@@ -42,6 +42,13 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.20.1
+
+The Word resolver honoured `toc-graphic = none` by emitting a literal `#none`
+and the caption. It now treats `none` as no graphic, as `just check-journal`
+already did. Upgrade: copy `tools/resolve_typst.py`; only a manuscript that
+sets the binding to `none` is affected.
+
 ## 3.20.0
 
 Journal profiles. `journals/<name>.toml` carries one venue's limits for one

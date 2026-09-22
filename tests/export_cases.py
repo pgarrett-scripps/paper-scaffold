@@ -216,6 +216,12 @@ def run_cases() -> bool:
     if rt._toc_block("// >>> BODY START -- t\nb\n// <<< BODY END -- t\n", {}):
         print("  toc block: a manuscript without one produced content")
         ok = False
+    # `toc-graphic = none` is the documented way to say "no graphic" while
+    # keeping the placement block in paper.typ; it must not leak `#none`.
+    if rt._toc_block("#let toc-graphic = none\n#let toc-caption = [c]\n"
+                     "// >>> BODY START -- t\nb\n// <<< BODY END -- t\n", {}):
+        print("  toc block: toc-graphic = none produced content")
+        ok = False
 
     # The author line carries affiliation superscripts -- the numbers Typst
     # derived, joined for a shared appointment, absent when an author has

@@ -689,7 +689,7 @@ def _toc_block(paper_src: str, assets: dict) -> str:
     m = readability.BODY_START.search(paper_src)
     front = _strip_comments(paper_src[:m.start()] if m else paper_src)
     g = re.search(r"(?m)^#let\s+toc-graphic\s*=\s*(\S.*)$", front)
-    if not g:
+    if not g or g.group(1).strip() == "none":
         return ""
     expr = g.group(1).strip()
     block = resolve_notation(expr if expr.startswith("#") else "#" + expr,
