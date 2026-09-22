@@ -19,7 +19,7 @@ All optional, in plain words after the skill name. State the interpretation
 at the top of the report.
 
 - **which**: default all five. The user may drop one ("skip figures") or
-  name a subset. `/literature-check` is off by default because it needs
+  name a subset. `/paper:literature-check` is off by default because it needs
   the network and is slow; "with literature" adds it as a sixth agent.
 - **model**: default is `opus`, passed as the Agent tool's `model`
   parameter on every launch. The user may name another for all reviews or
@@ -38,14 +38,25 @@ at the top of the report.
    reviews should still run.
 3. Note the date and the commit (`git rev-parse --short HEAD`) so the
    report says what was reviewed.
+4. `just review-text` once, so `paper.review.txt` is current. This is the
+   shared reviewers' copy: prose with numbers resolved, captions numbered,
+   citation keys bracketed, no images or table bodies. Generating it here
+   means no agent re-runs it and the prose-facing reviews never open the
+   Typst sources at all. Record its word count in the report.
 
 ## Launch
 
 Start all selected reviews in a single turn so they run concurrently, one
 Agent call each. Each agent's prompt is: invoke the named skill with the
 pass-through words, write its findings file under `reviews/`, and reply
-with only the verdict paragraph and the file path. The agents share nothing
-with each other. Do not start any of them sequentially and do not run one
+with only the verdict paragraph and the file path. Every prompt also says:
+"`paper.review.txt` is current as of this launch; read it for the prose,
+numbers and captions, do not regenerate it, and do not read paper.typ,
+si-body.typ or the PDF unless your skill's job is to check the source."
+That last clause applies to `claim-audit` and `methods-vs-code`, whose
+findings are about source and code; `peer-review`, `prose-review` and the
+caption half of `figure-review` work from the copy alone. The agents share
+nothing with each other beyond that file. Do not start any of them sequentially and do not run one
 inline to save time. Wait for every agent to finish before writing the
 merged report; if one fails, say so in the report and do not invent its
 findings.
@@ -61,8 +72,8 @@ Read the five findings files (not the agents' replies) and build one list:
    that changes a result, a figure that shows the opposite of the text, a
    failing `just verify`), then majors, then minors. Within a rank, order by
    how much of the manuscript the fix touches.
-3. Route: every item keeps the owner its review assigned (`/copy-edit`,
-   `/declare-number`, `/fix-verify`, `/new-figure`, "analysis change",
+3. Route: every item keeps the owner its review assigned (`/paper:copy-edit`,
+   `/paper:declare-number`, `/paper:fix-verify`, `/paper:new-figure`, "analysis change",
    "author decision"). Group the "author decision" items at the end as
    questions.
 4. Verdict: one of "ready", "ready after the listed minors", or "not ready",

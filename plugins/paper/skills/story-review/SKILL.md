@@ -87,11 +87,11 @@ Shape:
    already defensible, and the smallest set of changes that would make it
    so, with a total cost in days.
 2. **To publish**: the required changes, numbered, each with its cost and
-   its owner: `/copy-edit`, `/new-figure`, "analysis change", "new
+   its owner: `/paper:copy-edit`, `/paper:new-figure`, "analysis change", "new
    experiment", "cut", or "author decision" with the question stated.
 3. **Would make it better**: the rest, same shape, explicitly optional.
 4. The five sections above as the supporting detail.
 
 Print the verdict paragraph and the file path. Nothing was edited, so do
 not run `just paper` or `just verify`. This skill is not part of
-`/review-all`; its output is a plan to discuss, not a fix list.
+`/paper:review-all`; its output is a plan to discuss, not a fix list.

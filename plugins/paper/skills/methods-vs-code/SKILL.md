@@ -63,7 +63,7 @@ One verdict per row:
   code outside `analysis/`. Say where.
 
 Where a row's value also appears as a `#s()` id, prefer the id in the prose
-and say so; a typed threshold that the code also holds is a `/declare-number`
+and say so; a typed threshold that the code also holds is a `/paper:declare-number`
 case.
 
 ## Report
@@ -77,7 +77,7 @@ Write `reviews/<YYYY-MM-DD>-methods-vs-code.md` (create the directory). Shape:
 3. Unstated choices as a list the author can paste into the methods once
    confirmed.
 
-Route fixes to `/copy-edit` (wording), `/declare-number` (a typed
+Route fixes to `/paper:copy-edit` (wording), `/paper:declare-number` (a typed
 parameter the code holds), "analysis change" (the code is wrong), or
 "author decision" (which side is right is a scientific call). Apply none of
 them here. Finish by printing the verdict paragraph and the file path.

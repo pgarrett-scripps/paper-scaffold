@@ -248,9 +248,11 @@ Twelve workflows ship as skills: four that edit (`copy-edit`, `fix-verify`,
 `story-review`, `peer-review`) that write findings under `reviews/`, plus
 `review-all`, which runs the fix-list reviews in parallel (the network-bound
 literature check only on request; the story review is a plan to discuss and
-stays out) and merges them. Their maintained files live in `.claude/skills/`;
-`.agents/skills` is a relative symlink to that directory so Codex discovers the
-same instructions. Both paths travel with `new-paper.sh` into derived papers.
+stays out) and merges them. Their maintained files live in `plugins/paper/skills/`
+in the scaffold and reach every paper as the `paper` Claude Code plugin
+(`.claude/settings.json` enables it; the `paper-scaffold` marketplace serves it).
+`.agents/skills` is a symlink into the scaffold checkout so Codex discovers the
+same instructions. Neither is copied by `new-paper.sh`.
 
 | Skill | Does |
 |---|---|

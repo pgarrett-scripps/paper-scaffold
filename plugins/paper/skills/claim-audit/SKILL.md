@@ -77,9 +77,9 @@ the author's to commit or ignore). Shape:
    claim, id(s), what the code computes, verdict, and the routed fix.
 3. Proposed guards as a ready-to-apply list of stats.json `expect` edits.
 
-Route every fix to an existing owner: wording to `/copy-edit`, a number with
-no declaration to `/declare-number`, a guard or checksum problem to
-`/fix-verify`, a wrong computation to "analysis change", and an ambiguity
+Route every fix to an existing owner: wording to `/paper:copy-edit`, a number with
+no declaration to `/paper:declare-number`, a guard or checksum problem to
+`/paper:fix-verify`, a wrong computation to "analysis change", and an ambiguity
 only the author can resolve to "author decision" with the question stated.
 Do not apply any of them in this pass.
 

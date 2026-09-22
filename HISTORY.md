@@ -75,6 +75,21 @@ derived manuscript on this machine now carries the same paragraph at 3.20.3.
 Upgrade: optional; copy the paragraph into CLAUDE.md with the version written
 in.
 
+## 3.21.0
+
+Skills moved out of `.claude/skills/` into a Claude Code plugin, `paper`, served
+from this repository as the `paper-scaffold` marketplace. Eleven repos carried
+byte-identical copies and every skill fix meant twelve files times eleven
+commits. Now a paper enables `paper@paper-scaffold` in `.claude/settings.json`
+and gets the current skills. Slash names gain the plugin prefix:
+`/review-all` is `/paper:review-all`. The review skills also share one
+`paper.review.txt` generated once by `/paper:review-all`, instead of each
+agent re-reading the Typst sources.
+
+Upgrade: `git rm -r .claude/skills`, add `{"enabledPlugins": {"paper@paper-scaffold": true}}`
+to `.claude/settings.json`, `claude plugin marketplace add pgarrett-scripps/paper-scaffold`
+once per machine, and repoint `.agents/skills` at `<scaffold>/plugins/paper/skills`.
+
 ## 3.20.3
 
 Three fixes the 3.20 roll-out across ten manuscripts found. `just paper`,

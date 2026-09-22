@@ -1,5 +1,6 @@
 """Regression cases for the contracts that a green example did not exercise."""
 from __future__ import annotations
+import os
 
 import contextlib
 import io
@@ -267,7 +268,7 @@ class Hardening(unittest.TestCase):
             target = source / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / name, target)
-        shutil.copytree(ROOT / ".claude/skills", source / ".claude/skills")
+        shutil.copytree(ROOT / "plugins/paper/skills", source / "plugins/paper/skills")
         (source / ".agents").mkdir()
         shutil.copy2(ROOT / ".agents/skills", source / ".agents/skills",
                      follow_symlinks=False)
@@ -284,7 +285,8 @@ class Hardening(unittest.TestCase):
         self.assertTrue(all(not (destination / name).exists() for name in artifacts))
         shared = destination / ".agents/skills"
         self.assertTrue(shared.is_symlink())
-        self.assertEqual(shared.readlink().as_posix(), "../.claude/skills")
+        self.assertEqual(shared.readlink().as_posix(),
+                         os.path.relpath(source / "plugins/paper/skills", destination / ".agents"))
         expected = {"copy-edit", "fix-verify", "declare-number", "new-figure",
                     "claim-audit", "methods-vs-code", "figure-review", "peer-review",
                     "review-all", "prose-review",
@@ -292,9 +294,9 @@ class Hardening(unittest.TestCase):
         self.assertEqual({p.name for p in shared.iterdir()}, expected)
         for name in expected:
             skill = shared / name / "SKILL.md"
-            canonical = destination / ".claude/skills" / name / "SKILL.md"
+            canonical = source / "plugins/paper/skills" / name / "SKILL.md"
             self.assertEqual(skill.resolve(), canonical.resolve())
-            original = ROOT / ".claude/skills" / name / "SKILL.md"
+            original = ROOT / "plugins/paper/skills" / name / "SKILL.md"
             self.assertEqual(skill.read_bytes(), original.read_bytes())
 
     def test_trace_nonfinite_input_still_has_structured_error(self):

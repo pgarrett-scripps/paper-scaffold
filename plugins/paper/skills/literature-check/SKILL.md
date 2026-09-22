@@ -11,7 +11,7 @@ model: opus
 Work from the manuscript root and follow AGENTS.md/CLAUDE.md and STYLE.md
 "Citations". This skill is read-only: it never edits prose or
 references.bib. It uses the network, so it is slow, its answer has a shelf
-life, and it is not part of `just verify` or the default `/review-all`.
+life, and it is not part of `just verify` or the default `/paper:review-all`.
 
 Scope defaults to every citation in paper.typ and si-body.typ. The user may
 narrow it to a section, to one or more bib keys, or to one of the three
@@ -102,7 +102,7 @@ Shape:
    into references.bib and the sentence it should attach to.
 5. Pass 3 as a short list.
 
-Route fixes to `/copy-edit` (the sentence overstates what the source
+Route fixes to `/paper:copy-edit` (the sentence overstates what the source
 says), "bibliography change" (add, replace, or update an entry in
 references.bib, with the resolved entry given), or "author decision" (a
 priority or framing question). Apply none of them here. Print the verdict

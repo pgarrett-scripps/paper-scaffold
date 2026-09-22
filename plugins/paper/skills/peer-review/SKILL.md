@@ -38,7 +38,12 @@ loosely and state the interpretation at the top of the report.
 
 1. `just review-text` writes `paper.review.txt`: the prose with numbers
    resolved, captions numbered, and citation keys in brackets. This is the
-   reviewers' copy. Run it; it does not need a current PDF.
+   reviewers' copy. Run it unless the caller says it is already current
+   (`/paper:review-all` generates it once for every review); it does not need a
+   current PDF. Reviewers read this file and nothing else of the manuscript:
+   not paper.typ, not si-body.typ, not the PDF. Everything a referee sees
+   is in the copy, and the sources cost several times the tokens to say the
+   same thing.
 2. `references.bib` for what the bracketed keys refer to.
 3. In full depth, where a reviewer's point turns on a number: `just trace
    <id> --json` and the generator it names. Where it turns on a figure: view
@@ -47,17 +52,19 @@ loosely and state the interpretation at the top of the report.
 4. STYLE.md "Claims" and "Scientific terms and concrete claims" as the house
    standard for what counts as an overstatement.
 
-Do not run `/claim-audit`, `/methods-vs-code`, or `/figure-review` inside
+Do not run `/paper:claim-audit`, `/paper:methods-vs-code`, or `/paper:figure-review` inside
 this pass. If one of them has a recent file under `reviews/`, the editor may
 cite it; otherwise recommend it where a reviewer's point would be settled by
 it.
 
 ## Run the panel
 
-Give each reviewer the review text and their brief, and have them write
-independently, without seeing the other reports. Run each as its own agent
-when agents are available, so they do not share conclusions; otherwise write
-them one at a time from a fresh reading. Each reviewer writes in the form a
+Give each reviewer the path to `paper.review.txt` and their brief, and have
+them write independently, without seeing the other reports. Run each as its
+own agent when agents are available, so they do not share conclusions;
+otherwise write them one at a time from a fresh reading. A reviewer agent's
+prompt names the file and says not to regenerate it or open the sources;
+its whole reading is that one file plus `references.bib` on demand. Each reviewer writes in the form a
 journal expects:
 
 1. A summary of the paper in their own words (two to four sentences), so the
@@ -88,8 +95,8 @@ After the reports, write an editor's section:
 2. Where the reviewers agree, where they disagree, and which side the
    evidence in the manuscript supports.
 3. A consolidated, deduplicated list of required changes, each routed to the
-   owner that would make it: `/copy-edit` for wording, `/declare-number` for
-   an undeclared value, `/fix-verify` for a pipeline finding, `/new-figure`
+   owner that would make it: `/paper:copy-edit` for wording, `/paper:declare-number` for
+   an undeclared value, `/paper:fix-verify` for a pipeline finding, `/paper:new-figure`
    for a missing or changed asset, "analysis change", or "author decision"
    with the question stated. In pre-submission stance, order this list by
    cost and mark which items block submission.

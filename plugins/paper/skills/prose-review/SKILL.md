@@ -11,8 +11,8 @@ model: opus
 Work from the manuscript root and follow AGENTS.md/CLAUDE.md and STYLE.md,
 especially "Sentences", "Words", and "Scientific terms and concrete claims".
 This skill is read-only: it writes one findings file and routes every fix to
-`/copy-edit`. The question it answers is not "is this claim true" (that is
-`/claim-audit`) but "would a domain expert have written this sentence".
+`/paper:copy-edit`. The question it answers is not "is this claim true" (that is
+`/paper:claim-audit`) but "would a domain expert have written this sentence".
 
 Scope defaults to the abstract (config.typ) and everything between the BODY
 markers in paper.typ, including captions. The user may narrow it to a
@@ -29,8 +29,11 @@ next time. Propose; do not edit the file.
 
 ## Read every sentence against these questions
 
-Read the source, not the PDF. Use `just review-text` for a copy with numbers
-resolved if the build is not current. For each sentence in scope, ask:
+Read `paper.review.txt`, not the PDF and not the Typst sources: run
+`just review-text` unless the caller says the copy is current. It has every
+number resolved and every caption in place, at a fraction of the tokens of
+paper.typ plus stats.json. Open the source only to quote a `file:line` for
+a finding. For each sentence in scope, ask:
 
 1. **Does every noun phrase have a referent?** "Signal landscape",
    "analytical framework", "information-rich regime", "holistic view",
@@ -75,7 +78,7 @@ the sentence loses nothing, or "ask author: <question>" when a real
 statement is missing. Never invent a measurement, mechanism, or comparison
 to fill a vague phrase; that is a worse fault than the one being fixed. A
 replacement that would change a scientific claim is routed to
-`/claim-audit`, not written here.
+`/paper:claim-audit`, not written here.
 
 Group a phrase that recurs into one finding with its count and locations.
 Rank by where a reader forms their impression: the abstract, the first
@@ -91,7 +94,7 @@ Write `reviews/<YYYY-MM-DD>-prose-review.md` (create the directory). Shape:
    text would read as expert-written after the fixes.
 2. The mechanical layer's output, verbatim, under its own heading.
 3. The findings table: severity (major / minor), location, phrase, question
-   failed, replacement, routed to `/copy-edit` or `/claim-audit` or "ask
+   failed, replacement, routed to `/paper:copy-edit` or `/paper:claim-audit` or "ask
    author".
 4. Proposed prose-check.toml additions, if any.
 

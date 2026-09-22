@@ -20,8 +20,12 @@ main text or SI cites. The user may name one or more ids.
 
 1. `just trace <id> --json` for the path, generator, declared inputs, and
    every citing sentence with its `file:line`.
-2. The caption, from the `#figure(...)` block in paper.typ or si-body.typ.
-3. Every sentence in the prose that cites the label, from the trace `uses`.
+2. The caption and every citing sentence, from `paper.review.txt` (run
+   `just review-text` first unless the caller says it is current). The copy
+   has captions numbered and numbers resolved, so this is one read for all
+   assets instead of a source read per `#figure(...)` block. Use the trace
+   `uses` for the `file:line` of each citing sentence; open paper.typ or
+   si-body.typ only when a finding needs the exact source line quoted.
 4. The rendered file. For a figure, view the PNG or SVG directly. For a
    generated table, read the `si/*.typ` file; do not rasterize the PDF for
    this unless a layout defect is the question.
@@ -65,8 +69,8 @@ Write `reviews/<YYYY-MM-DD>-figure-review.md` (create the directory). Shape:
    minor), what the text says, what the figure shows, evidence, routed fix.
 3. Assets with no findings as a single list.
 
-Route fixes to `/copy-edit` (caption or citing sentence), `/new-figure` or
-"generator change" (the plot itself), `/declare-number` (a value in a
+Route fixes to `/paper:copy-edit` (caption or citing sentence), `/paper:new-figure` or
+"generator change" (the plot itself), `/paper:declare-number` (a value in a
 caption typed by hand), or "author decision". Apply none of them here.
 Finish by printing the verdict paragraph and the file path. Nothing was
 edited, so do not run `just paper` or `just verify`.

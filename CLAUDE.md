@@ -191,36 +191,39 @@ Before a wording-only pass (yours or an agent's): `just edit-baseline`, edit,
 never invented; references, floats and headings must survive exactly. Read the
 edited sentences for meaning even when the guard passes.
 
-Twelve packaged workflows ship as skills in `.claude/skills/`. Four edit:
-`/copy-edit` (a wording pass bracketed by the edit guard), `/fix-verify`
-(clear a failing gate the intended way), `/declare-number` (route a typed
-numeral through the four tiers), `/new-figure` (all four steps, including the
+Twelve packaged workflows ship as the `paper` plugin (`plugins/paper/skills/` in the
+scaffold, enabled per repo by `.claude/settings.json`). Four edit:
+`/paper:copy-edit` (a wording pass bracketed by the edit guard), `/paper:fix-verify`
+(clear a failing gate the intended way), `/paper:declare-number` (route a typed
+numeral through the four tiers), `/paper:new-figure` (all four steps, including the
 wordcount scope). Seven review and are read-only, each writing a findings file
 under `reviews/` that routes every fix to one of the editing skills:
-`/claim-audit` (each quantitative claim against the code that computes it),
-`/methods-vs-code` (the methods section against the analysis, parameter by
-parameter), `/figure-review` (each figure and table against its caption, its
-citing sentences, and its statistics), `/prose-review` (vague, decorative,
+`/paper:claim-audit` (each quantitative claim against the code that computes it),
+`/paper:methods-vs-code` (the methods section against the analysis, parameter by
+parameter), `/paper:figure-review` (each figure and table against its caption, its
+citing sentences, and its statistics), `/paper:prose-review` (vague, decorative,
 or machine-sounding language, with concrete replacements the evidence
-supports), `/literature-check` (each citation against what the cited work
+supports), `/paper:literature-check` (each citation against what the cited work
 says, missing foundational or competing work, citation hygiene; needs the
 network and never proposes a reference it did not resolve online),
-`/story-review` (the developmental pass: message, structure, which floats
+`/paper:story-review` (the developmental pass: message, structure, which floats
 to add, merge, or cut, and what analysis is missing, ranked by cost against
 acceptance with the aim of a defensible paper that gets published, not a
-perfect one), `/peer-review` (a small panel of
+perfect one), `/paper:peer-review` (a small panel of
 reviewer personas and an editor's decision, with loose parameters for scope,
-panel, journal, and depth). `/review-all` runs them in parallel, the
+panel, journal, and depth). `/paper:review-all` runs them in parallel, the
 literature check only on request and the story review never (its output is
 a plan to discuss, not a fix list), and merges their findings into one ranked list with a ship verdict. The review
 skills run forked, as their own agents, pinned to Opus by `model: opus` in
-their frontmatter; `/review-all` passes the same default to each launch. A
+their frontmatter; `/paper:review-all` passes the same default to each launch. A
 review skill never edits the manuscript.
-Codex discovers the same files through `.agents/skills`, a relative symlink to
-`.claude/skills`. Use `/copy-edit` in Claude Code or `$copy-edit` in Codex
-(likewise for the other names), or select the skill from a matching request.
-Maintain one copy of the instructions under `.claude/skills`; do not duplicate
-them into the Codex path. Prefer the relevant skill over improvising its steps.
+Claude Code loads them from the `paper-scaffold` marketplace (register once:
+`claude plugin marketplace add pgarrett-scripps/paper-scaffold`, or the local
+checkout path). Codex discovers the same files through `.agents/skills`, a
+symlink into the scaffold checkout. Use `/paper:copy-edit` in Claude Code or
+`$copy-edit` in Codex (likewise for the other names), or select the skill from
+a matching request. The only copy of the instructions is in the scaffold; a
+paper never carries its own. Prefer the relevant skill over improvising its steps.
 
 Leave a note to self as `#todo("...")`, never as a comment. It renders as a
 loud marker in `just draft` and REFUSES to build in `just paper`, so an

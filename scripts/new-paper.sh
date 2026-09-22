@@ -143,6 +143,8 @@ tar -C "$SCAFFOLD" -cf - \
     --exclude='./.git' \
     --exclude='./.github' \
     --exclude='./scripts' \
+    --exclude='./plugins' \
+    --exclude='./.claude-plugin' \
     --exclude='./examples' \
     --exclude='./.venv' \
     --exclude='./analysis/.venv' \
@@ -184,6 +186,17 @@ tar -C "$SCAFFOLD" -cf - \
 # plain LICENSE at the root of a manuscript reads as the licence of the paper,
 # which is a different question and the author's to answer.
 [ -f "$DEST/LICENSE" ] && mv "$DEST/LICENSE" "$DEST/LICENSE.scaffold"
+
+# Skills are NOT copied. They are the `paper` plugin, served from this scaffold
+# through the `paper-scaffold` marketplace and switched on by .claude/settings.json,
+# which did travel. One skill fix then reaches every paper on the next session.
+# Codex has no plugin system, so .agents/skills points back at the scaffold
+# checkout, relative where possible; it dangles if the scaffold moves.
+rm -f "$DEST/.agents/skills"
+REL="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' \
+      "$SCAFFOLD/plugins/paper/skills" "$DEST/.agents")"
+ln -s "$REL" "$DEST/.agents/skills"
+echo "skills: plugin paper@paper-scaffold (Claude Code); .agents/skills -> $REL (Codex)"
 
 # ---------------------------------------------------------------------------
 # Fill in config.typ. Done in Python rather than sed because a title is allowed
