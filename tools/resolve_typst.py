@@ -126,17 +126,35 @@ def front_matter_probe(*, label: bool = True) -> str:
     # the head prints below the author line, so the superscripts cannot
     # disagree with it. Both config shapes are normalized here in Typst:
     # `affiliation: "..."` (one string) and `affiliations: (...)` (a tuple).
-    return ('#import "/config.typ": paper-title, paper-authors, '
-             'paper-affiliations, paper-date, paper-keywords\n'
-             "#metadata((front_matter_schema: 1, title: paper-title, "
-             "authors: paper-authors.map(a => (name: a.name, "
-             'affils: a.at("affiliations", default: '
-             '(a.at("affiliation", default: none),))'
-             ".filter(x => x != none)"
-             ".map(af => paper-affiliations.position(x => x == af))"
-             ".filter(p => p != none).map(p => p + 1))), "
-             "affils: paper-affiliations, date: paper-date, "
-             "keywords: paper-keywords))" + (" <rmeta>" if label else "") + "\n")
+    #
+    # Three bindings are OPTIONAL, and the head prints each only when
+    # config.typ declares it: paper-running-title, paper-corresponding-email
+    # (the author whose `email` matches it gets a star) and
+    # paper-corresponding-phone. config.typ is read as a module turned into a
+    # dictionary so each is looked up with a default; a manuscript that
+    # declares none of them answers this query exactly as before. Brought up
+    # from koth-paper and koth-lfq-paper, which each patched this locally.
+    return ('#import "/config.typ" as _cfg\n'
+            "#let _c = dictionary(_cfg)\n"
+            '#let _affils = _c.at("paper-affiliations")\n'
+            '#let _email = _c.at("paper-corresponding-email", default: none)\n'
+            "#metadata((front_matter_schema: 1, "
+            'title: _c.at("paper-title"), '
+            'running-title: _c.at("paper-running-title", default: none), '
+            'authors: _c.at("paper-authors").map(a => (name: a.name, '
+            "corresponding: _email != none "
+            'and a.at("email", default: none) == _email, '
+            'affils: a.at("affiliations", default: '
+            '(a.at("affiliation", default: none),))'
+            ".filter(x => x != none)"
+            ".map(af => _affils.position(x => x == af))"
+            ".filter(p => p != none).map(p => p + 1))), "
+            "affils: _affils, "
+            'date: _c.at("paper-date"), '
+            'keywords: _c.at("paper-keywords"), '
+            "corresponding-email: _email, "
+            'corresponding-phone: _c.at("paper-corresponding-phone", default: none)'
+            "))" + (" <rmeta>" if label else "") + "\n")
 
 
 def _query_front_matter() -> dict:
@@ -281,9 +299,20 @@ def resolve_notation(src: str, assets: dict, where: str) -> str:
     # stray prose. Citations (@lovelace1843) are deliberately untouched. The
     # label part repeats typst_prose.CITE's segment class because labels may
     # be multi-segment (@fig:panel:a); capturing one segment truncated them.
+    #
+    # A bracket straight after the label is Typst's supplement: `@fig:x[]`
+    # prints the bare number and `@fig:x[Panel]` prints "Panel 1". Left
+    # alone, pandoc printed "Figure 1[]" (cascade/paper patched this).
+    def crossref(m: re.Match) -> str:
+        label = f"<{m[1]}:{m[2]}>"
+        if m[3] is None:
+            return f"#ref({label})"
+        text = m[3].strip()
+        return (f"{text} " if text else "") + f"#ref({label}, supplement: none)"
+
     src = re.sub(rf"@({'|'.join(FLOAT_PREFIX)}):"
-                 rf"([A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*)",
-                 r"#ref(<\1:\2>)", src)
+                 rf"([A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*)(?:\[([^\[\]\n]*)\])?",
+                 crossref, src)
 
     # Rejoin citation clusters the 80-column reflow split across lines. Typst
     # groups adjacent citations across a soft line break, so the PDF collapses
@@ -669,8 +698,17 @@ def _author_line(meta: dict) -> str:
             parts.append(_esc(a))
             continue
         nums = ",".join(str(n) for n in a.get("affils", []))
+        # The corresponding author's star rides in the same superscript,
+        # already escaped, so _esc() on the NAME cannot double it.
+        if a.get("corresponding"):
+            nums = nums + r",\*" if nums else r"\*"
         parts.append(_esc(a.get("name", "")) + (f"#super[{nums}]" if nums else ""))
     return ", ".join(parts)
+
+
+# The SI's opening line in the projection; export_docx --main-only cuts here.
+SI_HEADING = ("#heading(level: 1, numbering: none, outlined: false)"
+              "[Supporting Information]")
 
 
 def _si_title(meta: dict) -> str:
@@ -682,10 +720,13 @@ def _si_title(meta: dict) -> str:
     passes `numbering: none`: the crossref pass numbers markup headings, and
     this one must not tick Section S1 away from the SI's first real section.
     Plain names, no affiliation markers -- exactly what si-authors shows.
+
+    The leading page break is the PDF's: paper.typ breaks the page before
+    the SI, and without it the Word file ran the SI on straight after the
+    references (koth, koth-lfq and spectrl each forced it locally).
     """
     authors = _names(meta)
-    return ("#heading(level: 1, numbering: none, outlined: false)"
-            "[Supporting Information]\n\n"
+    return ("#pagebreak()\n\n" + SI_HEADING + "\n\n"
             f"{meta.get('title', '')}\n\n"
             + (f"_{authors}_\n\n" if authors else ""))
 
@@ -728,6 +769,40 @@ def _toc_block(paper_src: str, assets: dict) -> str:
     return block
 
 
+def _includes_si(paper_src: str) -> bool:
+    """Whether paper.typ includes si-body.typ, comments aside.
+
+    A manuscript whose SI is submitted as a separate file keeps si-body.typ
+    but does not include it; appending it anyway put the SI into the main
+    Word file (cascade/paper patched this).
+    """
+    return bool(_SI_INCLUDE.search(_strip_comments(paper_src)))
+
+
+_SI_INCLUDE = re.compile(r'#include\s+"/?si-body\.typ"')
+
+
+def _post_si_content(paper_src: str, assets: dict) -> str:
+    """Content paper.typ places AFTER the SI include, resolved.
+
+    The PDF prints it after the SI (a closing TOC graphic, say); the Word
+    export dropped it, because the SI is projected from its own file and the
+    back-matter slice stops before the include (uno-lfq-paper patched this).
+    """
+    end = readability.BODY_END.search(paper_src)
+    if not end:
+        return ""
+    tail = _strip_comments(paper_src[end.end():])
+    includes = list(_SI_INCLUDE.finditer(tail))
+    if len(includes) != 1:
+        return ""
+    content = resolve_notation(tail[includes[0].end():], assets,
+                               "paper.typ (after Supporting Information)").strip()
+    if content and NATIVE_NUMBERING is not None:
+        content = export_includes(content, ROOT / "paper.typ")
+    return content
+
+
 PLACEMENTS = ("preprint", "journal", "none")
 TOC_LABEL = "For Table of Contents Only"
 
@@ -735,8 +810,10 @@ TOC_LABEL = "For Table of Contents Only"
 def _toc_section(toc: str) -> str:
     """The graphical abstract in the journal's layout: its own labeled
     section on the last page of the main manuscript. A #heading CALL, as the
-    SI title is, so the crossref pass does not number it."""
-    return ("#heading(level: 1, numbering: none, outlined: false)"
+    SI title is, so the crossref pass does not number it, and on a page of
+    its own, as the SI title is."""
+    return ("#pagebreak()\n\n"
+            "#heading(level: 1, numbering: none, outlined: false)"
             f"[{TOC_LABEL}]\n\n{toc}")
 
 
@@ -765,6 +842,11 @@ def build(front_matter: dict | None = None, placement: str = "preprint") -> str:
     # everything, which citeproc read literally -- the reference list landed
     # at the very bottom of the Word file, underneath the entire SI.
     back = _back_matter(paper_src, assets)
+    if meta.get("corresponding-phone"):
+        # Author Information may print the binding; `context` and config
+        # imports do not travel, so the value is substituted here.
+        back = back.replace("#paper-corresponding-phone",
+                            _esc(meta["corresponding-phone"]))
     if back:
         body += "\n\n" + back
     config_src = (ROOT / "config.typ").read_text()
@@ -787,7 +869,11 @@ def build(front_matter: dict | None = None, placement: str = "preprint") -> str:
     # landed on. Appending anyway would put the entire SI in twice -- once
     # here, once through the inliner below -- silently.
     si = ROOT / "si-body.typ"
-    if si.is_file() and _SI_MARK not in body and not re.search(r'#include\s+"/?si-body\.typ"', body):
+    #
+    # And only when paper.typ includes it at all: see _includes_si.
+    appended = (si.is_file() and _includes_si(paper_src) and _SI_MARK not in body
+                and not _SI_INCLUDE.search(body))
+    if appended:
         # The marker sits on its own line so the SI's first heading still
         # starts a line, which is what the heading scan anchors on.
         si_src = export_includes(si.read_text(), si) if NATIVE_NUMBERING is not None else si.read_text()
@@ -812,6 +898,11 @@ def build(front_matter: dict | None = None, placement: str = "preprint") -> str:
 
     body = re.sub(r'#include\s+"([^"]+)"', inline, body)
 
+    if appended:
+        trailing = _post_si_content(paper_src, assets)
+        if trailing:
+            body += "\n\n" + trailing
+
     authors = _author_line(meta)
     affils = "\n".join(f"{i + 1}. {_esc(a)}" for i, a in
                        enumerate(meta.get("affils", [])))
@@ -819,13 +910,24 @@ def build(front_matter: dict | None = None, placement: str = "preprint") -> str:
     if NATIVE_NUMBERING is not None:
         abstract = export_includes(abstract, ROOT / "config.typ")
     keywords = ", ".join(meta.get("keywords") or [])
+    # Optional front matter, printed only when config.typ declares it, so a
+    # manuscript without it gets exactly the head it always did.
+    running = meta.get("running-title")
+    email = meta.get("corresponding-email")
+    phone = meta.get("corresponding-phone")
+    contact = ""
+    if email:
+        contact = (f"#super[\\*]Correspondence: {_esc(email)}"
+                   + (f"; telephone: {_esc(phone)}" if phone else "") + ".\n\n")
 
     head = (
         f"{ABOUT}\n"
         f"= {meta.get('title', '')}\n\n"
-        f"{authors}\n\n"
+        + (f"*Running title:* {_esc(running)}\n\n" if running else "")
+        + f"{authors}\n\n"
         f"{affils}\n\n"
-        f"== Abstract\n\n{abstract}\n\n"
+        + contact
+        + f"== Abstract\n\n{abstract}\n\n"
         + (f"*Keywords:* {keywords}\n\n" if keywords else "")
         + (toc + "\n\n" if toc and placement == "preprint" else "")
     )

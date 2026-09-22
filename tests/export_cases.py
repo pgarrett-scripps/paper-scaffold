@@ -267,6 +267,41 @@ def run_cases() -> bool:
     if re.search(r"(?m)^=+ ", si_title):
         print("  si title: a markup heading would steal the SI's S1")
         ok = False
+    # The PDF starts the SI on a new page; the Word file ran it on.
+    if not si_title.startswith("#pagebreak()"):
+        print(f"  si title: no page break before the SI: {si_title!r}")
+        ok = False
+    if not rt._toc_section("x").startswith("#pagebreak()"):
+        print("  toc section: no page break before it")
+        ok = False
+
+    # Optional front matter (koth-paper, koth-lfq-paper): the corresponding
+    # author's star joins the affiliation superscript, escaped.
+    line = rt._author_line({"authors": [
+        {"name": "A", "affils": [1], "corresponding": True},
+        {"name": "B", "affils": [], "corresponding": True},
+        {"name": "C", "affils": [2], "corresponding": False}]})
+    if line != "A#super[1,\\*], B#super[\\*], C#super[2]":
+        print(f"  author line: corresponding star misplaced: {line!r}")
+        ok = False
+
+    # The SI is appended only when paper.typ includes it (cascade/paper), and
+    # what follows the include survives (uno-lfq-paper).
+    if rt._includes_si('// #include "si-body.typ"\n') or \
+            not rt._includes_si('#include "si-body.typ"\n'):
+        print("  si include: a commented include counted, or a real one missed")
+        ok = False
+    tail = ("// >>> BODY START\nBody.\n// <<< BODY END\n"
+            '#include "si-body.typ"\n\nClosing words.\n')
+    saved = rt.NATIVE_NUMBERING
+    rt.NATIVE_NUMBERING = None
+    try:
+        after = rt._post_si_content(tail, {})
+    finally:
+        rt.NATIVE_NUMBERING = saved
+    if after != "Closing words.":
+        print(f"  post-SI content: lost or mangled: {after!r}")
+        ok = False
     return ok
 
 if __name__ == "__main__":

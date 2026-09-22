@@ -75,6 +75,54 @@ derived manuscript on this machine now carries the same paragraph at 3.20.3.
 Upgrade: optional; copy the paragraph into CLAUDE.md with the version written
 in.
 
+## 3.23.0 (Word export)
+
+The Word-export fixes that paper projects made locally in
+`tools/export_docx.py` and `tools/resolve_typst.py` are now upstream. General
+fixes, on for every export:
+
+- Pagination (`export_docx.paginate`): table rows never split, the first row
+  repeats, tables of up to 20 rows stay on one page, captions keep their
+  lines, table captions and figure images keep with what follows, and bold
+  run-in labels and empty lines after headings keep with the next paragraph.
+- `#pagebreak()` is a real page break, not a horizontal rule. The SI title
+  and the "For Table of Contents Only" section start on a new page, as in the
+  PDF.
+- The manuscript title uses Word's Title style, not Heading 1.
+- `image(..., width: 70%)` is sized against the text width instead of
+  pandoc's fixed 420 pt.
+- The empty paragraph left by a `<label>` after a heading or float is folded
+  into the paragraph before it.
+- `docProps/custom.xml` no longer records absolute `.bib` and `.csl` paths.
+- `#bibliography(title: "...")` in string form is read.
+- `@fig:x[]` gives the bare number and `@fig:x[Panel]` gives "Panel 1".
+- The SI is appended only when `paper.typ` includes `si-body.typ`.
+- Content after that include is kept.
+
+Opt-in:
+
+- `paper-running-title`, `paper-corresponding-email` and
+  `paper-corresponding-phone` in `config.typ` add a running-title line, a
+  star on the matching author (`email:` field) and a correspondence line.
+- `uv run python tools/export_docx.py --main-only` writes `paper-main.docx`
+  without the SI.
+- `tools/paper_word_reference.py --black-headings` regenerates the template
+  with black title and headings.
+
+Per-table column widths stay project code: set them in the source with `fr`
+columns (`columns: (2fr, 1fr, 1fr)`), which reach Word as proportional widths.
+
+This covers local fixes in koth-paper, koth-lfq-paper, uno-paper,
+uno-lfq-paper, spectrl-paper, cascade, DeNovoRust and d_noise-paper.
+
+Upgrade: copy `tools/export_docx.py`, `tools/resolve_typst.py` and
+`tools/paper_word_reference.py`, then delete each local patch this list now
+covers. Keep patches it does not cover, such as fixed column widths,
+table font sizes and caption sizes. To get black headings in an existing
+template, recolour the styles in Word, or regenerate the template with
+`--black-headings` (this discards other template edits). Then run
+`just docx` and `just verify`.
+
 ## 3.22.0
 
 `/paper:review-all` now splits the model by the kind of review. The four
