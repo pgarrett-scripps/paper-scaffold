@@ -6,9 +6,13 @@ import io
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
 
 from document_project import load_project
 from document_build import build, status, saved_metrics

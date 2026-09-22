@@ -5,18 +5,22 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 import zipfile
 
 import pypandoc
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
+
 import readability
 from export_docx import style_code
 from manuscript_snapshot import resolve_source
 from resolve_typst import _protect_raw, _restore_raw
 
-ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / "tests" / "code-fixture.typ"
 NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 W = "{" + NS["w"] + "}"
