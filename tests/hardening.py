@@ -285,7 +285,10 @@ class Hardening(unittest.TestCase):
         shared = destination / ".agents/skills"
         self.assertTrue(shared.is_symlink())
         self.assertEqual(shared.readlink().as_posix(), "../.claude/skills")
-        expected = {"copy-edit", "fix-verify", "declare-number", "new-figure"}
+        expected = {"copy-edit", "fix-verify", "declare-number", "new-figure",
+                    "claim-audit", "methods-vs-code", "figure-review", "peer-review",
+                    "review-all", "prose-review",
+                    "literature-check"}
         self.assertEqual({p.name for p in shared.iterdir()}, expected)
         for name in expected:
             skill = shared / name / "SKILL.md"

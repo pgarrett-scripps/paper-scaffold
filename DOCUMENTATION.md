@@ -242,7 +242,12 @@ and specific rendering defects. Copy-editing records its initial metrics with
 `just verify`. The writing review also checks defined terminology and concrete,
 supported claims using [STYLE.md](STYLE.md#scientific-terms-and-concrete-claims).
 
-Four workflows ship as skills. Their maintained files live in `.claude/skills/`;
+Eleven workflows ship as skills: four that edit (`copy-edit`, `fix-verify`,
+`declare-number`, `new-figure`) and six read-only reviews (`claim-audit`,
+`methods-vs-code`, `figure-review`, `prose-review`, `literature-check`,
+`peer-review`) that write findings under `reviews/`, plus `review-all`, which
+runs them in parallel (the network-bound literature check only on request) and
+merges them. Their maintained files live in `.claude/skills/`;
 `.agents/skills` is a relative symlink to that directory so Codex discovers the
 same instructions. Both paths travel with `new-paper.sh` into derived papers.
 

@@ -191,10 +191,27 @@ Before a wording-only pass (yours or an agent's): `just edit-baseline`, edit,
 never invented; references, floats and headings must survive exactly. Read the
 edited sentences for meaning even when the guard passes.
 
-Four packaged workflows ship as skills in `.claude/skills/` — `/copy-edit`
-(a wording pass bracketed by the edit guard), `/fix-verify` (clear a failing
-gate the intended way), `/declare-number` (route a typed numeral through the
-four tiers), `/new-figure` (all four steps, including the wordcount scope).
+Eleven packaged workflows ship as skills in `.claude/skills/`. Four edit:
+`/copy-edit` (a wording pass bracketed by the edit guard), `/fix-verify`
+(clear a failing gate the intended way), `/declare-number` (route a typed
+numeral through the four tiers), `/new-figure` (all four steps, including the
+wordcount scope). Six review and are read-only, each writing a findings file
+under `reviews/` that routes every fix to one of the editing skills:
+`/claim-audit` (each quantitative claim against the code that computes it),
+`/methods-vs-code` (the methods section against the analysis, parameter by
+parameter), `/figure-review` (each figure and table against its caption, its
+citing sentences, and its statistics), `/prose-review` (vague, decorative,
+or machine-sounding language, with concrete replacements the evidence
+supports), `/literature-check` (each citation against what the cited work
+says, missing foundational or competing work, citation hygiene; needs the
+network and never proposes a reference it did not resolve online),
+`/peer-review` (a small panel of
+reviewer personas and an editor's decision, with loose parameters for scope,
+panel, journal, and depth). `/review-all` runs them in parallel, the
+literature check only on request, and merges their findings into one ranked list with a ship verdict. The review
+skills run forked, as their own agents, pinned to Opus by `model: opus` in
+their frontmatter; `/review-all` passes the same default to each launch. A
+review skill never edits the manuscript.
 Codex discovers the same files through `.agents/skills`, a relative symlink to
 `.claude/skills`. Use `/copy-edit` in Claude Code or `$copy-edit` in Codex
 (likewise for the other names), or select the skill from a matching request.
