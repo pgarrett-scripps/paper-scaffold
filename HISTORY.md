@@ -48,7 +48,7 @@ customized files and the `version` line to you. `--json` is the same plan for
 an agent.
 
 Then merge each customized file by hand, with
-`git -C "$SCAFFOLD" diff vOLD..vNEW -- <path>` beside it, set
+`git -C <scaffold> diff vOLD..vNEW -- <path>` beside it, set
 `version` in `pyproject.toml`, and run `just paper` and `just verify`. There is
 still deliberately no automatic merge: a manuscript diverges from the scaffold
 the moment real writing starts, and a merge tool cannot tell your
@@ -60,7 +60,7 @@ moving an existing manuscript onto the scaffold, see MIGRATING.md.
 (A project older than 3.23.0 has no `tools/upgrade_plan.py`: run the scaffold's
 copy with `--project PATH`, or copy the tool and the recipe in first. Before
 2.0.0 the toolchain sat in the root, so upgrading from 1.x is by hand:
-`git -C ~/Repos/paper-scaffold diff vOLD..vNEW -- justfile *.py tests/`.)
+`git -C <scaffold> diff vOLD..vNEW -- justfile *.py tests/`.)
 
 ---
 
