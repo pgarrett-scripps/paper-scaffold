@@ -234,6 +234,22 @@ def run_cases() -> bool:
     if line != "A. Uthor#super[1], B. Oth#super[1,2], C. Lone":
         print(f"  author line: got {line!r}")
         ok = False
+    # Names and affiliations are literal text: a corresponding-author star
+    # must not open emphasis, and an email must not read as a citation.
+    line = rt._author_line({"authors": [{"name": "J. Yates III*", "affils": [1]},
+                                        "j@example.edu"]})
+    if line != "J. Yates III\\*#super[1], j\\@example.edu":
+        print(f"  author line: markup not escaped: {line!r}")
+        ok = False
+
+    # A directive typstyle broke across lines is one statement; the strip
+    # must take its continuation lines too, or they ship as prose.
+    multi = ('#show raw: it => text(\n  font: "x",\n  size: 8pt,\n)\n'
+             "kept prose\n")
+    got = rt.resolve_notation(multi, {}, "t")
+    if "font" in got or "8pt" in got or "kept prose" not in got:
+        print(f"  directive strip: continuation lines leaked: {got!r}")
+        ok = False
 
     # The SI title block is a #heading CALL on purpose: `= ` markup would
     # tick the crossref pass's counter and number the SI's first real

@@ -42,6 +42,22 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.20.3
+
+Three fixes the 3.20 roll-out across ten manuscripts found. `just paper`,
+`just docx` and `just docx-check` chose the dissertation Word adapter on the
+mere presence of `manuscript.toml`, then failed a manifest that names only
+PDF targets; they now require `lib/template.typ` as well and otherwise keep
+the paper's route. The standalone-directive strip in the Word resolver and
+the prose cleaner was line-based, so a `#show` rule typstyle had broken
+across lines left its continuation lines behind as prose; it now follows
+the brackets to the line that closes the statement. And author names and
+affiliations are emitted escaped, so a corresponding-author `*` no longer
+opens emphasis and an email address no longer reads as a citation pandoc
+fails the export over. Upgrade: copy `tools/typst_prose.py`,
+`tools/resolve_typst.py`, `tools/readability.py`, `tests/export_cases.py`,
+and the three `manuscript.toml` conditions in the justfile.
+
 ## 3.20.2
 
 `tests/slide_cases.py` failed four cases in a manuscript with no `slides/`

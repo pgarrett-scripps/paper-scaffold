@@ -444,10 +444,15 @@ paper:
   set -euo pipefail
   if [[ -f manuscript.toml ]]; then
     uv run --quiet python tools/documents.py build all
+  else
+    just pdf
+  fi
+  # The dissertation Word adapter needs its template contract, not merely a
+  # manifest: a manifest that only names PDF targets keeps the paper's route.
+  if [[ -f manuscript.toml && -f lib/template.typ ]]; then
     uv run --quiet python tools/document_docx.py
     uv run --quiet python tools/export_text.py
   else
-    just pdf
     just docx
     just review-text
   fi
@@ -779,10 +784,10 @@ fmt-check:
 docx target="":
   #!/usr/bin/env bash
   set -euo pipefail
-  if [[ -f manuscript.toml ]]; then
+  if [[ -f manuscript.toml && -f lib/template.typ ]]; then
     uv run --quiet python tools/document_docx.py {{quote(target)}}
   elif [[ -n {{quote(target)}} ]]; then
-    echo "Named Word targets require manuscript.toml" >&2
+    echo "Named Word targets require manuscript.toml and the lib/template.typ contract" >&2
     exit 2
   else
     uv run --quiet python tools/build_state.py docx
@@ -796,7 +801,7 @@ document-docx target="":
 docx-check target="":
   #!/usr/bin/env bash
   set -euo pipefail
-  if [[ -f manuscript.toml ]]; then
+  if [[ -f manuscript.toml && -f lib/template.typ ]]; then
     uv run --quiet python tools/document_docx.py {{quote(target)}} --check
   else
     uv run --quiet python tools/build_state.py check

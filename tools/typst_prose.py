@@ -283,6 +283,59 @@ def markup(delim: str) -> str:
 BIBLIOGRAPHY_CALLS = ("#bibliography(", "#bibliographyx(")
 
 
+DIRECTIVE = re.compile(r"^\s*#(?:import|let|set|show)\b")
+
+
+def strip_directives(text: str, gap: str = "") -> str:
+    """Remove standalone directive lines: #import, #let, #set, #show.
+
+    A directive that typstyle broke across lines -- `#show raw: it => text(`
+    with its arguments on the lines below -- is one statement, so the strip
+    follows unbalanced brackets to the line that closes it. The old
+    single-line regex removed the opening line and left the continuation
+    lines behind as prose, which leaked a table's `#show` rule into the Word
+    export and into the word count. Strings are skipped when counting.
+    Every removed line becomes `gap`, so line structure is preserved.
+    """
+    out = []
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines):
+        if not DIRECTIVE.match(lines[i]):
+            out.append(lines[i])
+            i += 1
+            continue
+        depth = _bracket_depth(lines[i])
+        out.append(gap)
+        while depth > 0 and i + 1 < len(lines):
+            i += 1
+            depth += _bracket_depth(lines[i])
+            out.append(gap)
+        i += 1
+    return "\n".join(out)
+
+
+def _bracket_depth(line: str) -> int:
+    """Net bracket depth of one line, ignoring bracket characters in strings."""
+    depth, in_str, esc = 0, False, False
+    for ch in line:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+    return depth
+
+
 def strip_balanced(text: str, opener: str, gap: str = "") -> str:
     """Remove `opener` ... matching-close-paren blocks (e.g. `#figure( ... )`),
     along with any `<label>` that trails the closing paren.

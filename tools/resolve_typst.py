@@ -226,7 +226,7 @@ def resolve_notation(src: str, assets: dict, where: str) -> str:
     # depend on the project helpers and on gitignored stats-rendered.json, so
     # pandoc run from any other directory fails inside the very files this
     # resolver exists to eliminate. Every call they served is resolved below.
-    src = re.sub(r"(?m)^\s*#(?:import|let|set|show)\b.*$", "", src)
+    src = typst_prose.strip_directives(src)
 
     src = typst_prose.resolve_stats(src)
     src = typst_prose.resolve_lit(src)
@@ -629,13 +629,27 @@ def _back_matter(paper_src: str, assets: dict) -> str:
                             "paper.typ (back matter)").strip()
 
 
+_MARKUP = re.compile(r"([\\*_#$@<>\[\]`])")
+
+
+def _esc(text: str) -> str:
+    """A front-matter string as literal text in Typst markup.
+
+    Names and affiliations are plain strings in config.typ and the PDF prints
+    them literally; emitted into markup unescaped, "Yates III*" opened an
+    emphasis span and "j@example.edu" became a citation that pandoc's
+    citeproc then failed the whole export over.
+    """
+    return _MARKUP.sub(r"\\\1", str(text))
+
+
 def _names(meta: dict) -> str:
     """The plain author names, comma-joined -- si-authors, rebuilt.
 
     Tolerates both the probe's (name, affils) records and bare strings, so
     a test can hand in names without inventing affiliations.
     """
-    return ", ".join(a["name"] if isinstance(a, dict) else a
+    return ", ".join(_esc(a["name"] if isinstance(a, dict) else a)
                      for a in meta.get("authors", []))
 
 
@@ -652,10 +666,10 @@ def _author_line(meta: dict) -> str:
     parts = []
     for a in meta.get("authors", []):
         if isinstance(a, str):
-            parts.append(a)
+            parts.append(_esc(a))
             continue
         nums = ",".join(str(n) for n in a.get("affils", []))
-        parts.append(a.get("name", "") + (f"#super[{nums}]" if nums else ""))
+        parts.append(_esc(a.get("name", "")) + (f"#super[{nums}]" if nums else ""))
     return ", ".join(parts)
 
 
@@ -799,7 +813,7 @@ def build(front_matter: dict | None = None, placement: str = "preprint") -> str:
     body = re.sub(r'#include\s+"([^"]+)"', inline, body)
 
     authors = _author_line(meta)
-    affils = "\n".join(f"{i + 1}. {a}" for i, a in
+    affils = "\n".join(f"{i + 1}. {_esc(a)}" for i, a in
                        enumerate(meta.get("affils", [])))
     abstract = resolve_notation(_abstract(), assets, "config.typ (abstract)")
     if NATIVE_NUMBERING is not None:

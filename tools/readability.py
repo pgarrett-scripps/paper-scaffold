@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 from typst_prose import (
+    strip_directives,
     CITE,
     FOOTNOTE,
     strip_links,
@@ -116,7 +117,7 @@ def clean(text: str, gap: str = " ") -> str:
     # line comments and standalone directive lines (imports, lets, sets, shows)
     text = re.sub(r"(?m)^\s*//.*$", gap, text)
     text = re.sub(r"/\*.*?\*/", gap, text, flags=re.S)
-    text = re.sub(r"(?m)^\s*#(?:import|let|set|show)\b.*$", gap, text)
+    text = strip_directives(text, gap)
     # block code and config dumps, then whole figures (caption + table + image)
     text = re.sub(r"```.*?```", gap, text, flags=re.S)
     text = _strip_balanced(text, "#raw(", gap)
