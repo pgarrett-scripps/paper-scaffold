@@ -9,7 +9,7 @@
       "orcid": "0000-0002-8434-9693"
     }
   ],
-  "license": "MIT",
+  "license": "mit",
   "keywords": [
     "Typst",
     "reproducible research",
@@ -17,12 +17,5 @@
     "provenance",
     "manuscript",
     "AI agents"
-  ],
-  "related_identifiers": [
-    {
-      "identifier": "https://github.com/pgarrett-scripps/paper-scaffold",
-      "relation": "isSupplementTo",
-      "scheme": "url"
-    }
   ]
 }
