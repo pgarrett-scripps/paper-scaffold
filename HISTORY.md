@@ -26,9 +26,10 @@ Tag every release: `git tag -a v1.2.3 -m "..."`.
 ### Upgrading a project built on an older version
 
 ```bash
+SCAFFOLD=~/path/to/paper-scaffold                # your clone of the scaffold
 just version                                    # what the project is on
-git -C ~/Repos/paper-scaffold log --oneline vOLD..vNEW
-git -C ~/Repos/paper-scaffold diff vOLD..vNEW -- justfile tools/ tests/ scripts/
+git -C "$SCAFFOLD" log --oneline vOLD..vNEW
+git -C "$SCAFFOLD" diff vOLD..vNEW -- justfile tools/ tests/ scripts/
 ```
 
 (Before 2.0.0 the toolchain sat in the root, so upgrading from 1.x needs

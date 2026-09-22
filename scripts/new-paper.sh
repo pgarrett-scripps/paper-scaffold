@@ -177,8 +177,9 @@ tar -C "$SCAFFOLD" -cf - \
     --exclude='./audio/*.opus' \
     --exclude='./audio/paper_prose.txt' \
     --exclude='./audio/cover_*.png' \
-    --exclude='./REVIEW.md' \
     --exclude='./MIGRATING.md' \
+    --exclude='./CITATION.cff' \
+    --exclude='./.zenodo.json' \
     . | tar -C "$DEST" -xf -
 
 # The scaffold's MIT terms cover the TOOLING, which the new directory is now

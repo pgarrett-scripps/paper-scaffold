@@ -1,0 +1,28 @@
+{
+  "title": "paper-scaffold: provenance-checked Typst manuscripts that are safe for AI agents to edit",
+  "upload_type": "software",
+  "description": "paper-scaffold is a Typst manuscript scaffold in which every number in the prose is read by id from a declaration file written by the analysis, with a checksum, a record of the code and data behind it, and guards on what the prose assumes about it. A static gate reports stale figures, tables and builds without re-running the analysis, and checks prose rules, word limits and journal profiles. Word export goes through pandoc with native equations. An edit guard lets a wording pass drop a number but never invent one, and a set of packaged agent skills audits claims and methods against the code that computes them.",
+  "creators": [
+    {
+      "name": "Garrett, Patrick T.",
+      "affiliation": "The Scripps Research Institute",
+      "orcid": "0000-0002-8434-9693"
+    }
+  ],
+  "license": "MIT",
+  "keywords": [
+    "Typst",
+    "reproducible research",
+    "scientific writing",
+    "provenance",
+    "manuscript",
+    "AI agents"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/pgarrett-scripps/paper-scaffold",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ]
+}

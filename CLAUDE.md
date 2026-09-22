@@ -9,12 +9,12 @@ task is moving an existing manuscript onto this scaffold, follow
 ## Paper scaffold
 
 Built on [paper-scaffold](https://github.com/pgarrett-scripps/paper-scaffold)
-SCAFFOLD_VERSION (`just version`; upstream checkout at `~/Repos/paper-scaffold`).
-The scaffold owns the toolchain: `justfile`, `tools/`, `tests/`, `journals/`,
-`word/` and the staleness records in `.build-state/`. This project owns the
-manuscript: `paper.typ`, `config.typ`, `si-body.typ`, `analysis/`, and the
-declarations in `stats.json` and `assets.json`. Every number and float is
-declared by the analysis and read by id, `#s("id")` and `#fig("id")`, never
+SCAFFOLD_VERSION (`just version`; upstream is your local clone of that
+repository). The scaffold owns the toolchain: `justfile`, `tools/`, `tests/`,
+`journals/`, `word/` and the staleness records in `.build-state/`. This project
+owns the manuscript: `paper.typ`, `config.typ`, `si-body.typ`, `analysis/`,
+and the declarations in `stats.json` and `assets.json`. Every number and float
+is declared by the analysis and read by id, `#s("id")` and `#fig("id")`, never
 typed. `just paper` builds, `just verify` is the gate, and journal limits come
 from `journal.toml` and `journals/<profile>.toml`, never from memory. There is
 no upgrade script: to move to a newer scaffold, read the "Upgrade:" line of
