@@ -87,6 +87,8 @@ build needs internet access to download dependencies and the Typst template.
    | `paper.typ` | Main text |
    | `si-body.typ` | Supporting information |
    | `references.bib` | Bibliography, for both reference lists |
+   | `slides/` | Talk decks, built from the same figures and numbers |
+   | `slides/config.typ` | The talks' title, authors and date, separate from the paper's |
 
    The Supporting Information prints its own reference list, since journals
    take it as a separate file. Cite `@si-key` in `si-body.typ` and `@key` in

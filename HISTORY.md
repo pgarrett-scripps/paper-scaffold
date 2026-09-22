@@ -44,6 +44,48 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ## Unreleased
 
+`tests/run.py` is a fixture harness and a registry again. It had grown to 2,271
+lines: the golden-file extractor check it documents, plus fourteen unrelated
+suites that ran as a side effect of `structural_cases()`, which chained thirteen
+of them at its end. A failure in the Word export was reported under "structural
+cases", and adding a suite meant editing a function about prose rules. Those
+suites are now one case module per subject under `tests/` -- `prose_cases.py`,
+`bibliography_cases.py`, `asset_cases.py`, `stats_cases.py`,
+`stats_ownership_cases.py`, `resolver_cases.py`, `export_cases.py`,
+`adoption_cases.py`, `new_paper_cases.py`, joining the five that already lived
+this way -- listed in `CASE_MODULES`, which names whichever one fails. Every
+module now also runs on its own (`uv run python tests/stats_cases.py`); three
+that could not before, because they read `sys.path` as `run.py` had left it, set
+it themselves. No case changed. The split found one real coupling: the adoption
+cases imported `_assets` off a path `stats_cases()` happened to add first.
+
+Upgrade: copy `tests/` wholesale. Nothing outside it changed.
+
+Slide decks are part of the pipeline. A deck lives in `slides/`, is built by
+name with `just slides <name>`, and reuses the manuscript's own declarations:
+`#s("id")` from `stats.json`, `#fig("id")` / `#tbl("id")` from `assets.json`,
+and `references.bib`. The talks' own identity -- title, author line,
+institution, date, aspect ratio -- is `slides/config.typ`, separate from the
+manuscript's `config.typ` because a talk title is usually not the paper title,
+and because a `manuscript.toml` project has no root `config.typ` to read.
+Touying supplies
+the slides (metropolis theme, speaker notes, handout mode, appendix); all of it
+is configured in `slides/theme.typ`. `just slides-handout`, `just slides-notes`
+(a `.pdfpc` sidecar for presenter tools), `just slides-draft`, `just
+slides-list` and `just slides-fmt` round it out.
+
+Decks are outside the gate: `just verify`, `just check` and `just fmt` say
+nothing about them, and `just slides-check` answers staleness plus four prose
+rules on demand. Two things in `verify` DO change, because the id index now
+includes decks: a number or figure used only in a talk is no longer reported as
+declared-but-unread, and `just trace <id>` lists the deck among its use sites.
+An id a deck references but nothing declares is a warning, not an error -- a
+half-written talk must not fail the manuscript's gate.
+
+Upgrade: nothing to do; a project with no `slides/` directory behaves exactly as
+before. To adopt, copy `slides/`, `tools/slides.py`, `tests/slide_cases.py` and
+the `slides*` recipes, then replace the example deck.
+
 The Supporting Information carries its own reference list, for journals that
 take the SI as a separate file. Typst allows one native `#bibliography` per
 document, so the SI's is set by Alexandria: `#show: alexandria(prefix: "si-",

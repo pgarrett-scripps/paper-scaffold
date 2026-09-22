@@ -10,6 +10,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ENTRYPOINTS = ("paper.typ", "config.typ", "si-body.typ")
+
+# Slide decks. A deck is a .typ file directly under slides/; theme.typ and any
+# `_`-prefixed file are shared includes, reached THROUGH a deck and never built
+# as one. The glob is the manifest on purpose: a list of decks in a config file
+# is a second place to update and therefore a place to drift.
+SLIDES = "slides"
 CALL = re.compile(r'(?<![\w-])#?(s|n|fig|tbl)\(\s*"([^"\n]+)"')
 DEPENDENCY = re.compile(r'#(?:include|import)\s+"([^"\n]+)"')
 
@@ -226,9 +232,56 @@ def source_files(root: Path = ROOT, entrypoints=None) -> dict[str, str]:
     return found
 
 
-def usages(root: Path = ROOT) -> list[dict]:
+# The two shared files in slides/ that are not decks: every deck imports the
+# theme, and the theme imports the talks' identity. Naming them here is what
+# stops `just slides` from trying to compile either one as a talk. A partial a
+# project adds itself is named with a leading underscore.
+SLIDE_SHARED = ("theme.typ", "config.typ")
+
+
+def slide_targets(root: Path = ROOT) -> tuple[str, ...]:
+    """Every buildable deck name under slides/, sorted."""
+    folder = root / SLIDES
+    if not folder.is_dir():
+        return ()
+    return tuple(sorted(p.stem for p in folder.glob("*.typ")
+                        if p.name not in SLIDE_SHARED
+                        and not p.name.startswith("_")))
+
+
+def slide_files(root: Path = ROOT, *, strict: bool = True) -> dict[str, str]:
+    """The decks and everything they literally import.
+
+    SEPARATE FROM source_files() ON PURPOSE, and the separation is the whole
+    design. build_state.snapshot() fingerprints source_files(), so a deck that
+    entered there would mark paper.pdf and paper.docx stale on every slide
+    edit -- and decks are outside that gate by decision. A deck is allowed to
+    READ a declared id; it is not part of the paper.
+
+    strict=False skips a deck whose imports are broken, which is what usages()
+    passes: a half-written talk must not be able to turn `just verify` red
+    through the id index. `just slides-check` passes strict=True, so the same
+    breakage is reported where it can be acted on.
+    """
+    out: dict[str, str] = {}
+    for name in slide_targets(root):
+        try:
+            out.update(source_files(root, entrypoints=(f"{SLIDES}/{name}.typ",)))
+        except ValueError:
+            if strict:
+                raise
+    return out
+
+
+def usages(root: Path = ROOT, *, slides: bool = True) -> list[dict]:
     out = []
-    for path, src in source_files(root).items():
+    # Decks are included by default: a number restated on a slide is still in
+    # use, and an asset a talk shows is not an orphan. See slide_files() for
+    # why this is the only index that widens.
+    sources = dict(source_files(root))
+    if slides:
+        sources.update(slide_files(root, strict=False))
+    for path, src in sources.items():
         for m in matches(CALL, src):
             line = src.count("\n", 0, m.start()) + 1
             start = src.rfind("\n", 0, m.start()) + 1

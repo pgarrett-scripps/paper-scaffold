@@ -257,6 +257,8 @@ def _unused(values: dict) -> list[Finding]:
     already a hard failure (an unknown id panics the compile), so without this
     nothing ever notices a value going out of use.
     """
+    # A slide deck counts as a reader: a number restated in a talk is still in
+    # use, and `just slides-check` is what holds the slide to it.
     called = {u["id"] for u in usages(ROOT) if u["helper"] in ("s", "n")}
     return [Finding("warn", id, "is declared but no .typ file reads it")
             for id in sorted(set(values) - called)]

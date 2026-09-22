@@ -107,6 +107,20 @@ unaccounted-number warning at that spot; a global value-level exception goes
 in `prose-check.toml` with a written reason. `lit()` never silences
 `derivable-number` — a computed value wrapped in it still gets flagged.
 
+**A stale slide deck is not a `verify` failure.** Decks live in `slides/`, are
+built by name (`just slides talk`), and sit outside the gate on purpose: `just
+check` and `just verify` say nothing about them, and `just fmt` does not touch
+them. Do not "fix" a deck during a verify pass, and do not add `slides/*.typ` to
+`typst_sources`. Check one when the user asks, or before a talk: `just
+slides-check`. A deck reuses the paper's declarations -- `#s("id")`,
+`#fig("id")`, `config.typ`, `references.bib` -- so never type a number onto a
+slide, for the same reason you never type one into the prose. The talk's own
+identity -- title, author line, institution, date -- is `slides/config.typ`, NOT
+the manuscript's `config.typ`: renaming a talk must not touch the file five
+manuscript tools read. `slides/theme.typ` is the only place Touying is
+configured, and neither of those two shared files is a deck `just slides`
+builds.
+
 **Cite in `si-body.typ` as `@si-key`, never `@key`.** The Supporting
 Information has its own reference list, set by Alexandria because Typst allows
 one native `#bibliography` per document, and the `si-` prefix is what routes a
@@ -247,7 +261,11 @@ whether the external toolchain is present and new enough.
 
 If you taught an extractor to handle a new construct, add a case for it to
 `tests/fixture.typ` and regenerate the golden files with `just test-update`,
-reading the diff before you commit it. Do not add coverage by putting the
+reading the diff before you commit it. Anything that is not an extractor case
+goes in the case module for its subject under `tests/` -- one file per subject,
+each exporting `run_cases() -> bool` and listed in `tests/run.py`'s
+`CASE_MODULES`. Add a module there rather than growing `run.py`, and run the one
+you are working on directly (`uv run python tests/stats_cases.py`). Do not add coverage by putting the
 construct in `paper.typ`: that prose is placeholder and gets deleted.
 
 ## When adding a table or figure

@@ -66,3 +66,10 @@ analysis/.venv/
 # Derived from paper.typ + stats.json + assets.json on demand.
 paper.resolved.typ
 *.review.txt
+
+# Slide decks: the SOURCES under slides/ are tracked, like figures/ and si/, so
+# a fresh clone can rebuild a talk. The compiled PDFs and the pdfpc speaker-note
+# sidecars are build artifacts with their own .build-state records, exactly like
+# paper.pdf.
+slides/*.pdf
+slides/*.pdfpc

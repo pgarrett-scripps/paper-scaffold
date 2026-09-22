@@ -177,6 +177,15 @@ jobs:
 
       - run: just verify
 
+      # The example deck, built on a fresh clone. It is the one thing that
+      # proves the slides/ imports resolve (`/stats.typ` from a subdirectory
+      # only works because every typst call passes --root) and that the touying
+      # package is reachable. slides-check then answers staleness and the four
+      # slide rules; neither is part of `just verify`, by design.
+      - run: just slides
+      - run: just slides-handout
+      - run: just slides-check
+
   # A clone is not how anyone starts a paper -- scripts/new-paper.sh is. It runs
   # in `just test` too, but only with --no-build; this is the one place the
   # generated manuscript is actually compiled, which is what a new user does

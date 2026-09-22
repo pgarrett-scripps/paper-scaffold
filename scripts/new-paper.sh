@@ -160,6 +160,8 @@ tar -C "$SCAFFOLD" -cf - \
     --exclude='./paper.docx' \
     --exclude='./paper.docx.html' \
     --exclude='./paper.resolved.typ' \
+    --exclude='./slides/*.pdf' \
+    --exclude='./slides/*.pdfpc' \
     --exclude='*.review.txt' \
     --exclude='./.text-baseline' \
     --exclude='./.edit-guard' \
@@ -186,11 +188,11 @@ tar -C "$SCAFFOLD" -cf - \
 # to contain the characters that break a sed expression, and a silently mangled
 # title is worse than a failure -- it renders, and it renders wrong.
 # ---------------------------------------------------------------------------
-echo "filling in config.typ"
+echo "filling in config.typ and slides/config.typ"
 TITLE="$TITLE" WORDMARK="$WORDMARK" SUBTITLE="$SUBTITLE" AUTHOR="$AUTHOR" \
 EMAIL="$EMAIL" AFFILIATION="$AFFILIATION" INSTITUTION="$INSTITUTION" \
 KEYWORDS="$KEYWORDS" PDATE="$PDATE" BIBSTYLE="$BIBSTYLE" \
-python3 - "$DEST/config.typ" <<'PY'
+python3 - "$DEST/config.typ" "$DEST/slides/config.typ" <<'PY'
 import os, re, sys
 from pathlib import Path
 
@@ -206,12 +208,15 @@ def tstr(s: str) -> str:
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+which = "config.typ"
+
+
 def sub_let(name: str, value: str) -> None:
     """Replace the value of a single-line `#let name = ...` binding."""
     global src
     pat = re.compile(rf"^(#let {re.escape(name)} = ).*$", re.M)
     if not pat.search(src):
-        sys.exit(f"error: {name} not found in config.typ")
+        sys.exit(f"error: {name} not found in {which}")
     src = pat.sub(lambda m: m.group(1) + value, src, count=1)
 
 
@@ -221,7 +226,7 @@ def sub_block(name: str, value: str) -> None:
     global src
     m = re.search(rf"^#let {re.escape(name)} = \(", src, re.M)
     if not m:
-        sys.exit(f"error: {name} not found in config.typ")
+        sys.exit(f"error: {name} not found in {which}")
     i = src.index("(", m.start())
     depth = 0
     for j in range(i, len(src)):
@@ -265,6 +270,23 @@ author = (
 sub_block("paper-authors", author)
 
 p.write_text(src)
+
+# The talks' identity, seeded from the same answers. It is its own file because
+# a talk title is usually not the paper title -- slides/config.typ says why --
+# but starting the two the same is right: a project renames a talk when it has
+# one to give, not on the day it is created. A subtitle's \n becomes a space,
+# because a slide subtitle is one line.
+deck = Path(sys.argv[2])
+if deck.is_file():
+    which = "slides/config.typ"
+    src = deck.read_text()
+    sub_let("deck-title", tstr(env["TITLE"]))
+    sub_let("deck-subtitle", tstr(env["SUBTITLE"].replace("\\n", " ")))
+    sub_let("deck-authors", tstr(env["AUTHOR"]))
+    sub_let("deck-institution", tstr(env["INSTITUTION"]))
+    sub_let("deck-date", tstr(env["PDATE"]))
+    sub_let("deck-bib-style", tstr(env["BIBSTYLE"]))
+    deck.write_text(src)
 PY
 
 # pyproject's `name` is cosmetic here (package = false, nothing is built), but it

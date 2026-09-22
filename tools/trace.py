@@ -75,7 +75,7 @@ def inspect(id: str, root: Path = ROOT, kind: str | None = None) -> dict:
               "declaration": declaration, "inputs": inputs, "uses": uses,
               "findings": checks, "suggested_commands": commands,
               "scope": {"rederived": False, "inputs": "declared inputs only",
-                        "uses": "literal calls in entrypoints and literal Typst includes/imports",
+                        "uses": "literal calls in entrypoints and slide decks, and literal Typst includes/imports",
                         "meaning": "checks establish consistency, not scientific correctness"}}
     if kind == "stats":
         try:

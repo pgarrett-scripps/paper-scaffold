@@ -88,6 +88,11 @@ have to drop their import. The exact edits are under
 | `just watch` | Live preview, recompiling on save |
 | `just fmt` | Reflow the hand-written Typst sources (typstyle, 80 cols) |
 | `just docx` | Export `paper.docx` for journals and co-authors |
+| `just slides [name]` | Build a slide deck from `slides/` -> `slides/<name>.pdf` (all decks with no name) |
+| `just slides-handout [name]` | Build the handout form, with every `#pause` reveal flattened |
+| `just slides-check [name]` | Deck staleness plus the four slide-only prose rules. Not in `verify` |
+| `just slides-notes <name>` | Export `#speaker-note` text to `slides/<name>.pdfpc` for a presenter tool |
+| `just slides-list` | What decks exist, and whether each is current |
 | `just review-text [target]` | Export a compact `.review.txt` with prose, equations and numbered captions for AI review |
 | `just wordcount` | Journal-style counts and configured section checks without rebuilding |
 | `just wordcount --sections` | List exact section paths available for word-count checks |
@@ -446,8 +451,12 @@ tools/       the Python and shell toolchain. Nothing here is imported by the
              manuscript; every one of them READS it. Run through `just`.
 analysis/    your analysis. Writes into figures/ and si/. Own environment.
 figures/ si/ generated, and tracked, so a fresh clone compiles
+slides/      talk decks (Typst + Touying). Sources tracked, PDFs not.
+             theme.typ configures Touying; config.typ is the talks' own
+             identity. Outside the gate. Optional, deletable.
 audio/       narration. Optional, deletable.
-tests/       the extractor fixture and its golden files
+tests/       the extractor fixture, its golden files, and one case module
+             per subject. run.py lists them; each runs standalone too.
 scripts/     new-paper.sh, which makes a manuscript out of this directory
 ```
 
@@ -534,6 +543,80 @@ every SI reference with nothing saying so.
 A manuscript that wants one list deletes the show rule and the
 `#bibliographyx` call and writes plain `@key` throughout; every tool then
 behaves as it did before this existed.
+
+### Slide decks reuse the paper's material, and are outside the gate
+
+A talk is made from the same figures and the same numbers as the paper, so it
+is built from the same declarations rather than retyped. A deck lives in
+`slides/`, is built by name (`just slides talk` -> `slides/talk.pdf`), and gets
+four things from the manuscript:
+
+| In a deck | Comes from |
+|---|---|
+| `#s("id")` | `stats.json`, the same number the paper prints |
+| `#fig("fig.id")`, `#tbl("tbl.id")` | `assets.json`, so `just assets` updates the talk too |
+| `@key` | `references.bib`, listed by `#deck-references()` |
+| title, authors, institution, date | `slides/config.typ` — the talks' own |
+
+The first three are the manuscript's, by id, and are checked: a slide that
+restates a number gets the number the paper prints. The identity is separate,
+in `slides/config.typ`, because a talk title is usually not the paper title, the
+author line drops affiliation superscripts, and the date is the seminar's. One
+deck that differs overrides at its call site
+(`#show: deck.with(title: [...], date: "...")`); the file is what every other
+deck starts from. The trade is stated where it is made: a deck *can* disagree
+with the paper about its title and nothing checks that, while a number is the
+opposite, because a wrong number is a wrong claim and a shorter title is just a
+title. Keeping them separate is also what lets a deck build in a
+`manuscript.toml` project (see [MULTI-DOCUMENT.md](MULTI-DOCUMENT.md)), which
+has no root `config.typ` at all.
+
+`slides/theme.typ` is the only place Touying is configured: the theme, the
+section furniture, handout mode and the references slide. A deck imports that
+one file, and `slides/theme.typ` and `slides/config.typ` are the two files under
+`slides/` that are not decks — `just slides` never tries to build either.
+
+**Decks are outside the gate, deliberately.** A stale deck does not fail
+`just verify` or `just check`, and an unformatted one does not either (hence
+`just slides-fmt` rather than adding decks to `typst_sources`, since
+`fmt-check` runs inside `verify`). A talk falls behind the moment a sentence
+changes, the fix costs one recompile, and a nag that is almost always present
+is one people learn to scroll past — the same reasoning that keeps `just viz`
+and the audiobooks out. Ask deliberately, with `just slides-check`.
+
+What a deck *is* held to, every time:
+
+- **Its ids must resolve.** `#s("effect.typo")` fails the deck's compile exactly
+  as it fails the paper's.
+- **`just check-stats` counts a deck as a reader**, so a number quoted only in a
+  talk stops being reported as declared-but-unread, and `just trace <id>` lists
+  the deck among the use sites.
+- **`just check-assets` counts a deck as a reference**, so a figure shown only
+  in a talk is not an orphan. An id a deck references but `assets.json` does not
+  declare is a *warning* naming `just slides-check`, not the error the same
+  mistake is in the manuscript — a half-written talk must not be able to fail
+  the manuscript's gate.
+- **Four prose rules**, under `just slides-check`: em dashes, British spellings,
+  doubled words, and a numeral typed where the analysis already computes it.
+  Every rule that judges sentences is off, because slide text is fragments: a
+  bullet has no terminal punctuation, so the sentence splitter reads a whole
+  slide as one enormous sentence and `long-sentence` fires on everything. The
+  rule ids are the manuscript's own, so `prose-check.toml` suppressions apply
+  unchanged.
+
+Slide text is **not** in the journal word count or the readability report.
+
+Handout mode (`just slides-handout`) flattens every `#pause` group to its final
+state, and is selected with `--input handout=true` rather than by editing the
+deck. `#speaker-note[...]` stays out of the presented PDF and exports to a
+`.pdfpc` sidecar with `just slides-notes`. `#show: appendix` starts backup
+slides and freezes the slide counter, so the footer keeps reading the length of
+the talk you gave.
+
+Touying's nicer citation mode — a footnote on the slide that makes the claim —
+is deliberately not used: touying 0.6.1 targets Typst 0.12 and recovers the
+entries through a `grid` show rule that Typst 0.14 no longer produces. The note
+in `slides/theme.typ` says what to change when that is fixed upstream.
 
 ### The `si/` contract: generated tables, never hand-typed numbers
 
@@ -1114,6 +1197,17 @@ blessed into the baseline by accident, so read the diff.
 
 This is separate from the manuscript on purpose. Anything relying on placeholder
 prose for coverage would be tested once, at clone time, and never again.
+
+Everything else `just test` runs lives in a **case module** beside it — one file
+per subject (`stats_cases.py`, `bibliography_cases.py`, `export_cases.py`,
+`slide_cases.py`, …), each exporting `run_cases() -> bool`. `run.py` lists them
+in `CASE_MODULES`, names the one that failed, and that list is the only place to
+edit to add another. Each module owns its own fixtures and runs on its own while
+you iterate:
+
+```bash
+uv run python tests/stats_cases.py
+```
 
 ### Audio
 

@@ -210,6 +210,17 @@ reader of the SI alone cannot follow it; `just prose-check` reports one.
 Cite the work, not the list: both lists read the same `references.bib`, so a
 work cited in both halves is one entry with two numbers, not two entries.
 
+## Slides
+
+Slide text is held to four rules only: no em dashes, American spellings, no
+doubled words, and no numeral typed where the analysis already computes it
+(`just slides-check`). The rules that judge sentences do not apply, because a
+slide is fragments -- a bullet is not a sentence and should not be written as
+one.
+
+Slide text is not counted in the journal word count or the readability report.
+A number on a slide is still `#s("id")`.
+
 ## Mechanics
 
 Reflow with `just fmt` before committing prose changes, so diffs stay line-scoped

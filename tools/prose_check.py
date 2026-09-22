@@ -739,6 +739,49 @@ def check_si_bibliography(root: Path | None = None,
     return out
 
 
+# The rules a SLIDE is held to, and only these.
+#
+# Slide text is fragments: a bullet has no terminal punctuation, so
+# readability's sentence splitter reads a whole slide as one enormous
+# "sentence". Every rule that judges sentences therefore misfires on a deck --
+# long-sentence on a bullet list, opener-run on the parallel verbs that make a
+# list readable, unexpanded-acronym on the shorthand a talk is allowed. Those
+# rules are not relaxed for slides; they are simply not asked.
+#
+# What is left is the three that are about correctness rather than style, plus
+# the one that keeps a number on a slide tied to the analysis the paper's
+# number came from. That last is the reason any of this runs at all: a talk
+# quoting 2.1-fold while the paper says 2.07-fold is the failure slides in this
+# pipeline exist to prevent.
+SLIDE_RULES = ("em-dash", "british-spelling", "doubled-word", "derivable-number")
+
+
+def check_slides(sources: dict[str, str],
+                 cfg: Config | None = None) -> list[Finding]:
+    """SLIDE_RULES over each deck. `sources` maps path -> Typst source.
+
+    Runs the EXISTING check() and check_derivable_numbers() and filters their
+    output, rather than reimplementing four rules. That is the point: the rule
+    ids, subjects, vocabularies and severities are the same objects, so
+    `[allow].british-spelling`, `[severity].em-dash` and `[disable]` in
+    prose-check.toml apply to a slide exactly as they apply to the paper, with
+    nothing to keep in step and no new ids to document.
+
+    Not called from main(): `just prose-check`, and therefore `just verify`,
+    never looks at slides/. `just slides-check` asks.
+    """
+    cfg = Config() if cfg is None else cfg
+    out: list[Finding] = []
+    for label, src in sorted(sources.items()):
+        out += [f for f in check(label, readability.clean(src),
+                                 readability.clean(no_code(src)),
+                                 readability.clean(src, gap=GAP), cfg)
+                if f.rule in SLIDE_RULES]
+    out += [f for f in check_derivable_numbers(sources)
+            if f.rule in SLIDE_RULES]
+    return out
+
+
 def check_bibliography(root: Path | None = None,
                        cfg: Config | None = None, *, bib_paths=None,
                        cited_keys: set[str] | None = None) -> list[Finding]:

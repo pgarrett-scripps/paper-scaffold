@@ -61,14 +61,24 @@ def snapshot(root: Path, dependencies=()) -> dict[str, str | None]:
         except ValueError:
             name = str(path)
         result[name] = digest(path) if path.is_file() else None
-    stats = root / "stats.json"
-    if stats.is_file():
-        doc = load(stats, "stats")
-        doc.pop("pinned", None)
-        result["stats.json"] = hashlib.sha256(json.dumps(doc, sort_keys=True).encode()).hexdigest()
-    else:
-        result["stats.json"] = None
+    result["stats.json"] = stats_digest(root)
     return result
+
+
+def stats_digest(root: Path) -> str | None:
+    """stats.json's hash with `pinned` dropped.
+
+    `just pin` re-records the hashes of files the numbers only WATCH, and that
+    must not read as a source change: the values are untouched and the PDF
+    cannot differ. Shared with tools/slides.py so a deck and the paper agree
+    about what a change to stats.json is.
+    """
+    stats = root / "stats.json"
+    if not stats.is_file():
+        return None
+    doc = load(stats, "stats")
+    doc.pop("pinned", None)
+    return hashlib.sha256(json.dumps(doc, sort_keys=True).encode()).hexdigest()
 
 
 def state_path(root: Path, output: str) -> Path:

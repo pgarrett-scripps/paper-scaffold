@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import hashcache  # noqa: E402
 from manifest_validation import load, ManifestError
-from manuscript_sources import usages
+from manuscript_sources import SLIDES, usages
 
 ASSETS = ROOT / "assets.json"
 
@@ -134,12 +134,22 @@ def _references(values: dict) -> list[Finding]:
     second is the one nothing else sees: an asset that is still generated and
     still hashed, and that no sentence points at any more.
     """
-    called = {u["id"] for u in usages(ROOT) if u["helper"] in ("fig", "tbl")}
+    uses = [u for u in usages(ROOT) if u["helper"] in ("fig", "tbl")]
+    # Split by where the call is. A slide deck counts as a reference -- an
+    # asset a talk shows is not an orphan -- but a deck must not be able to
+    # fail this gate: an undeclared id there breaks THAT DECK's compile, not
+    # the paper's, and decks are outside `just verify` by decision.
+    paper = {u["id"] for u in uses if not u["path"].startswith(SLIDES + "/")}
+    decks = {u["id"] for u in uses if u["path"].startswith(SLIDES + "/")}
     out = [Finding("error", id, "is referenced by the manuscript but not "
                                 "declared in assets.json -- run: just assets")
-           for id in sorted(called - set(values))]
+           for id in sorted(paper - set(values))]
+    out += [Finding("warn", id, "is referenced by a slide deck but not "
+                                "declared in assets.json, so that deck will "
+                                "not compile -- run: just slides-check")
+            for id in sorted(decks - set(values) - paper)]
     out += [Finding("warn", id, "is declared but no .typ file references it")
-            for id in sorted(set(values) - called)]
+            for id in sorted(set(values) - paper - decks)]
     return out
 
 

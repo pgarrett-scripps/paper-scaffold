@@ -622,6 +622,78 @@ word-audit *args:
 viz:
   @uv run --quiet python tools/viz.py
 
+# Slide decks live in slides/ and are built by name: `just slides talk` compiles
+# slides/talk.typ to slides/talk.pdf. `just slides` with no name builds them all.
+#
+# A deck reuses the manuscript's own material -- #fig("id") and #tbl("id") from
+# assets.json, #s("id") from stats.json, the title and authors from config.typ,
+# @keys from references.bib -- so a slide cannot quietly disagree with the paper
+# it is about. That is the whole point: a talk quoting 2.1-fold while the paper
+# says 2.07-fold is the failure this prevents.
+#
+# Decks are OUTSIDE the gate, on purpose, like `just viz` and the audiobooks. A
+# stale deck does not fail `just verify` or `just check`: a talk falls behind the
+# moment you edit a sentence, the fix costs one recompile, and a nag that is
+# almost always present is one people learn to scroll past. Ask on demand, with
+# `just slides-check`.
+#
+# See slides/theme.typ for what a deck gets and how to delete the feature.
+# Build a slide deck by name, or all of them -> slides/<name>.pdf
+slides name="":
+  @uv run --quiet python tools/slides.py build "$@"
+
+# Handout mode flattens every #pause group to its final state, so a deck built
+# for the room prints as one page per idea instead of one page per reveal. It is
+# a SEPARATE output with its own staleness record, so building one never makes
+# the other look current.
+# Build the handout form of a deck -> slides/<name>-handout.pdf
+slides-handout name="":
+  @uv run --quiet python tools/slides.py build "$@" --handout
+
+# Compile with unresolved numbers shown as placeholders, exactly as `just draft`
+# does for the paper. Writes slides/<name>-draft.pdf and records NOTHING: a file
+# with `?id?` in it must never be one you could mistake for the talk you are
+# about to give.
+# Compile a deck with unresolved numbers as placeholders -> slides/<name>-draft.pdf
+slides-draft name:
+  @uv run --quiet python tools/slides.py build "$@" --draft
+
+# Two questions in one pass, neither of them in `just verify`: has a deck fallen
+# behind the material it reuses, and does its text break the four rules a slide
+# is held to (em dashes, British spellings, doubled words, and a numeral typed
+# where the analysis already computes it)?
+#
+# The full prose gate is deliberately NOT applied. Slide text is fragments, and
+# long-sentence or word-repetition on a bullet list is noise. See
+# prose_check.SLIDE_RULES for why each excluded rule is excluded.
+# Check slide decks: staleness plus the four slide-only prose rules
+slides-check name="":
+  #!/usr/bin/env bash
+  set -uo pipefail
+  rc=0
+  uv run --quiet python tools/slides.py check "$@" || rc=1
+  uv run --quiet python tools/slides.py prose "$@" || rc=1
+  exit $rc
+
+# Touying records every #speaker-note as pdfpc metadata inside the PDF. This
+# pulls it back out into the sidecar file that pdfpc, Impressive and Slide
+# Presenter read, so the presenter view shows your notes on the second screen.
+# Export a deck's speaker notes -> slides/<name>.pdfpc
+slides-notes name:
+  @uv run --quiet python tools/slides.py notes "$@"
+
+# What decks exist, and whether each is current.
+# List the slide decks
+slides-list:
+  @uv run --quiet python tools/slides.py list
+
+# Slides are NOT in `typst_sources` and so not in `just fmt`: fmt-check runs
+# inside `just verify`, and a deck must never be able to fail the gate. Same
+# reflow, run when you want it.
+# Reflow the slide decks to the shared column width
+slides-fmt:
+  typstyle --inplace --line-width {{fmt_width}} --wrap-text slides/*.typ
+
 # Every DOI in the bibliography, checked against Crossref or DataCite: do the
 # title, authors and publication details match, does it resolve, and has the
 # work been retracted?
@@ -641,6 +713,10 @@ bib-audit *args:
 # a reflow. Runs against tests/fixture.typ, which is NOT part of the manuscript --
 # placeholder prose in paper.typ gets deleted the moment real writing starts, so
 # anything relying on it for coverage would be tested once and never again.
+#
+# tests/run.py owns that fixture check and then runs each case module in
+# CASE_MODULES, naming whichever fails. To work on one, run it directly:
+# `uv run python tests/stats_cases.py`.
 # Assert the prose extractors handle every construct, before and after a reflow
 test:
   @uv run --quiet python tests/run.py
@@ -846,6 +922,7 @@ check-build:
 _stamp-manuscript:
   @uv run --quiet python tools/build_state.py stamp
 
-# Remove the built PDF and Word export
+# Remove the built PDF, Word export and slide decks
 clean:
   rm -f paper.pdf paper-draft.pdf paper.docx paper.docx.html
+  rm -f slides/*.pdf slides/*.pdfpc
