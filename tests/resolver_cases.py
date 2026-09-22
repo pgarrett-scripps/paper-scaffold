@@ -68,6 +68,12 @@ def run_cases() -> bool:
             # label plus stray ':a' prose.
             ("multi-segment crossref label", "see @fig:panel:a here",
              "#ref(<fig:panel:a>)", "@fig:"),
+            # A bracket after the label is Typst's supplement; pandoc
+            # printed "Figure 1[]" (cascade/paper).
+            ("empty supplement means the bare number", "see @fig:demo[] here",
+             "#ref(<fig:demo>, supplement: none) here", "[]"),
+            ("a supplement replaces the word", "see @fig:demo[Panel] here",
+             "Panel #ref(<fig:demo>, supplement: none) here", "[Panel]"),
             ("citation is NOT a crossref", "as shown @lovelace1843 here",
              "@lovelace1843", "#ref(<lovelace"),
             # typstyle breaks a long call and leaves a trailing comma; the

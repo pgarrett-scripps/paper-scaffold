@@ -117,8 +117,12 @@ See @fig:first.
         self.assertEqual(numbers, separate_numbers)
         meta = json.loads(target.read_text())
         self.assertEqual(meta["title"], "Computed title")
-        self.assertEqual(meta["authors"], [{"name": "Ada Lovelace", "affils": [2, 1]},
-                                           {"name": "René Example", "affils": [1]}])
+        self.assertEqual(meta["authors"], [
+            {"name": "Ada Lovelace", "corresponding": False, "affils": [2, 1]},
+            {"name": "René Example", "corresponding": False, "affils": [1]}])
+        # The optional bindings answer none when config.typ omits them.
+        for key in ("running-title", "corresponding-email", "corresponding-phone"):
+            self.assertIsNone(meta[key])
         with patch.object(resolve_typst, "ROOT", self.root), \
                 patch.object(resolve_typst, "ASSETS", self.root / "assets.json"), \
                 patch.object(resolve_typst, "NATIVE_NUMBERING", numbers):

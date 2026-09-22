@@ -49,7 +49,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 from typing import NamedTuple  # noqa: E402
 
-from resolve_typst import FLOAT_PREFIX  # noqa: E402
+from resolve_typst import FLOAT_PREFIX, SI_HEADING  # noqa: E402
 from typst_prose import CITE  # noqa: E402
 from bibliography import entries
 from manuscript_sources import BIBLIOGRAPHY, call_span, mask
@@ -57,6 +57,7 @@ from word_xml import order_properties
 
 SRC = ROOT / "paper.resolved.typ"
 OUT = ROOT / "paper.docx"
+MAIN_ONLY = False
 
 
 def style_code(path: Path) -> None:
@@ -107,6 +108,221 @@ def style_code(path: Path) -> None:
             archive.writestr(info, rendered if info.filename == "word/styles.xml" else data)
 
 
+W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+M = "{http://schemas.openxmlformats.org/officeDocument/2006/math}"
+PAGE_BREAK = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
+TEXT_WIDTH_IN = 6.5
+# A table this short is kept on one page; a longer one breaks between rows.
+KEEP_TABLE_ROWS = 20
+# Front-matter keys pandoc copies into docProps/custom.xml. Both hold
+# absolute paths on the machine that built the file (spectrl-paper).
+LOCAL_META = ("bibliography", "csl")
+
+
+def text_width(reference: Path | None) -> float:
+    """The body text width in inches: the reference document's page less
+    its margins, or US Letter with 1 in margins when it sets none."""
+    if reference is None or not reference.is_file():
+        return TEXT_WIDTH_IN
+    with zipfile.ZipFile(reference) as archive:
+        root = ET.fromstring(archive.read("word/document.xml"))
+    size, margin = root.find(f".//{W}sectPr/{W}pgSz"), root.find(f".//{W}sectPr/{W}pgMar")
+    if size is None or margin is None:
+        return TEXT_WIDTH_IN
+    twips = (int(size.get(W + "w")) - int(margin.get(W + "left", 0))
+             - int(margin.get(W + "right", 0)))
+    return twips / 1440 if twips > 0 else TEXT_WIDTH_IN
+
+
+def adapt_tree(tree: dict, width_in: float = TEXT_WIDTH_IN) -> dict:
+    """Pandoc-tree fixes for Word, in place; returns the tree.
+
+    Each is a divergence between pandoc's Word output and the PDF that
+    downstream papers patched locally before it came here:
+
+      - `#pagebreak()` reads as a page-break Div around a horizontal rule,
+        which Word drew as a line across the page. It becomes a real break.
+      - `image(..., width: 70%)` kept the percentage, which the docx writer
+        measures against a fixed 420 pt, not the text width, so every such
+        figure came out narrower than in the PDF. It becomes inches.
+      - The manuscript title is the head's `= Title`, which Word styled as
+        the first Heading 1. It takes the Title style.
+      - The .bib and .csl paths are dropped from the metadata, which pandoc
+        writes into the file's custom properties as absolute local paths.
+    """
+    def image_width(attr) -> None:
+        for pair in attr[2]:
+            if pair[0] == "width" and pair[1].endswith("%"):
+                try:
+                    share = float(pair[1][:-1]) / 100
+                except ValueError:
+                    continue
+                pair[1] = f"{width_in * share:.2f}in"
+
+    def walk(value):
+        if isinstance(value, list):
+            for i, child in enumerate(value):
+                if (isinstance(child, dict) and child.get("t") == "Div"
+                        and "page-break" in child["c"][0][1]):
+                    value[i] = {"t": "RawBlock", "c": ["openxml", PAGE_BREAK]}
+                else:
+                    walk(child)
+        elif isinstance(value, dict):
+            if value.get("t") == "Image":
+                image_width(value["c"][0])
+            for child in value.values():
+                walk(child)
+
+    walk(tree["blocks"])
+    for i, block in enumerate(tree["blocks"]):
+        if block.get("t") != "Header":
+            continue
+        if block["c"][0] == 1:
+            tree["blocks"][i] = {"t": "Div", "c": [
+                [block["c"][1][0], [], [["custom-style", "Title"]]],
+                [{"t": "Para", "c": block["c"][2]}]]}
+        break
+    for key in LOCAL_META:
+        tree.get("meta", {}).pop(key, None)
+    return tree
+
+
+def paginate(root: ET.Element) -> ET.Element:
+    """Keep Word's page breaks where the PDF would put them, in place.
+
+    Six downstream papers each wrote some of these rules against the same
+    failures -- a figure on one page and its caption on the next, a table
+    caption stranded above its table, a table row split across pages, a
+    heading or bold run-in label left at the foot of a page, an empty page
+    after a full-page table. They are general, so they run on every export:
+
+      - A paragraph holding only a page break becomes pageBreakBefore on the
+        next paragraph with content; the lone break after a table that
+        filled its page otherwise produced a blank page.
+      - An empty paragraph holding only bookmarks -- what pandoc makes of a
+        `<label>` after a heading or float -- hands its bookmarks to the
+        paragraph before it (past a table, to the table's caption) and goes;
+        after a full-page table it could spill onto a page of its own.
+      - Captions keep their lines together; a table caption and a figure's
+        image keep with what follows (the table, the caption).
+      - An empty paragraph after a heading, and a short paragraph whose text
+        is all bold (a run-in label), keep with what follows.
+      - Table rows never split; the first row repeats on each page; a table
+        of at most KEEP_TABLE_ROWS rows stays on one page.
+
+    Column widths are the source's business, not this pass's: `columns:
+    (2fr, 1fr, 1fr)` reaches Word as proportional widths.
+    """
+    def props(element: ET.Element, name: str) -> ET.Element:
+        found = element.find(W + name)
+        if found is None:
+            found = ET.Element(W + name)
+            element.insert(0, found)
+        return found
+
+    def set_flag(element: ET.Element, name: str) -> None:
+        flag = element.find(W + name)
+        if flag is None:
+            ET.SubElement(element, W + name)
+        else:
+            flag.attrib.pop(W + "val", None)
+
+    def text(p: ET.Element) -> str:
+        return "".join(t.text or "" for t in p.iter(W + "t"))
+
+    def style(p: ET.Element) -> str:
+        found = p.find(f"{W}pPr/{W}pStyle")
+        return "" if found is None else found.get(W + "val", "")
+
+    def content(p: ET.Element) -> bool:
+        return (bool(text(p).strip()) or p.find(f".//{W}drawing") is not None
+                or p.find(f".//{M}oMath") is not None)
+
+    body = root.find(W + "body")
+    pending = False
+    previous = None
+    for block in list(body):
+        if block.tag != W + "p":
+            continue
+        breaks = [b for b in block.iter(W + "br") if b.get(W + "type") == "page"]
+        if breaks and not content(block):
+            body.remove(block)
+            pending = True
+            continue
+        anchor = (block.find(W + "bookmarkStart") is not None and not content(block)
+                  and all(c.tag in (W + "pPr", W + "bookmarkStart", W + "bookmarkEnd")
+                          for c in block))
+        if anchor and previous is not None:
+            previous.extend(c for c in list(block) if c.tag != W + "pPr")
+            body.remove(block)
+            continue
+        if pending and content(block):
+            set_flag(props(block, "pPr"), "pageBreakBefore")
+            pending = False
+        previous = block
+
+    blocks = list(body)
+    for i, p in enumerate(blocks):
+        if p.tag != W + "p":
+            continue
+        name = style(p)
+        flags = []
+        if name in ("ImageCaption", "TableCaption", "Caption"):
+            flags.append("keepLines")
+        if name == "TableCaption" or p.find(f".//{W}drawing") is not None:
+            flags.append("keepNext")
+        if (not content(p) and i and blocks[i - 1].tag == W + "p"
+                and style(blocks[i - 1]).startswith("Heading")):
+            flags.append("keepNext")
+        runs = [r for r in p.iter(W + "r")
+                if "".join(t.text or "" for t in r.iter(W + "t")).strip()]
+        if (runs and len(text(p)) <= 120 and not name.startswith("Heading")
+                and all(r.find(f"{W}rPr/{W}b") is not None for r in runs)):
+            flags.append("keepNext")
+        for flag in flags:
+            set_flag(props(p, "pPr"), flag)
+
+    for table in root.iter(W + "tbl"):
+        rows = table.findall(W + "tr")
+        for i, row in enumerate(rows):
+            row_props = props(row, "trPr")
+            set_flag(row_props, "cantSplit")
+            if i == 0:
+                set_flag(row_props, "tblHeader")
+            if len(rows) <= KEEP_TABLE_ROWS and i < len(rows) - 1:
+                for p in row.iter(W + "p"):
+                    set_flag(props(p, "pPr"), "keepNext")
+    order_properties(root)
+    return root
+
+
+def postprocess(path: Path) -> None:
+    """Apply paginate() to a written .docx."""
+    with zipfile.ZipFile(path) as archive:
+        parts = [(info, archive.read(info)) for info in archive.infolist()]
+    xml = next(data for info, data in parts if info.filename == "word/document.xml")
+    for _, (prefix, uri) in ET.iterparse(io.BytesIO(xml), events=("start-ns",)):
+        ET.register_namespace(prefix, uri)
+    rendered = ET.tostring(paginate(ET.fromstring(xml)), encoding="utf-8",
+                           xml_declaration=True)
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        for info, data in parts:
+            archive.writestr(info, rendered if info.filename == "word/document.xml" else data)
+
+
+def main_only(src: str) -> str:
+    """The projection up to the Supporting Information, for journals that
+    take the SI as a separate upload (koth-paper and d_noise-paper each
+    exported this locally)."""
+    at = src.find(SI_HEADING)
+    if at < 0:
+        return src
+    head = src[:at].rstrip()
+    if head.endswith("#pagebreak()"):
+        head = head[:-len("#pagebreak()")].rstrip()
+    return head + "\n"
+
+
 class Segment(NamedTuple):
     """One stretch of the manuscript and the reference list that closes it."""
     text: str
@@ -146,8 +362,12 @@ def bibliography_segments(src: str) -> list[Segment]:
         paths = [p.lstrip("/") for p in
                  re.findall(r'"([^"]+\.(?:bib|yml|yaml|json))"', call)]
         style = re.search(r'style:\s*"([^"]+)"', call)
-        title = re.search(r"title:\s*\[([^\]]*)\]", call)
-        heading = (f"= {title.group(1) if title else 'Bibliography'}"
+        # Typst takes the title as content or as a string; the string form
+        # fell back to "Bibliography" (koth-paper patched this).
+        title = re.search(r'title:\s*(?:\[([^\]]*)\]|"([^"]*)")', call)
+        name = (title.group(1) if title.group(1) is not None else title.group(2)) \
+            if title else "Bibliography"
+        heading = (f"= {name}"
                    "\n\n#block[]<refs>")
         out.append(Segment(src[at:start] + heading, paths,
                            style.group(1) if style else None))
@@ -275,6 +495,8 @@ def main() -> int:
               file=sys.stderr)
         return 1
     src = SRC.read_text()
+    if MAIN_ONLY:
+        src = main_only(src)
     bib = sorted({b for seg in bibliography_segments(src) for b in seg.paths})
     try:
         tree = document(src, ROOT)
@@ -286,11 +508,13 @@ def main() -> int:
     reference = ROOT / "word/paper-reference.docx"
     if reference.is_file():
         args += ["--reference-doc", str(reference)]
+    adapt_tree(tree, text_width(reference))
     import pypandoc
     pypandoc.convert_text(json.dumps(tree), "docx", format="json",
                           outputfile=str(OUT), extra_args=args)
     if not reference.is_file():
         style_code(OUT)
+    postprocess(OUT)
 
     # Trust, then verify: count what actually landed in the file.
     with zipfile.ZipFile(OUT) as z:
@@ -311,6 +535,12 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, default=OUT)
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--source", type=Path, default=SRC)
+    parser.add_argument("--main-only", action="store_true",
+                        help="stop before the Supporting Information "
+                             "(default output paper-main.docx)")
     args = parser.parse_args()
+    MAIN_ONLY = args.main_only
+    if MAIN_ONLY and args.output == OUT:
+        args.output = OUT.with_name("paper-main.docx")
     OUT, ROOT, SRC = args.output, args.root, args.source
     raise SystemExit(main())

@@ -64,7 +64,103 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
-## 3.23.0 (upgrade-plan)
+## 3.23.0
+
+Three things the paper projects kept building for themselves are now upstream.
+
+### Word export
+
+The Word-export fixes that paper projects made locally in
+`tools/export_docx.py` and `tools/resolve_typst.py` are now upstream. General
+fixes, on for every export:
+
+- Pagination (`export_docx.paginate`): table rows never split, the first row
+  repeats, tables of up to 20 rows stay on one page, captions keep their
+  lines, table captions and figure images keep with what follows, and bold
+  run-in labels and empty lines after headings keep with the next paragraph.
+- `#pagebreak()` is a real page break, not a horizontal rule. The SI title
+  and the "For Table of Contents Only" section start on a new page, as in the
+  PDF.
+- The manuscript title uses Word's Title style, not Heading 1.
+- `image(..., width: 70%)` is sized against the text width instead of
+  pandoc's fixed 420 pt.
+- The empty paragraph left by a `<label>` after a heading or float is folded
+  into the paragraph before it.
+- `docProps/custom.xml` no longer records absolute `.bib` and `.csl` paths.
+- `#bibliography(title: "...")` in string form is read.
+- `@fig:x[]` gives the bare number and `@fig:x[Panel]` gives "Panel 1".
+- The SI is appended only when `paper.typ` includes `si-body.typ`.
+- Content after that include is kept.
+
+Opt-in:
+
+- `paper-running-title`, `paper-corresponding-email` and
+  `paper-corresponding-phone` in `config.typ` add a running-title line, a
+  star on the matching author (`email:` field) and a correspondence line.
+- `uv run python tools/export_docx.py --main-only` writes `paper-main.docx`
+  without the SI.
+- `tools/paper_word_reference.py --black-headings` regenerates the template
+  with black title and headings.
+
+Per-table column widths stay project code: set them in the source with `fr`
+columns (`columns: (2fr, 1fr, 1fr)`), which reach Word as proportional widths.
+
+This covers local fixes in koth-paper, koth-lfq-paper, uno-paper,
+uno-lfq-paper, spectrl-paper, cascade, DeNovoRust and d_noise-paper.
+
+Upgrade: copy `tools/export_docx.py`, `tools/resolve_typst.py` and
+`tools/paper_word_reference.py`, then delete each local patch this list now
+covers. Keep patches it does not cover, such as fixed column widths,
+table font sizes and caption sizes. To get black headings in an existing
+template, recolour the styles in Word, or regenerate the template with
+`--black-headings` (this discards other template edits). Then run
+`just docx` and `just verify`.
+
+### Submission outputs
+
+The journal upload set is upstream. Four papers each built their own split
+PDFs, split Word files and standalone graphic, three different ways. Now one
+tool, `tools/submission.py`, writes them into `submission/` with a
+`manifest.json`. The recipes are `just main-pdf`, `si-pdf`, `main-docx`,
+`si-docx`, `toc-graphic`, `cover-letter`, and `just submission` for all of
+them. Every split file is cut from the manuscript that `just paper` captured,
+never from a second compile. It refuses to build while the source differs from
+that capture, so its page, figure and reference numbers always match
+`paper.pdf`.
+
+- **PDFs.** They are page ranges of one compile, split at a new `<si-start>`
+  probe in `paper.typ`.
+- **Word files.** They are split at the SI heading of the Word projection.
+- **Graphical abstract.** It follows the profile's new
+  `[graphical-abstract] file-format` (TIF for the four ACS profiles, as the
+  ACS guideline says). It is flattened onto white, and its resolution is set
+  so it fits the journal's box. It fails if that resolution is under
+  `min-dpi`.
+- **Cover letter.** `cover-letter.typ` is a new, optional template. It reads
+  `config.typ` and `#s()`, and takes the journal name from the profile. If the
+  file is absent, the step is skipped.
+- **Graphic placement.** `journal.toml [placement]` gains `submission`, which
+  defaults to `journal`.
+
+Each output is recorded in `.build-state/submission.json`. The set stays
+outside `verify`, for the same reason as the audiobooks. `just check` prints a
+note, not a failure. `just check-submission` is the strict version, and
+`preflight` now builds the set and runs that check. Project-specific packaging
+stays downstream: figure QC for one journal, source-data archives and delivery
+bundles.
+
+Upgrade: copy `tools/submission.py`, the new justfile recipes and the
+`all`/`preflight`/`check`/`clean` changes, `submission/` in `.gitignore`, and
+the `file-format` lines in `journals/*.toml`. Add
+`#context [#metadata(here().page()) <si-start>]` to `paper.typ` directly after
+the `#pagebreak()` that opens the SI. Do this after the journal-layout graphic,
+so the main text ends with that page. Copy `cover-letter.typ` only if you want
+a letter. If the project has its own main-pdf, si-pdf, main-docx or si-docx
+recipes or a tool behind them, delete those. Keep project extras such as
+figure QC and source-data packaging, and point them at `submission/`, which is
+where the outputs now land, not the root.
+
+### Upgrade planning
 
 `just upgrade-plan [target]` (`tools/upgrade_plan.py`) plans a scaffold
 upgrade from inside a derived project. Ten papers made about 105 upgrade
@@ -113,50 +209,6 @@ that `scripts/new-paper.sh` fills with the release the copy came from. Every
 derived manuscript on this machine now carries the same paragraph at 3.20.3.
 Upgrade: optional; copy the paragraph into CLAUDE.md with the version written
 in.
-
-## 3.23.0 (submission outputs)
-
-The journal upload set is upstream. Four papers each built their own split
-PDFs, split Word files and standalone graphic, three different ways. Now one
-tool, `tools/submission.py`, writes them into `submission/` with a
-`manifest.json`. The recipes are `just main-pdf`, `si-pdf`, `main-docx`,
-`si-docx`, `toc-graphic`, `cover-letter`, and `just submission` for all of
-them. Every split file is cut from the manuscript that `just paper` captured,
-never from a second compile. It refuses to build while the source differs from
-that capture, so its page, figure and reference numbers always match
-`paper.pdf`.
-
-- **PDFs.** They are page ranges of one compile, split at a new `<si-start>`
-  probe in `paper.typ`.
-- **Word files.** They are split at the SI heading of the Word projection.
-- **Graphical abstract.** It follows the profile's new
-  `[graphical-abstract] file-format` (TIF for the four ACS profiles, as the
-  ACS guideline says). It is flattened onto white, and its resolution is set
-  so it fits the journal's box. It fails if that resolution is under
-  `min-dpi`.
-- **Cover letter.** `cover-letter.typ` is a new, optional template. It reads
-  `config.typ` and `#s()`, and takes the journal name from the profile. If the
-  file is absent, the step is skipped.
-- **Graphic placement.** `journal.toml [placement]` gains `submission`, which
-  defaults to `journal`.
-
-Each output is recorded in `.build-state/submission.json`. The set stays
-outside `verify`, for the same reason as the audiobooks. `just check` prints a
-note, not a failure. `just check-submission` is the strict version, and
-`preflight` now builds the set and runs that check. Project-specific packaging
-stays downstream: figure QC for one journal, source-data archives and delivery
-bundles.
-
-Upgrade: copy `tools/submission.py`, the new justfile recipes and the
-`all`/`preflight`/`check`/`clean` changes, `submission/` in `.gitignore`, and
-the `file-format` lines in `journals/*.toml`. Add
-`#context [#metadata(here().page()) <si-start>]` to `paper.typ` directly after
-the `#pagebreak()` that opens the SI. Do this after the journal-layout graphic,
-so the main text ends with that page. Copy `cover-letter.typ` only if you want
-a letter. If the project has its own main-pdf, si-pdf, main-docx or si-docx
-recipes or a tool behind them, delete those. Keep project extras such as
-figure QC and source-data packaging, and point them at `submission/`, which is
-where the outputs now land, not the root.
 
 ## 3.22.0
 
@@ -354,7 +406,6 @@ CSL, tests and justfile recipes together. Existing dissertation templates need
 the documented capture contract; arbitrary multi-document layouts are not
 silently adapted. Full Word contents pagination also needs LibreOffice and
 Poppler. Existing local template edits should be merged rather than replaced.
-
 
 Optional `word-limits.toml` defines independent word-count checks with section
 inclusions, exclusions, and inclusive minimum/maximum bounds. `just wordcount
