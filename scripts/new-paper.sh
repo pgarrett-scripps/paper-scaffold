@@ -354,7 +354,9 @@ fi
 
 # CLAUDE.md carries one short paragraph about the scaffold, the same in every
 # derived manuscript; the placeholder becomes the release this copy came from.
-sed -i "s/SCAFFOLD_VERSION/$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)/" "$DEST/CLAUDE.md"
+if [ -f "$DEST/CLAUDE.md" ]; then
+  sed -i "s/SCAFFOLD_VERSION/$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)/" "$DEST/CLAUDE.md"
+fi
 
 if [ "$DO_GIT" = 1 ]; then
   if command -v git >/dev/null 2>&1; then
