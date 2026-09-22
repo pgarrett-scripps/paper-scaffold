@@ -60,7 +60,10 @@ check-words`, its resolution floor joins `just prose-check` beneath the
 project's own `min-figure-dpi`, and `just check-journal` (in `verify`) covers
 keywords, main-text float counts, and the graphical abstract measured against
 the journal's box. `just journal` prints the whole card with the journal's own
-wording; `just journals` lists the profiles.
+wording; `just journals` lists the profiles. A limit that covers the reference
+list (JASMS's Technical Note) selects a `references` region: the main text's
+list as citeproc sets it for the Word file, rendered through pandoc and
+counted; `just wordcount` shows it as its own row.
 
 The graphical abstract is declared once in `paper.typ` (`toc-graphic`,
 `toc-caption`) and placed per output by `journal.toml`'s `[placement]`: under

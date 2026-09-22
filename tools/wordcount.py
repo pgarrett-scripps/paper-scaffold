@@ -17,7 +17,10 @@ from document_project import keys, tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = "word-limits.toml"
-REGIONS = ("abstract", "main", "si")
+# "references" is the main text's reference list as citeproc sets it for the
+# Word file, from tools/journal.py; a journal whose limit covers the list
+# (JASMS's Technical Note) selects it alongside "main".
+REGIONS = ("abstract", "main", "si", "references")
 
 
 def load_checks(root: Path) -> list[dict]:
@@ -114,6 +117,17 @@ def counts(root: Path) -> dict:
     if "sections" not in data:
         raise ValueError("wordcount.typ needs the section inventory; update it together "
                          "with wordcount-sections.typ and tools/wordcount.py")
+    # The main text's reference list, counted from what citeproc renders for
+    # the Word file. A row like the regions Typst counted, so a check can
+    # select it; absent when the manuscript has no bibliography.
+    from journal import reference_words
+    refs = reference_words(root)
+    if refs is not None:
+        data["references_words"] = refs["words"]
+        data["references_entries"] = refs["entries"]
+        data["references_style"] = refs["csl"] or refs["style"]
+        data["sections"].append({"id": "references", "heading": False,
+                                 "words": refs["words"]})
     return data
 
 
@@ -139,6 +153,9 @@ def print_counts(data: dict) -> None:
                           ("main", "Main text"), ("si", "Supporting Information"),
                           ("total", "Total (main + SI)")):
         t.add_row(label, f"{data[region + '_words']:,}", f"{data[region + '_chars']:,}")
+    if "references_words" in data:
+        t.add_row(f"References (main list, {data['references_entries']} entries; "
+                  f"not in total)", f"{data['references_words']:,}", "")
     console.print(t)
 
 

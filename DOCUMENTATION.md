@@ -651,8 +651,12 @@ BODY markers' too), and the graphical abstract measured against the journal's
 box. A section a profile refers to by role, such as the experimental section
 JPR excludes, is mapped to this manuscript's section path in `[sections]`, and
 an unmapped role is a loud error naming the fix. A limit that covers the
-reference list, as JASMS's Technical Note limit does, is reported with a note
-that the count shown is low, because nothing here counts a rendered list.
+reference list, as JASMS's Technical Note limit does, selects the
+`references` region: the main text's list as citeproc sets it from
+`references.bib` and the CSL for the Word file, which is what the journal
+counts, rendered to plain text through pandoc and counted like everything
+else. `just wordcount` shows it as its own row; the PDF's list is Typst's
+rendering and differs by a few words of punctuation.
 
 **The graphical abstract** is the one thing a profile changes about the output
 rather than the checks. `paper.typ` declares it once, as `#let toc-graphic =

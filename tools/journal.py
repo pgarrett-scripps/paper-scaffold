@@ -54,9 +54,9 @@ DEFAULT_PLACEMENT = {"pdf": "preprint", "docx": "journal"}
 # Methods in one paper and Experimental Procedures in the next.
 ROLES = ("methods",)
 # Regions the word counter can add to the main text when a journal's limit
-# covers them. "references" is accepted in a profile and reported as
-# uncountable: nothing here counts a rendered reference list.
-COUNTABLE = ("abstract", "si")
+# covers them. "references" is the main text's reference list as citeproc
+# sets it for the Word file -- see reference_words().
+COUNTABLE = ("abstract", "si", "references")
 
 PROFILE_KEYS = {"schema_version", "label", "journal", "type", "source",
                 "guidelines-dated", "checked", "words", "floats", "figures",
@@ -158,10 +158,10 @@ def load_profile(root: Path, id: str) -> Profile:
         if not isinstance(v, list) or any(not isinstance(x, str) for x in v):
             raise JournalError(f"{where}: [words].{k} must be a list of strings")
         words[k] = v
-    bad = set(words["counts"]) - set(COUNTABLE) - {"references"}
+    bad = set(words["counts"]) - set(COUNTABLE)
     if bad:
         raise JournalError(f"{where}: [words].counts has unknown region(s) "
-                           f"{sorted(bad)}; expected {', '.join(COUNTABLE)} or references")
+                           f"{sorted(bad)}; expected {', '.join(COUNTABLE)}")
     bad = set(words["excludes"]) - set(ROLES)
     if bad:
         raise JournalError(f"{where}: [words].excludes has unknown role(s) "
@@ -288,9 +288,8 @@ def word_checks(root: Path = ROOT) -> list[dict]:
         check = {"name": f"{profile.label}: main text", "include": include,
                  "exclude": exclude, "max": w["main-max"], "source": profile.source}
         if "references" in w["counts"]:
-            check["note"] = ("the journal's limit also covers the reference list, "
-                             "which this count cannot include, so the true figure "
-                             "is higher than shown")
+            check["note"] = ("includes the main text's reference list as citeproc "
+                             "sets it for the Word file")
         out.append(check)
     if "abstract-max" in w:
         out.append({"name": f"{profile.label}: abstract", "include": ["abstract"],
@@ -378,6 +377,75 @@ def toc_graphic(root: Path = ROOT) -> dict | None:
     elif i:
         out["path"] = i.group(1).lstrip("/")
     return out
+
+
+def main_text_citations(root: Path = ROOT) -> list[str]:
+    """Keys the main text cites, in first-citation order; the SI's excluded.
+
+    The main text is paper.typ and what it includes, less si-body.typ and
+    what THAT includes. A key is a citation by the same rule the Word export
+    applies (typst_prose.CITE, outside strings, not a float cross-reference),
+    and a key carrying the SI's routing prefix belongs to the SI's list.
+    """
+    from manuscript_sources import mask, si_bibliography, source_files
+    from resolve_typst import FLOAT_PREFIX
+    from typst_prose import CITE
+    si = si_bibliography(root)
+    prefix = (si or {}).get("prefix") or None
+    main = source_files(root, entrypoints=("paper.typ",))
+    for name in source_files(root, entrypoints=("si-body.typ",)):
+        main.pop(name, None)
+    seen: dict[str, None] = {}
+    for src in main.values():
+        for m in re.finditer(r"(?<![\w\\:./-])" + CITE, mask(_strip_comments(src), strings=True)):
+            key = m.group(0)[1:]
+            if key.split(":", 1)[0] in FLOAT_PREFIX:
+                continue
+            if prefix and key.startswith(prefix):
+                continue
+            seen.setdefault(key, None)
+    return list(seen)
+
+
+def reference_words(root: Path = ROOT) -> dict | None:
+    """Words in the main text's reference list, as the journal will see it.
+
+    The list counted is the one citeproc sets from the .bib and the CSL for
+    the Word export, because the Word file is what goes to the journal; the
+    PDF's list is Typst's own rendering and differs by a few words of
+    punctuation. Pandoc renders the cited entries to plain text through a
+    `nocite` list, and the words are counted the way the rest of the count
+    counts them: whitespace-separated tokens.
+
+    None when the manuscript has no #bibliography call or cites nothing in
+    the main text. A missing .csl falls back to pandoc's default style, as
+    the export does, and is reported in the result.
+    """
+    import pypandoc
+    from resolve_typst import bibliography_line, _strip_comments as strip
+    paper, config = root / "paper.typ", root / "config.typ"
+    if not paper.is_file():
+        return None
+    call = bibliography_line(paper.read_text(encoding="utf-8"),
+                             config.read_text(encoding="utf-8") if config.is_file() else "")
+    if not call:
+        return None
+    paths = re.findall(r'"([^"]+\.(?:bib|yml|yaml))"', call)
+    style_m = re.search(r'style:\s*"([^"]+)"', call)
+    style = style_m.group(1) if style_m else None
+    keys = main_text_citations(root)
+    if not keys or not paths:
+        return None
+    args = ["--citeproc", "--wrap=none"]
+    args += [f"--bibliography={root / p.lstrip('/')}" for p in paths]
+    csl = next((p for p in (root / f"{style}.csl", root / "csl" / f"{style}.csl")
+                if style and p.is_file()), None)
+    if csl:
+        args += ["--csl", str(csl)]
+    doc = "---\nnocite: |\n  " + ", ".join(f"@{k}" for k in keys) + "\n---\n"
+    text = pypandoc.convert_text(doc, "plain", format="markdown", extra_args=args)
+    return {"words": len(text.split()), "entries": len(keys), "style": style,
+            "csl": csl.name if csl else None}
 
 
 def pixel_size(path: Path) -> tuple[int, int] | None:

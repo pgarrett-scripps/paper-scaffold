@@ -172,13 +172,33 @@ class JournalCases(unittest.TestCase):
                                  '[sections]\nmethods = ""\n')
         self.assertEqual(journal.word_checks(self.root)[0]["exclude"], [])
 
-    def test_a_limit_that_counts_references_says_the_count_is_low(self):
+    def test_a_limit_that_counts_references_selects_the_rendered_list(self):
         self.put("journals/note.toml", PROFILE.replace('excludes = ["methods"]',
                                                        'counts = ["abstract", "references"]'))
         self.put("journal.toml", 'schema_version = 1\nprofile = "note"\n')
         check = journal.word_checks(self.root)[0]
-        self.assertEqual(check["include"], ["main", "abstract"])
-        self.assertIn("reference list", check["note"])
+        self.assertEqual(check["include"], ["main", "abstract", "references"])
+        self.assertIn("citeproc", check["note"])
+
+    def test_the_main_texts_reference_list_is_counted_as_citeproc_sets_it(self):
+        self.put("references.bib", '''@article{a2020, author={Ada Lovelace and Grace Hopper},
+  title={A title of several words}, journal={J. Tests}, year={2020}, volume={1}, pages={1--9}}
+@article{b2021, author={Alan Turing}, title={Another}, journal={J. Tests}, year={2021}}
+@article{c2022, author={Only In SI}, title={Unused here}, journal={J. Tests}, year={2022}}
+''')
+        self.put("si-body.typ", "SI text @si-c2022.\n")
+        self.put("paper.typ", PAPER.replace("More words.", "More words @b2021 and @a2020 again, "
+                                            "but not \"@quoted\" nor @fig:a.")
+                 + '#bibliography("references.bib", style: paper-bib-style)\n'
+                 + '#include "si-body.typ"\n')
+        self.assertEqual(journal.main_text_citations(self.root), ["a2020", "b2021"])
+        refs = journal.reference_words(self.root)
+        self.assertEqual(refs["entries"], 2)
+        self.assertGreater(refs["words"], 15)
+        self.assertIsNone(refs["csl"], "no ieee.csl in this root: pandoc's default style")
+        # No bibliography call, or nothing cited: nothing to count.
+        self.put("paper.typ", PAPER)
+        self.assertIsNone(journal.reference_words(self.root))
 
     # --- what check-journal itself covers ----------------------------------
 

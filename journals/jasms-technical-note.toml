@@ -18,8 +18,8 @@ checked = "2026-09-22"
 [words]
 main-max = 2300
 # The 2,300 covers the abstract and the reference list as well as the text.
-# The word counter can add the abstract; it cannot count a rendered reference
-# list, so the check reports that the true figure is higher than it shows.
+# The reference list counted is the main text's, as citeproc sets it for the
+# Word file that goes to the journal.
 counts = ["abstract", "references"]
 abstract-max = 250
 
