@@ -21,9 +21,15 @@ at the top of the report.
 - **which**: default all five. The user may drop one ("skip figures") or
   name a subset. `/paper:literature-check` is off by default because it needs
   the network and is slow; "with literature" adds it as a sixth agent.
-- **model**: default is `opus`, passed as the Agent tool's `model`
-  parameter on every launch. The user may name another for all reviews or
-  per review ("peer-review on sonnet"). Do not edit any SKILL.md to do so.
+- **model**: passed as the Agent tool's `model` parameter on every launch.
+  Default is split by the kind of work: `claim-audit`, `methods-vs-code`,
+  `figure-review` and `prose-review` are checklists against a fixed standard
+  (the sources, the code, `assets.json`, STYLE.md) and run on `sonnet`;
+  `peer-review` and `literature-check` are judgment calls and run on `opus`.
+  The split exists because Opus draws down the plan's rate-limit window several
+  times faster than Sonnet, and the checklists lose nothing on Sonnet. The
+  user may name another model for all reviews ("all on opus") or per review
+  ("prose-review on opus"). Do not edit any SKILL.md to do so.
 - **scope** and any review-specific words ("pre-submission", "hostile
   Reviewer 2", "just the results section") are passed through verbatim to
   the review they apply to; scope goes to all of them.
@@ -47,7 +53,7 @@ at the top of the report.
 ## Launch
 
 Start all selected reviews in a single turn so they run concurrently, one
-Agent call each. Each agent's prompt is: invoke the named skill with the
+Agent call each, with `model` set per the **model** parameter above. Each agent's prompt is: invoke the named skill with the
 pass-through words, write its findings file under `reviews/`, and reply
 with only the verdict paragraph and the file path. Every prompt also says:
 "`paper.review.txt` is current as of this launch; read it for the prose,

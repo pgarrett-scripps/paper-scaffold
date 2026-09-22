@@ -75,6 +75,18 @@ derived manuscript on this machine now carries the same paragraph at 3.20.3.
 Upgrade: optional; copy the paragraph into CLAUDE.md with the version written
 in.
 
+## 3.22.0
+
+`/paper:review-all` now splits the model by the kind of review. The four
+checklist reviews (`claim-audit`, `methods-vs-code`, `figure-review`,
+`prose-review`) compare the manuscript against a fixed standard and run on
+Sonnet; `peer-review` and `literature-check` are judgment calls and stay on
+Opus. Opus draws down the plan's rate-limit window several times faster than
+Sonnet, and the checklists do not lose findings on Sonnet. "all on opus"
+restores the old behaviour for one run. No manuscript-side change. Each repo pins its plugin version, so run
+`claude plugin update paper@paper-scaffold --scope project` in each paper
+(`paper-plugin-update` on this machine does all of them).
+
 ## 3.21.0
 
 Skills moved out of `.claude/skills/` into a Claude Code plugin, `paper`, served
