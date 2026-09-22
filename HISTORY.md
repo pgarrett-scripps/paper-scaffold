@@ -42,7 +42,7 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
-## Unreleased
+## 3.20.0
 
 Journal profiles. `journals/<name>.toml` carries one venue's limits for one
 manuscript type -- word limits and what they exclude, abstract and keyword
