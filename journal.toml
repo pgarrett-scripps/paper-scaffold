@@ -25,6 +25,9 @@ methods = "main/Methods"
 #   "none"      left out
 # The PDF defaults to the preprint layout and the Word export to the journal's,
 # because the PDF is what goes to an archive and the Word file to the journal.
+# `submission` is the split main-text PDF `just submission` writes for the
+# upload form; it goes to the journal, so it takes the journal's layout too.
 [placement]
 pdf = "preprint"
 docx = "journal"
+submission = "journal"

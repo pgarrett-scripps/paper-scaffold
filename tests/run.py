@@ -96,6 +96,7 @@ CASE_MODULES = (
     "code_cases",             # native code through every output
     "slide_cases",            # slide decks
     "journal_cases",          # journal profiles and the graphical abstract
+    "submission_cases",       # the journal upload set in submission/
 )
 
 

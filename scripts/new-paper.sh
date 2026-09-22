@@ -163,6 +163,7 @@ tar -C "$SCAFFOLD" -cf - \
     --exclude='./stats-rendered.json' \
     --exclude='./viz' \
     --exclude='./paper.docx' \
+    --exclude='./submission' \
     --exclude='./paper.resolved.typ' \
     --exclude='./slides/*.pdf' \
     --exclude='./slides/*.pdfpc' \

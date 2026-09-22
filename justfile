@@ -16,7 +16,7 @@ set positional-arguments
 # The hand-written Typst sources, for `just fmt`. Add files here as the
 # manuscript grows (a reviewer-response letter, a cover letter, a shared macro
 # file). Deliberately does NOT include si/*.typ -- see the `fmt` recipe.
-typst_sources := "config.typ paper.typ si-body.typ code.typ"
+typst_sources := "config.typ paper.typ si-body.typ code.typ cover-letter.typ"
 
 # Line width for typstyle. Must stay in step with `tinymist.formatterPrintWidth`
 # in .vscode/settings.json, or format-on-save and `just fmt` will fight.
@@ -176,7 +176,7 @@ density:
 # directory, and this skips the audiobooks rather than failing. Making it a hard
 # dependency meant `just all` broke on a manuscript that had removed a feature it
 # never asked for.
-# Rebuild every artifact this directory owns: PDF, Word, and the audiobooks if audio/ is present
+# Rebuild every artifact this directory owns: PDF, Word, the submission set, and the audiobooks if audio/ is present
 all: paper
   #!/usr/bin/env bash
   set -euo pipefail
@@ -188,6 +188,8 @@ all: paper
     echo ""
     echo "PDF, Word and review text rebuilt from the current source (no audio/, narration skipped)."
   fi
+  # The upload set, from the capture `paper` just made (no second build).
+  uv run --quiet python tools/submission.py all
   just check
 
 # The one command that answers "is this done". Everything under it already
@@ -261,8 +263,9 @@ verify:
 # commands in three places, which is a conditional ritual, and conditional
 # rituals get skipped (the same reasoning that created `verify`).
 #
-# What it runs, in order: fresh builds of both outputs (as dependencies), the
-# whole verify gate, the deep stats check (re-runs the analysis behind the
+# What it runs, in order: fresh builds of both outputs and the upload set in
+# submission/ (as dependencies), the whole verify gate, the upload set's own
+# staleness check, the deep stats check (re-runs the analysis behind the
 # numbers and diffs -- as slow as your gen_stats.py), and the bibliography audit
 # (network: registered metadata, dead links and retractions). Every stage
 # runs even after one fails, same as verify: the full list beats four rounds of
@@ -271,12 +274,15 @@ verify:
 # NOT here: `just assets`. Regenerating every figure may take hours and is a
 # rebuild, not a check -- `check-assets` (inside verify) already reports if the
 # analysis moved out from under the committed figures, and names what to re-run.
-# Everything to run before submitting: fresh builds, verify, deep stats, DOI audit
-preflight: paper
+# Everything to run before submitting: fresh builds and upload set, verify, deep stats, DOI audit
+preflight: submission
   #!/usr/bin/env bash
   set -uo pipefail
   rc=0
   just verify || rc=1
+  echo ""
+  echo "=== upload set (just check-submission) ==="
+  just check-submission || rc=1
   echo ""
   echo "=== deep stats (just check-stats-deep) ==="
   just check-stats-deep || rc=1
@@ -316,6 +322,8 @@ check:
   # people learn to scroll past, and it was eroding trust in the rest of this
   # output. Rebuild them with `just audiobook-all` when you actually want them.
   just check-build || rc=1
+  # The submission set is a note, never a failure: see the submission recipes.
+  uv run --quiet python tools/submission.py check --note
 
   [ $rc -eq 0 ] && echo "everything is current with the source"
   exit $rc
@@ -807,6 +815,50 @@ docx-check target="":
     uv run --quiet python tools/build_state.py check
   fi
 
+# ---------------------------------------------------------------- submission --
+# The journal upload set, in submission/ with a manifest.json saying what each
+# file is and what built it. tools/submission.py has the full rationale. The
+# split files are cut from the manuscript `just paper` captured -- never from a
+# second compilation of the source -- so they refuse to build until that capture
+# matches the source again, and every page, figure and reference number agrees
+# with paper.pdf. The graphical abstract's format and box, and the journal and
+# article type the cover letter names, come from journals/<profile>.toml.
+#
+# OUTSIDE the gate, like the audiobooks: rebuilding an upload set after every
+# prose edit is a nag nobody acts on. `just check` prints a note when a built
+# set is stale; `just check-submission` fails on it, and preflight runs it.
+# Main text alone -> submission/manuscript.pdf (graphical abstract per [placement].submission)
+main-pdf:
+  @uv run --quiet python tools/submission.py main-pdf
+
+# Supporting Information alone -> submission/supporting-information.pdf
+si-pdf:
+  @uv run --quiet python tools/submission.py si-pdf
+
+# Main text alone, as Word -> submission/manuscript.docx
+main-docx:
+  @uv run --quiet python tools/submission.py main-docx
+
+# Supporting Information alone, as Word -> submission/supporting-information.docx
+si-docx:
+  @uv run --quiet python tools/submission.py si-docx
+
+# Graphical abstract as a standalone file in the journal's format and box
+toc-graphic:
+  @uv run --quiet python tools/submission.py toc-graphic
+
+# Cover letter from cover-letter.typ -> submission/cover-letter.pdf (skipped without the file)
+cover-letter:
+  @uv run --quiet python tools/submission.py cover-letter
+
+# Build the whole upload set into submission/, after a fresh PDF and Word build
+submission: paper
+  @uv run --quiet python tools/submission.py all
+
+# Fail if any file in submission/ no longer matches the source it was built from
+check-submission:
+  @uv run --quiet python tools/submission.py check
+
 # Test Word content, formatting, templates and chapter reference isolation
 test-docx:
   @uv run --quiet python -m unittest discover -s tests -p 'test_document_docx.py'
@@ -932,7 +984,8 @@ check-build:
 _stamp-manuscript:
   @uv run --quiet python tools/build_state.py stamp
 
-# Remove the built PDF, Word export and slide decks
+# Remove the built PDF, Word export, submission set and slide decks
 clean:
   rm -f paper.pdf paper-draft.pdf paper.docx
+  rm -rf submission
   rm -f slides/*.pdf slides/*.pdfpc
