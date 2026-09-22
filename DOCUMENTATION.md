@@ -118,6 +118,7 @@ have to drop their import. The exact edits are under
 | `just density` | Numerals, parentheticals, acronyms, passives per 1,000 words, and section outliers |
 | `just setup` | Build the Python environment (uv, locked) |
 | `just version` | Which scaffold version this manuscript is built on |
+| `just upgrade-plan [vX.Y.Z]` | Upgrade: lines since this version, and each scaffold file classed pristine or customized; read-only unless `--apply-pristine` |
 | `just audio-setup` | One-time: install the audio deps and download the voice model |
 | `just audiobook` | Chaptered `.m4b` of the main text |
 | `just all` | PDF + Word + both audiobooks, then `just check` |
@@ -1359,7 +1360,9 @@ The scaffold version lives in `pyproject.toml` and is copied into every project
 built from it, so `just version` answers "what am I on" from inside a derived
 manuscript. [HISTORY.md](HISTORY.md) records what each release contains, what
 bumps major/minor/patch, and how to pull a later version's changes into an
-existing project.
+existing project. `just upgrade-plan` does the bookkeeping for that: it lists
+the Upgrade: lines in order and says which scaffold files still match the
+release the project came from (safe to replace) and which need a hand merge.
 
 Read HISTORY.md's "Decisions reversed" section before changing something that
 looks obviously improvable. Several obvious improvements were tried here and were

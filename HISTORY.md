@@ -25,23 +25,61 @@ Tag every release: `git tag -a v1.2.3 -m "..."`.
 
 ### Upgrading a project built on an older version
 
+From inside the project. The upstream clone is `--scaffold PATH`, else
+`$PAPER_SCAFFOLD`, else found through `.agents/skills`, a sibling
+`paper-scaffold` directory, or `~/Repos/paper-scaffold`:
+
 ```bash
-SCAFFOLD=~/path/to/paper-scaffold                # your clone of the scaffold
-just version                                    # what the project is on
-git -C "$SCAFFOLD" log --oneline vOLD..vNEW
-git -C "$SCAFFOLD" diff vOLD..vNEW -- justfile tools/ tests/ scripts/
+just version                        # what the project is on
+just upgrade-plan                   # plan to the latest tag, or: just upgrade-plan v3.23.0
+just upgrade-plan --apply-pristine  # copy only the files the project never touched
 ```
 
-(Before 2.0.0 the toolchain sat in the root, so upgrading from 1.x needs
-`justfile *.py tests/` as the path list instead.)
+The plan lists every "Upgrade:" line between the project's version and the
+target, oldest first, folds a pure copy step that a later release repeats,
+and names the customized files each line touches. It then classes every
+scaffold-owned file: **pristine** (identical to upstream at the project's
+current version, so replacing it loses nothing), **customized** (changed both
+locally and upstream; lines on each side, and whether `git merge-file` would
+conflict), **new-upstream**, **removed-upstream**, **project-only**,
+**at-target**, and **unchanged**. `--apply-pristine` copies the pristine and
+new files only, refuses when git shows any of them dirty, and leaves removals,
+customized files and the `version` line to you. `--json` is the same plan for
+an agent.
 
-Then apply what you want by hand. There is deliberately no automatic upgrade: a
-manuscript diverges from the scaffold the moment real writing starts, and a
-merge tool cannot tell your `paper.typ` from the placeholder it replaced. Read
-the major entries first — those need an edit rather than a copy. For moving an
-existing manuscript onto the scaffold, see MIGRATING.md.
+Then merge each customized file by hand, with
+`git -C "$SCAFFOLD" diff vOLD..vNEW -- <path>` beside it, set
+`version` in `pyproject.toml`, and run `just paper` and `just verify`. There is
+still deliberately no automatic merge: a manuscript diverges from the scaffold
+the moment real writing starts, and a merge tool cannot tell your
+customization from the placeholder it replaced. The tool takes over the
+bookkeeping only; every file that would need merging, it leaves to you. Read
+the major entries first, since those need an edit rather than a copy. For
+moving an existing manuscript onto the scaffold, see MIGRATING.md.
+
+(A project older than 3.23.0 has no `tools/upgrade_plan.py`: run the scaffold's
+copy with `--project PATH`, or copy the tool and the recipe in first. Before
+2.0.0 the toolchain sat in the root, so upgrading from 1.x is by hand:
+`git -C ~/Repos/paper-scaffold diff vOLD..vNEW -- justfile *.py tests/`.)
 
 ---
+
+## 3.23.0 (upgrade-plan)
+
+`just upgrade-plan [target]` (`tools/upgrade_plan.py`) plans a scaffold
+upgrade from inside a derived project. Ten papers made about 105 upgrade
+commits in 60 days, most of them copying files the project had never touched,
+one release at a time. The plan reads old releases with `git show` from a
+local clone, never the network: the "Upgrade:" lines for every release in
+(current, target], and a class per scaffold-owned file, where owned means
+what `scripts/new-paper.sh` copies minus what CLAUDE.md says the project owns.
+Pristine files can be replaced with `--apply-pristine`; customized ones still
+get a hand merge, with a three-way summary to size it. `--json` serves agents,
+and `--from` overrides a `version` line that is wrong. Upgrade: copy
+`tools/upgrade_plan.py` and `tests/upgrade_plan_cases.py`, add
+`upgrade_plan_cases` to `CASE_MODULES` in `tests/run.py`, add the
+`upgrade-plan` recipe after `version` in the justfile, and replace the "no
+upgrade script" sentence in CLAUDE.md's "Paper scaffold" paragraph.
 
 ## Unreleased
 
