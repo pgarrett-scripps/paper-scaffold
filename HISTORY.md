@@ -42,6 +42,15 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## 3.20.2
+
+`tests/slide_cases.py` failed four cases in a manuscript with no `slides/`
+directory, which made `just test` and therefore `just verify` fail in exactly
+the projects the 3.20.0 note said were unaffected. The three cases that read
+the shipped deck now skip when it is absent, as `tests/new_paper_cases.py`
+already does for `scripts/new-paper.sh`. Upgrade: copy
+`tests/slide_cases.py`.
+
 ## 3.20.1
 
 The Word resolver honoured `toc-graphic = none` by emitting a literal `#none`

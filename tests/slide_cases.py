@@ -36,6 +36,12 @@ import readability
 import slides
 from prose_rules import Config
 
+# Decks are opt-in: a derived manuscript with no slides/ must pass `just
+# test` untouched (HISTORY 3.20.0). The cases that read the SHIPPED deck skip
+# there; the ones that build decks in a temporary root always run.
+SHIPPED_DECK = (ROOT / "slides/theme.typ").is_file()
+no_shipped_deck = unittest.skipUnless(SHIPPED_DECK, "slides/: absent, skipped")
+
 PAPER = """// >>> BODY START
 Main prose with #s("paper.only") and #fig("fig.paper").
 // <<< BODY END
@@ -124,6 +130,7 @@ class SlideCases(unittest.TestCase):
             with self.subTest(shared=shared), self.assertRaises(ValueError):
                 slides.source(self.root, shared)
 
+    @no_shipped_deck
     def test_the_decks_identity_is_not_the_papers(self):
         """The whole point of slides/config.typ: a deck builds where the
         manuscript's own config.typ does not exist at all, which is what a
@@ -257,10 +264,12 @@ class SlideCases(unittest.TestCase):
 
     # --- the real deck ------------------------------------------------------
 
+    @no_shipped_deck
     def test_touying_pin_is_exact(self):
         theme = (ROOT / "slides/theme.typ").read_text()
         self.assertIn("@preview/touying:0.6.1", theme)
 
+    @no_shipped_deck
     @unittest.skipUnless(shutil.which("typst"), "typst not installed")
     def test_the_shipped_deck_compiles_plain_and_as_a_handout(self):
         """Proves /stats.typ and /assets.typ resolve from slides/, which only
