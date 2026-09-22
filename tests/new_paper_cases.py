@@ -1,6 +1,7 @@
 """scripts/new-paper.sh actually produces a usable manuscript directory."""
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import tempfile
@@ -50,12 +51,19 @@ def run_cases() -> bool:
             return False
 
         cfg = (dest / "config.typ").read_text()
+        version = re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(),
+                            re.M).group(1)
         checks = [
             # The identity actually landed, with the quotes escaped rather than
             # ending the string.
             ("title substituted",
              '#let paper-title = "The \\"Quoted\\" Study: 20% Faster"' in cfg),
             ("author substituted", 'name: "Ada Lovelace"' in cfg),
+            # CLAUDE.md's scaffold paragraph names the release this copy came
+            # from, not the placeholder the scaffold's own copy carries.
+            ("scaffold version written into CLAUDE.md",
+             "SCAFFOLD_VERSION" not in (dest / "CLAUDE.md").read_text()
+             and ("paper-scaffold)\n" + version) in (dest / "CLAUDE.md").read_text()),
             ("keywords substituted", '#let paper-keywords = ("one", "two")' in cfg),
             # Matched on the author ENTRY, not the bare name: config.typ also
             # names both placeholder authors in a comment explaining how the

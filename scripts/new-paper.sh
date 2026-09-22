@@ -352,6 +352,10 @@ if [ "$DO_BUILD" = 1 ]; then
   fi
 fi
 
+# CLAUDE.md carries one short paragraph about the scaffold, the same in every
+# derived manuscript; the placeholder becomes the release this copy came from.
+sed -i "s/SCAFFOLD_VERSION/$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)/" "$DEST/CLAUDE.md"
+
 if [ "$DO_GIT" = 1 ]; then
   if command -v git >/dev/null 2>&1; then
     # A machine with no configured identity (a fresh laptop, a CI runner) makes

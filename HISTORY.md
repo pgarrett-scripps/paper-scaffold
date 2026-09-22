@@ -42,6 +42,16 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ---
 
+## Unreleased
+
+CLAUDE.md carries a short "Paper scaffold" paragraph -- what the scaffold owns,
+what the project owns, how numbers reach the prose, the build and gate
+commands, and how an upgrade is done -- with a `SCAFFOLD_VERSION` placeholder
+that `scripts/new-paper.sh` fills with the release the copy came from. Every
+derived manuscript on this machine now carries the same paragraph at 3.20.3.
+Upgrade: optional; copy the paragraph into CLAUDE.md with the version written
+in.
+
 ## 3.20.3
 
 Three fixes the 3.20 roll-out across ten manuscripts found. `just paper`,
