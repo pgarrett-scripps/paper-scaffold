@@ -82,16 +82,11 @@ setup: doctor
   uv sync
   @echo "environment ready. For the audiobooks: just audio-setup"
 
-# The minimum Typst this scaffold compiles under.
-#
-# 0.13 is where `--features html` and `html.frame()` arrived, so it is the
-# obvious floor and it is the WRONG one. On 0.13 the Word export runs, exits 0,
-# and silently contains no figures: its HTML export emits no <img> for an
-# `image()` call, while tables and the rasterized math both survive. You get a
-# .docx that looks finished and has lost every plot. 0.14 emits them.
-#
-# Measured, not assumed -- 0.13.1, 0.14.2 and 0.15.1 were each run through
-# `just docx` and the output compared. CI holds the floor with a version matrix.
+# The minimum Typst this scaffold compiles under: the oldest version the
+# pipeline is tested against, and CI holds it with a version matrix. It was
+# first set at 0.14 because the HTML Word route, since removed, silently lost
+# every figure on 0.13 (see HISTORY.md, "Decisions reversed"); it stays
+# because nothing older has been run through the pandoc route.
 typst_min := "0.14"
 
 # Reports which of the external tools are present and whether they are new
@@ -478,7 +473,7 @@ readability:
   @uv run --quiet python tools/readability.py
 
 # ---------------------------------------------------------------------------
-# Text-invariance, for structural refactors: preamble changes, docx-mode edits,
+# Text-invariance, for structural refactors: preamble changes,
 # a typstyle upgrade, a migration. The property being protected is "the words
 # in the PDF did not move", which no other check watches -- verify guards the
 # machinery, not the rendered text. Snapshot before the refactor, rebuild
@@ -791,17 +786,6 @@ test-docx:
   @uv run --quiet python -m unittest discover -s tests -p 'test_document_docx.py'
   @uv run --quiet python -m unittest discover -s tests -p 'test_paper_word.py'
 
-# The old docx route, kept as a fallback while the pandoc one earns trust.
-# Typst HTML export -> pandoc: --input docx=true bypasses the arkheion
-# template (HTML export silently discards its front matter and headings), and
-# paper.typ wraps equations in html.frame() under that flag because HTML
-# export drops math outright; tools/typst2docx.py rasterizes them back inline
-# as images -- which is exactly why this is no longer the default. Typst's
-# "ignored during HTML export" warnings are expected and cost nothing.
-# Export paper.docx via the old HTML route (equations become images)
-docx-html:
-  @uv run --quiet python tools/build_state.py docx-html
-
 # ---------------------------------------------------------------------------
 # Generated assets. The contract: numbers and plots in the manuscript are written
 # by the analysis that produced them, never typed in by hand. Tables land in si/
@@ -924,5 +908,5 @@ _stamp-manuscript:
 
 # Remove the built PDF, Word export and slide decks
 clean:
-  rm -f paper.pdf paper-draft.pdf paper.docx paper.docx.html
+  rm -f paper.pdf paper-draft.pdf paper.docx
   rm -f slides/*.pdf slides/*.pdfpc

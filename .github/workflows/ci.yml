@@ -35,9 +35,9 @@ jobs:
       fail-fast: false
       matrix:
         # The floor from `typst_min` in the justfile, and the newest release.
-        # Both, because the two failures are different: an old Typst loses
-        # figures from the Word export (see the justfile comment), and a new one
-        # changes HTML export in ways typst2docx.py has to keep up with.
+        # Both, because the two failures are different: the floor is the oldest
+        # version the pandoc route has been run under, and a new release can
+        # change what the resolver and pandoc's Typst reader agree on.
         typst: ["0.14.2", "0.15.1"]
         python: ["3.10", "3.12"]
 
@@ -112,9 +112,8 @@ jobs:
       # pandoc route, where equations are native Word math: on the old HTML
       # route a rasterized equation is also an image, so the count could not
       # tell a dropped figure from a kept equation, and the check measured the
-      # HTML intermediate instead. That intermediate no longer exists for this
-      # manuscript -- the SI sets its own reference list, which Typst's HTML
-      # export discards, so the HTML route refuses it (asserted below).
+      # HTML intermediate instead. That route is gone (HISTORY.md, "Decisions
+      # reversed"), and this count is exact on the one that remains.
       #
       # The first version counted image() in the sources, which went to zero
       # the day figures moved behind the assets manifest -- a check that
@@ -169,25 +168,6 @@ jobs:
           print(f"  ({len(media)} embedded image(s))")
           sys.exit(0 if all(checks.values()) else 1)
           PY
-
-      # The fallback route cannot build THIS manuscript: the SI sets its own
-      # reference list, and Typst's HTML export would drop it silently, so
-      # `just docx-html` refuses rather than ship a Word file missing every SI
-      # reference. The refusal is the contract, so it is what is asserted. The
-      # typst floor the route depends on is held by `just doctor`, above.
-      - name: The fallback Word route refuses an SI with its own references
-        run: |
-          if just docx-html > "$RUNNER_TEMP/docx-html.log" 2>&1; then
-            echo "FAIL: just docx-html built a manuscript whose SI sets its own"
-            echo "  reference list; the HTML export drops that list silently."
-            exit 1
-          fi
-          grep -q "sets its own reference list" "$RUNNER_TEMP/docx-html.log" || {
-            echo "FAIL: just docx-html failed for a reason other than the SI list:"
-            cat "$RUNNER_TEMP/docx-html.log"
-            exit 1
-          }
-          echo "  ok   refused, as documented"
 
       - run: just verify
 

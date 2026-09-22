@@ -44,6 +44,20 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ## Unreleased
 
+The HTML Word route is gone. `just docx-html`, `tools/typst2docx.py`, the
+`docx-mode` conditionals in `paper.typ` and the `paper-author-line` binding
+they read from `config.typ` are removed; `just docx` through pandoc's Typst
+reader is the only export, and has been the default since 3.18. The route
+could not carry the SI's own reference list, which was the last reason to keep
+it. The PDF renders identically and `paper.docx` is byte-identical. The typst
+floor stays at 0.14, now as the oldest version the pandoc route has been run
+under.
+
+Upgrade: delete `tools/typst2docx.py`, drop the `docx-html` recipe, and remove
+every `docx-mode` branch from `paper.typ`, keeping the `else` content. A
+project that still carries `paper-author-line` in `config.typ` may keep or
+drop it.
+
 `tests/run.py` is a fixture harness and a registry again. It had grown to 2,271
 lines: the golden-file extractor check it documents, plus fourteen unrelated
 suites that ran as a side effect of `structural_cases()`, which chained thirteen
@@ -92,16 +106,14 @@ document, so the SI's is set by Alexandria: `#show: alexandria(prefix: "si-",
 read: p => read(p))` in `paper.typ`, `#bibliographyx(..., prefix: "si-")` at
 the foot of `si-body.typ`, and every SI citation written `@si-key`. Both lists
 number from 1 and each prints only the works its own half cites. The Word
-export converts each list with its own citeproc run and joins the trees;
-`just docx-html`, the legacy HTML route, refuses such a manuscript rather than
-shipping a file with the SI's references silently missing. `just prose-check`
+export converts each list with its own citeproc run and joins the trees.
+`just prose-check`
 reports a bare `@key` in the SI, which compiles and quietly joins the MAIN
 list, and prefixes that disagree between the two files.
 
-CI follows the same decision: the figure-survival check now counts images
-embedded in `paper.docx` against `fig()` call sites, which is exact on the
-pandoc route because equations are native Word math, and the `just
-docx-html` step asserts the documented refusal instead of a build.
+CI's figure-survival check now counts images embedded in `paper.docx`
+against `fig()` call sites, which is exact on the pandoc route because
+equations are native Word math.
 
 Upgrade: nothing to do. A manuscript with one bibliography behaves exactly as
 before, down to the bytes of its Word export. To adopt the second list, copy
@@ -922,6 +934,18 @@ no-op, and restored via `git checkout --`, the most dangerous line in the
 repo. The `.m4b` staleness checks went too: every prose edit marked the
 audiobooks stale, clearing that cost minutes of narration, and a warning
 almost always present and almost never acted on erodes trust in the rest.
+
+### The HTML Word route as a fallback
+
+Word export first went Typst → HTML → pandoc, with a `docx-mode` flag that
+bypassed the PDF template and `html.frame()` plus a rasterizer to bring the
+equations Typst's HTML export drops back as images. When the pandoc route
+arrived it was kept as a fallback "while the new one earns trust". It never
+paid its way: it doubled the preamble with conditionals every editor had to
+read past, it set the typst floor for a reason no longer relevant, and when the
+SI got its own reference list it could not carry it, since the HTML export
+drops the grid that list is set in. A fallback that refuses the scaffold's own
+manuscript is not a fallback. Removed.
 
 ### Re-deriving every value in `just verify` (3.0.0 → 3.2.0)
 

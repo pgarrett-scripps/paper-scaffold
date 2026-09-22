@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """paper.resolved.typ -> paper.docx, through pandoc's real Typst reader.
 
-WHY THIS PATH EXISTS. The HTML route (tools/typst2docx.py, `just docx-html`)
-rasterizes every equation into a PNG, because Typst's HTML export drops math
-outright and images were the only way back. Pandoc reads Typst natively --
+WHY THIS PATH EXISTS. The route it replaced went through Typst's HTML export,
+which drops math outright, so every equation came back as a rasterized PNG;
+it was removed once this one earned trust. Pandoc reads Typst natively --
 a real evaluator -- and writes NATIVE, editable Word equations. The resolver
 has already replaced every project helper with plain Typst, so what this
 script feeds pandoc is exactly what a person would read in the source.

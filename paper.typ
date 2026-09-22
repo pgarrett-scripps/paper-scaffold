@@ -6,9 +6,6 @@
 // tools slice the prose out of this file at those markers -- the word counter,
 // the readability report, and the audiobook narrator -- and each fails loudly
 // rather than guessing if they go missing.
-//
-// The docx-mode machinery in this preamble is load-bearing for `just docx` and
-// is inert on the PDF path. Read the comments before changing it.
 // =============================================================================
 
 #import "@preview/arkheion:0.1.0": arkheion, arkheion-appendices
@@ -31,14 +28,9 @@
 #import "assets.typ": fig, tbl
 #import "code.typ": code-style
 
-// Word-export path (`just docx`): compiling with --input docx=true bypasses the
-// arkheion template. Its front matter and heading styling are built from layout-only
-// primitives (page/pad/line/block) that Typst's HTML export discards, which silently
-// drops every section heading and the abstract. In docx mode we skip the template and
-// emit plain front matter instead, so headings survive as real <h2>/<h3> elements.
-// With the flag absent this is inert and the PDF is byte-for-byte unchanged.
-#let docx-mode = sys.inputs.at("docx", default: "") == "true"
-
+// The Word export (`just docx`) never compiles this preamble: it resolves the
+// source to plain Typst and synthesizes its own front matter from config.typ,
+// so the template below is the PDF's alone.
 #let _template = arkheion.with(
   title: paper-title,
   authors: paper-authors,
@@ -47,42 +39,13 @@
   date: paper-date,
 )
 
-// Apply the template for PDF; in docx mode pass the document through untouched.
-#show: if docx-mode { doc => doc } else { _template }
+#show: _template
 #show: code-style
 // The prefix is a literal here and in si-body.typ's #bibliographyx call, on
 // purpose: tools/prose_check.py and tools/resolve_typst.py both read it out of
 // the source, and a #let in config.typ would be invisible to a text read.
 // `just prose-check` reports the two drifting apart.
 #show: alexandria(prefix: "si-", read: p => read(p))
-
-// arkheion normally supplies heading numbering; without it the `@sec:` cross-references
-// fail to resolve, so restore it on the docx path only. The SI's own "S1"-style
-// numbering is set later in the file and still overrides this for the appendix.
-#set heading(numbering: "1.") if docx-mode
-
-// Typst's HTML export drops equations outright, which would gut any sentence built
-// around inline math. html.frame keeps each one as an SVG that typst2docx.py then
-// rasterizes back inline. Identity on the PDF path, so print output is unchanged.
-#show math.equation: it => if docx-mode { html.frame(it) } else { it }
-
-// Front matter for the Word/HTML path only (the template would normally supply it).
-// The author line comes from config.typ, built from the same author list the PDF
-// template uses, so the superscript affiliation markers cannot drift.
-#if docx-mode {
-  text(17pt, weight: "bold", paper-title)
-  parbreak()
-  text(11pt, paper-author-line)
-  parbreak()
-  for (i, affil) in paper-affiliations.enumerate() {
-    text(9pt, style: "italic", super(str(i + 1)) + " " + affil)
-    linebreak()
-  }
-  parbreak()
-  text(10pt, strong("Abstract.") + " " + paper-abstract)
-  parbreak()
-  text(9pt, strong("Keywords: ") + paper-keywords.join(", "))
-}
 
 // Print just a cross-reference's number (e.g. "3") with no "Figure"/"Table"/
 // "Section" prefix, for enumerations like "Figures 2 and 3".
@@ -188,27 +151,17 @@ generative AI tooling, disclose it in this paragraph.
 #show figure.where(kind: table): set figure(numbering: n => "S" + str(n))
 #set heading(numbering: (..n) => "S" + n.pos().map(str).join("."))
 
-// Same trap as any centred block: HTML export discards the align/block wrapper AND
-// its contents, so on the Word path this whole title block vanishes and the main
-// text runs straight into Section S1 with nothing marking the boundary. Emit it as
-// plain content there -- a real heading, so it also lands in Word's navigation pane
-// -- and keep the centred layout for the PDF.
-#if docx-mode [
-  #heading(level: 1, numbering: none, outlined: false)[Supporting Information]
-
+// The SI's title block, for the PDF. The Word export does not read this
+// layout: tools/resolve_typst.py synthesizes the same block as a real heading
+// from the front matter, so it lands in Word's navigation pane.
+#align(center)[
+  #text(15pt, weight: "bold")[Supporting Information]
+  #v(2pt)
   #text(13pt)[#paper-title]
-
+  #v(2pt)
   #text(10pt, style: "italic")[#si-authors]
-] else [
-  #align(center)[
-    #text(15pt, weight: "bold")[Supporting Information]
-    #v(2pt)
-    #text(13pt)[#paper-title]
-    #v(2pt)
-    #text(10pt, style: "italic")[#si-authors]
-  ]
-
-  #v(1em)
 ]
+
+#v(1em)
 
 #include "si-body.typ"

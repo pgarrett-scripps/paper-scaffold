@@ -662,9 +662,8 @@ def _author_line(meta: dict) -> str:
 def _si_title(meta: dict) -> str:
     """The SI's title block: what the PDF centers ahead of the appendix.
 
-    paper.typ builds it from align/text primitives inside a docx-mode
-    conditional, neither of which travels (the conditional's `docx-mode` is a
-    stripped #let), so it is synthesized here from the same front matter.
+    paper.typ builds it from align/text primitives, which do not travel, so
+    it is synthesized here from the same front matter.
     A #heading CALL rather than `= ` markup, for the same reason the PDF
     passes `numbering: none`: the crossref pass numbers markup headings, and
     this one must not tick Section S1 away from the SI's first real section.
@@ -684,7 +683,7 @@ def _toc_block(paper_src: str, assets: dict) -> str:
     fig() call) with an optional `#let toc-caption = [...]` beside it. Both
     sit in layout wrappers the export cannot use, so the bindings are read
     directly and emitted as plain content -- image, then italic caption --
-    exactly as paper.typ's docx-mode branch lays them out. A manuscript
+    image, then italic caption. A manuscript
     without the binding gets "" and no TOC graphic, which is legal.
     """
     m = readability.BODY_START.search(paper_src)

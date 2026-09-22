@@ -33,7 +33,6 @@ stats-rendered.json
 # just viz diagnostics: regenerated on demand, never part of the manuscript
 viz/
 paper.docx
-paper.docx.html
 
 # Audio toolchain: voice models and every generated audio file. The engine is a
 # uv dependency now (piper-tts), so there is no downloaded binary to ignore.

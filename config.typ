@@ -62,30 +62,16 @@
 // Derived values. Nothing to edit below here.
 // -----------------------------------------------------------------------------
 
-// Unique affiliations in first-appearance order, so the Word front matter can
-// number them the way the PDF template does. Deriving this rather than typing a
-// second author line by hand removes the drift that a duplicated list invites.
+// Unique affiliations in first-appearance order, so the Word export
+// (tools/resolve_typst.py) can number them the way the PDF template does.
+// Deriving this rather than typing a second list by hand removes the drift
+// that a duplicated list invites.
 #let paper-affiliations = {
   let seen = ()
   for a in paper-authors {
     if a.affiliation not in seen { seen.push(a.affiliation) }
   }
   seen
-}
-
-#let affiliation-number(affil) = (
-  paper-affiliations.position(x => x == affil) + 1
-)
-
-// "Ada Lovelace^1, Grace Hopper^2" for the Word front matter, which has no
-// template to build an author line for it. Derived rather than retyped, so the
-// superscript markers cannot drift out of step with the PDF.
-// Wrapped in a code block because a method chain broken across lines after
-// `#let x =` would otherwise end at the first newline.
-#let paper-author-line = {
-  paper-authors
-    .map(a => a.name + super(str(affiliation-number(a.affiliation))))
-    .join(", ")
 }
 
 // Generational and post-nominal suffixes, so a surname lookup does not return

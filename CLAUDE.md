@@ -129,8 +129,7 @@ superscript, and quietly joins the MAIN list instead. `just prose-check` reports
 that as `misrouted-citation`, and reports the prefix in paper.typ's
 `#show: alexandria(...)` drifting from the one in si-body.typ's
 `#bibliographyx(...)`. Both lists read `references.bib`; there is one
-bibliography file. `just docx` sets both; `just docx-html` refuses such a
-manuscript, because Typst's HTML export would drop the SI's list silently.
+bibliography file. `just docx` sets both.
 
 **Never delete the `// >>> BODY START` / `// <<< BODY END` markers** in
 `paper.typ`. The word counter, the readability report, and the narrator all slice
@@ -305,13 +304,12 @@ of those are tracked.
 
 `just docx` goes through `just resolve` and pandoc's native Typst reader:
 real, editable Word equations, and a reference list set by citeproc from
-`references.bib` (matching `<style>.csl` in the root if present). The
-`docx-mode` block in `paper.typ` is load-bearing only for `just docx-html`,
-the old rasterizing route kept as a fallback, and inert on the PDF path. It
-exists because Typst's HTML export silently discards the template's front
-matter, all section headings, and every equation. If you change either path,
-verify with the corresponding recipe and confirm the headings, abstract, and
-equations survive, not just that the command exits 0.
+`references.bib` (matching `<style>.csl` in the root if present). It never
+compiles the preamble: the resolver reads the `#let` bindings in `config.typ`
+and synthesizes the front matter and the SI title block itself, so the arkheion
+template is the PDF's alone. If you change the preamble or the resolver, run
+`just docx` and confirm the headings, abstract, and equations survive, not
+just that the command exits 0.
 
 Typst gotcha worth knowing: a method chain broken across lines after `#let x =`
 or inside `[...]` ends at the first newline, and the continuation is parsed as

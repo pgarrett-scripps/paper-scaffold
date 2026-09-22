@@ -296,8 +296,7 @@ this after its template setup:
 
 Adjust the import path for a nested document. PDF styling lives in `code.typ`;
 Word's corresponding `SourceCode` and `VerbatimChar` styles are set in
-`tools/export_docx.py`. The older `just docx-html` fallback does not use these
-Word styles. Block code stays outside prose metrics and narration; inline
+`tools/export_docx.py`. Block code stays outside prose metrics and narration; inline
 code still counts as words. Captions, numbered listings, and external-file
 snippets are not part of this initial support.
 
@@ -535,10 +534,7 @@ Alexandria package, pointing at neither line).
 The SI's list is excluded from the SI word count (the `<si-references>` label,
 in `wordcount.typ`), dropped by the readability report and the narrator, and
 omitted from the plain-text review copy, exactly as the main list is. `just
-docx` sets both lists, one citeproc run each. `just docx-html`, the legacy
-route, refuses the manuscript: Typst's HTML export discards the grid
-Alexandria sets the list in, and the fallback would ship a Word file missing
-every SI reference with nothing saying so.
+docx` sets both lists, one citeproc run each.
 
 A manuscript that wants one list deletes the show rule and the
 `#bibliographyx` call and writes plain `@key` throughout; every tool then
@@ -1016,14 +1012,9 @@ checked against the `.bib` before converting, because citeproc renders a
 missing one as bold prose and still exits 0. When the output looks wrong, read
 `paper.resolved.typ` — it is exactly what pandoc was fed.
 
-`just docx-html` refuses a manuscript whose SI sets its own reference list,
-for the reason above. It is the old route, otherwise kept as a fallback:
-Typst → HTML → pandoc,
-with `--input docx=true` bypassing the arkheion template (HTML export silently
-discards its front matter and headings) and `html.frame()` +
-`tools/typst2docx.py` rasterizing equations into images — which is exactly why
-it is no longer the default. Its "ignored during HTML export" warnings are
-expected. The PDF path is entirely unaffected by either route.
+This is the only Word route. The one it replaced went Typst → HTML → pandoc,
+and is recorded under "Decisions reversed" in HISTORY.md. The PDF path is
+entirely unaffected by the export.
 
 ### Formatting: the editor and the CLI must agree
 
@@ -1255,13 +1246,10 @@ whether the ones you have are new enough.
 - a network connection for `just audio-setup` (the voice model) and the first
   PDF build (the `arkheion` template)
 
-The Typst floor is 0.14, and it is not where you would guess. `--features html`
-and `html.frame()`, which `just docx-html` is built on, both arrived in 0.13 — but on
-0.13 the Word export runs, exits 0, and silently contains **no figures**: that
-version's HTML export emits no `<img>` for an `image()` call, while tables and
-rasterized math survive. The result is a .docx that looks finished and has lost
-every plot. 0.14 emits them. All three of 0.13.1, 0.14.2 and 0.15.1 were run
-through `just docx` to establish this, and CI holds the floor with a matrix.
+The Typst floor is 0.14: the oldest version the pipeline is tested against,
+held by a CI matrix. It was first set there because the HTML Word route, since
+removed, silently lost every figure on 0.13; it stays because nothing older
+has been run through the pandoc route.
 
 `just setup` builds the Python environment from `pyproject.toml` and commits the
 resolution to `uv.lock`, so every machine gets the same versions. There are two
@@ -1322,7 +1310,7 @@ reason).
 
 Extracted from the `dnoise` manuscript pipeline. The design decisions encoded
 here (commit-date PDF checking, byte-compared figure copies, generated SI tables,
-the docx-mode template bypass) each came from a specific way that manuscript went
+the resolver's own front matter) each came from a specific way that manuscript went
 wrong.
 
 ## License

@@ -23,7 +23,7 @@ from manuscript_sources import source_files
 from manifest_validation import load
 
 ROOT = Path(__file__).resolve().parent.parent
-BUILD_TOOLS = ("render_stats.py", "typst_prose.py", "typst2docx.py",
+BUILD_TOOLS = ("render_stats.py", "typst_prose.py",
                "resolve_typst.py", "export_docx.py", "word_xml.py",
                "paper_word_reference.py", "readability.py",
                "refs_div.lua", "manuscript_sources.py", "manifest_validation.py",
@@ -143,21 +143,6 @@ def prepare_snapshot(root: Path, folder: Path, sources: dict, dependencies: list
 
 def build(mode: str, root: Path = ROOT) -> int:
     output = "paper.pdf" if mode in ("paper", "resolve") else "paper.docx"
-    # The old HTML route cannot carry a second reference list. Typst's HTML
-    # export drops the grid Alexandria sets the SI's list in ("grid was
-    # ignored during HTML export"), so the SI's references would be missing
-    # from the Word file with nothing in the output saying so. `just docx`
-    # converts each list with its own citeproc run and keeps both.
-    if mode == "docx-html":
-        from manuscript_sources import si_bibliography
-        si = si_bibliography(root)
-        if si and si["block"] is not None:
-            raise ValueError(
-                "the Supporting Information sets its own reference list, "
-                "which Typst's HTML export discards -- this fallback route "
-                "would ship a Word file missing every SI reference. Export "
-                "with `just docx` (pandoc's Typst reader), which sets both "
-                "lists.")
     with build_lock(root), tempfile.TemporaryDirectory(dir=root / ".build-state") as tmp:
         staged = Path(tmp) / output
         depfile = Path(tmp) / "deps.json"
@@ -182,15 +167,10 @@ def build(mode: str, root: Path = ROOT) -> int:
                 manifest = prepare_snapshot(root, folder, before, dependencies)
                 if mode in ("paper", "resolve"):
                     shutil.copyfile(folder / "paper.pdf", staged)
-                elif mode == "docx":
+                else:
                     run(sys.executable, str(root / "tools/export_docx.py"),
                         "--root", str(folder), "--source", str(folder / "paper.word.typ"),
                         "--output", str(staged))
-                else:
-                    target = folder / "paper.html"
-                    run("typst", "compile", "--root", str(folder), "--features", "html",
-                        "--input", "docx=true", "-f", "html", str(folder / "paper.typ"), str(target))
-                    run(sys.executable, str(root / "tools/typst2docx.py"), str(target), str(staged))
                 if snapshot(root, dependencies) != before:
                     raise ValueError("sources changed during the build; last good output preserved, rerun the build")
                 saved = root / ".build-state" / "manuscripts" / manifest["id"]
@@ -244,7 +224,7 @@ def check(root: Path = ROOT) -> list[dict]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("paper", "resolve", "docx", "docx-html", "check", "stamp"))
+    parser.add_argument("command", choices=("paper", "resolve", "docx", "check", "stamp"))
     args = parser.parse_args()
     try:
         if args.command == "stamp":
