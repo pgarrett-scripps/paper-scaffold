@@ -98,6 +98,11 @@ shipping a file with the SI's references silently missing. `just prose-check`
 reports a bare `@key` in the SI, which compiles and quietly joins the MAIN
 list, and prefixes that disagree between the two files.
 
+CI follows the same decision: the figure-survival check now counts images
+embedded in `paper.docx` against `fig()` call sites, which is exact on the
+pandoc route because equations are native Word math, and the `just
+docx-html` step asserts the documented refusal instead of a build.
+
 Upgrade: nothing to do. A manuscript with one bibliography behaves exactly as
 before, down to the bytes of its Word export. To adopt the second list, copy
 the Alexandria show rule into `paper.typ` and the `#bibliographyx` call into

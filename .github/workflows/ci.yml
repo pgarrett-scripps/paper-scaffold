@@ -106,23 +106,23 @@ jobs:
       # The Word export is the part that fails silently rather than loudly, so
       # exiting 0 is not enough of an assertion.
       #
-      # Every figure must survive. This is measured on the HTML intermediate
-      # rather than the .docx because a count of embedded images cannot tell a
-      # figure from a rasterized equation: on typst 0.13 the export drops the
-      # figure and keeps both equations, so the .docx still contains images and
-      # still looks fine. One <img> per rendered figure is the property that
-      # actually distinguishes them.
+      # Every figure must survive. This is measured as embedded images in the
+      # .docx against fig("...") call sites (plus any direct image() calls),
+      # with // comments stripped first. That count is only meaningful on the
+      # pandoc route, where equations are native Word math: on the old HTML
+      # route a rasterized equation is also an image, so the count could not
+      # tell a dropped figure from a kept equation, and the check measured the
+      # HTML intermediate instead. That intermediate no longer exists for this
+      # manuscript -- the SI sets its own reference list, which Typst's HTML
+      # export discards, so the HTML route refuses it (asserted below).
       #
-      # Figures are counted as fig("...") call sites (plus any direct image()
-      # calls), with // comments stripped first. The first version counted
-      # image() in the sources, which went to zero the day figures moved behind
-      # the assets manifest -- a check that compares against zero passes forever.
-      # The count therefore also FAILS the step when it finds no figures at all,
-      # so it cannot silently die the same way twice.
-      - name: Every figure survives the HTML export
+      # The first version counted image() in the sources, which went to zero
+      # the day figures moved behind the assets manifest -- a check that
+      # compares against zero passes forever. The count therefore also FAILS
+      # the step when it finds no figures at all, so it cannot silently die
+      # the same way twice.
+      - name: Every figure survives the Word export
         run: |
-          typst compile --features html --input docx=true -f html \
-            paper.typ "$RUNNER_TEMP/check.html" 2>/dev/null
           calls=$(uv run --quiet python - <<'PY'
           import re
           from pathlib import Path
@@ -134,8 +134,8 @@ jobs:
                 + len(re.findall(r'\bimage\(\s*"', src)))
           PY
           )
-          imgs=$(grep -o '<img' "$RUNNER_TEMP/check.html" | wc -l)
-          echo "  figure references in source: $calls, <img> in export: $imgs"
+          imgs=$(unzip -Z1 paper.docx | grep -c '^word/media/' || true)
+          echo "  figure references in source: $calls, images in paper.docx: $imgs"
           if [ "$calls" -eq 0 ]; then
             echo "FAIL: found no figure references in the sources. Either the"
             echo "  scaffold really has no figures, or this count no longer"
@@ -144,9 +144,8 @@ jobs:
             exit 1
           fi
           if [ "$imgs" -lt "$calls" ]; then
-            echo "FAIL: the HTML export dropped $((calls - imgs)) figure(s)."
-            echo "  The Word export would be produced anyway, look finished, and"
-            echo "  be missing plots. This is what typst 0.13 does; see typst_min."
+            echo "FAIL: the Word export dropped $((calls - imgs)) figure(s)."
+            echo "  The file would look finished and be missing plots."
             exit 1
           fi
 
@@ -171,9 +170,24 @@ jobs:
           sys.exit(0 if all(checks.values()) else 1)
           PY
 
-      # The fallback route still has to build -- it is the one html.frame()
-      # and the typst floor exist for, and the matrix is what holds that floor.
-      - run: just docx-html
+      # The fallback route cannot build THIS manuscript: the SI sets its own
+      # reference list, and Typst's HTML export would drop it silently, so
+      # `just docx-html` refuses rather than ship a Word file missing every SI
+      # reference. The refusal is the contract, so it is what is asserted. The
+      # typst floor the route depends on is held by `just doctor`, above.
+      - name: The fallback Word route refuses an SI with its own references
+        run: |
+          if just docx-html > "$RUNNER_TEMP/docx-html.log" 2>&1; then
+            echo "FAIL: just docx-html built a manuscript whose SI sets its own"
+            echo "  reference list; the HTML export drops that list silently."
+            exit 1
+          fi
+          grep -q "sets its own reference list" "$RUNNER_TEMP/docx-html.log" || {
+            echo "FAIL: just docx-html failed for a reason other than the SI list:"
+            cat "$RUNNER_TEMP/docx-html.log"
+            exit 1
+          }
+          echo "  ok   refused, as documented"
 
       - run: just verify
 
