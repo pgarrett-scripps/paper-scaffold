@@ -44,7 +44,7 @@ existing manuscript onto the scaffold, see MIGRATING.md.
 
 ## Unreleased
 
-Six read-only review skills join the four editing skills in
+Seven read-only review skills join the four editing skills in
 `.claude/skills/`: `claim-audit` walks every quantitative claim to the code
 that computes it through `just trace`; `methods-vs-code` compares the methods
 section with the analysis parameter by parameter; `figure-review` checks each
@@ -53,14 +53,18 @@ figure and table against its caption, citing sentences, and statistics;
 proposes only replacements the evidence supports; `literature-check`
 reads each cited work against the sentence citing it, searches for missing
 foundational or competing work, and may only propose a reference it
-resolved online in the same pass; `peer-review` convenes a small panel of reviewer personas and an editor, with
+resolved online in the same pass; `story-review` is the developmental
+pass, proposing message, structure, float, and analysis changes ranked by
+cost against acceptance with the stated aim of a defensible paper that gets
+published rather than a perfect one; `peer-review` convenes a small panel of reviewer personas and an editor, with
 loose parameters, and depends on no external review pipeline. Each writes a
 dated findings file under `reviews/` and routes every fix to the editing
 skill that owns it, so a review never edits the manuscript. `review-all`
-runs them concurrently, the literature check on request, as forked agents, with an optional model per run,
+runs the fix-list reviews concurrently, the literature check on request
+and the story review never, as forked agents, with an optional model per run,
 and merges the findings into one ranked list with a ship verdict. The review
 skills carry `context: fork` and `model: opus`, so they run as their own
-agents on Opus and hand back only the report. Upgrade: copy the seven new directories under
+agents on Opus and hand back only the report. Upgrade: copy the eight new directories under
 `.claude/skills/`.
 
 CLAUDE.md carries a short "Paper scaffold" paragraph -- what the scaffold owns,

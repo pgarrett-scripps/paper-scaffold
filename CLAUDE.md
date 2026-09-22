@@ -191,11 +191,11 @@ Before a wording-only pass (yours or an agent's): `just edit-baseline`, edit,
 never invented; references, floats and headings must survive exactly. Read the
 edited sentences for meaning even when the guard passes.
 
-Eleven packaged workflows ship as skills in `.claude/skills/`. Four edit:
+Twelve packaged workflows ship as skills in `.claude/skills/`. Four edit:
 `/copy-edit` (a wording pass bracketed by the edit guard), `/fix-verify`
 (clear a failing gate the intended way), `/declare-number` (route a typed
 numeral through the four tiers), `/new-figure` (all four steps, including the
-wordcount scope). Six review and are read-only, each writing a findings file
+wordcount scope). Seven review and are read-only, each writing a findings file
 under `reviews/` that routes every fix to one of the editing skills:
 `/claim-audit` (each quantitative claim against the code that computes it),
 `/methods-vs-code` (the methods section against the analysis, parameter by
@@ -205,10 +205,14 @@ or machine-sounding language, with concrete replacements the evidence
 supports), `/literature-check` (each citation against what the cited work
 says, missing foundational or competing work, citation hygiene; needs the
 network and never proposes a reference it did not resolve online),
-`/peer-review` (a small panel of
+`/story-review` (the developmental pass: message, structure, which floats
+to add, merge, or cut, and what analysis is missing, ranked by cost against
+acceptance with the aim of a defensible paper that gets published, not a
+perfect one), `/peer-review` (a small panel of
 reviewer personas and an editor's decision, with loose parameters for scope,
 panel, journal, and depth). `/review-all` runs them in parallel, the
-literature check only on request, and merges their findings into one ranked list with a ship verdict. The review
+literature check only on request and the story review never (its output is
+a plan to discuss, not a fix list), and merges their findings into one ranked list with a ship verdict. The review
 skills run forked, as their own agents, pinned to Opus by `model: opus` in
 their frontmatter; `/review-all` passes the same default to each launch. A
 review skill never edits the manuscript.
