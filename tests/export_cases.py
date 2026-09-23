@@ -29,6 +29,11 @@ def run_cases() -> bool:
     body = (
         "= Intro <sec:i>\n"
         "prose\n"
+        # A FORWARD reference, reflowed onto three lines by typstyle. The label
+        # inside it must not count as a float definition: when it did, the
+        # first forward reference ticked the figure counter and every figure
+        # in the Word export was off by one (koth-paper).
+        "forward #ref(\n  <fig:a>,\n) before the definition\n"
         '#figure(image("a.png"), caption: [First light.]) <fig:a>\n'
         "== Deep\n<sec:d>\n"  # label wrapped onto its own line, as typstyle may
         "#figure(table()) <tbl:t>\n"
@@ -47,7 +52,7 @@ def run_cases() -> bool:
         print(f"  crossrefs: raised {type(e).__name__}: {e}")
         got = ""
         ok = False
-    for want in ("see Figure 1,", " Table 1,", " Table 2,", " Equation 1,",
+    for want in ("see Figure 1,", "forward Figure 1 before", " Table 1,", " Table 2,", " Equation 1,",
                  " Section 1.1,", " Section S1,", " Figure S1,",
                  "figure([S1])",        # code mode: a content block, not bare words
                  "and SS1 and",         # supplement: none -> the bare number
