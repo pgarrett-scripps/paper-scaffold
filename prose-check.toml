@@ -12,6 +12,11 @@
 # such as semicolon-count. Prefer [allow] for anything narrower.
 disable = []
 
+# House-style rules that are off until named here: list-in-prose (no bulleted
+# or numbered lists in running prose) and bold-in-prose (bold only for a run-in
+# paragraph label, never for emphasis). Turn them on if the journal wants it.
+# enable = ["list-in-prose", "bold-in-prose"]
+
 # Values that are fine in this manuscript, per rule. Matching is
 # case-insensitive on the value the finding names.
 [allow]

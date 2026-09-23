@@ -1171,6 +1171,59 @@ def check_todos(sources: dict[str, str]) -> list[Finding]:
     return out
 
 
+# A list item: `- ` (bulleted) or `+ ` (numbered) opening a line.
+LIST_ITEM = re.compile(r"(?m)^[ \t]*([-+])[ \t]+(\S+(?:[ \t]+\S+)?)")
+
+
+def check_house_style(sources: dict[str, str]) -> list[Finding]:
+    """Lists and bold in running prose, for a house style that forbids them.
+
+    Opt-in (`enable` in prose-check.toml): some journals want every list turned
+    into connected prose and bold kept off emphasis, and the rest do not care.
+    Judged on the RAW source, because lists and bold are exactly the markup
+    readability.clean() has already unwrapped by the time check() sees the text.
+
+    Bold survives in two places: a span alone on its line, and a run-in label
+    opening a line and ending in a period or colon (`*Early stopping.* It
+    halts when...`), which is a paragraph's mini-heading, not emphasis. A
+    genuinely tabular enumeration in the SI earns an [allow] entry.
+    """
+    out: list[Finding] = []
+    for name, src in sources.items():
+        body = re.sub(r"(?m)^\s*//.*$", " ", src)
+        body = re.sub(r"```.*?```", " ", body, flags=re.S)
+        # Math: a display equation broken so a line opens with "- x" is not a
+        # list, and `a * b` inside it is not bold.
+        body = re.sub(r"(?<!\\)\$[^$]*(?<!\\)\$", " ", body)
+        for opener in ("#raw(", "#figure(", "#table("):
+            body = typst_prose.strip_balanced(body, opener)
+
+        for m in LIST_ITEM.finditer(body):
+            kind = "bulleted" if m.group(1) == "-" else "numbered"
+            out.append(Finding(
+                "list-in-prose", "error",
+                f"{kind} list item in running prose; write it as sentences",
+                subject=m.group(2), where=name,
+                context=_ctx(body, m.start())))
+
+        for m in re.finditer(typst_prose.markup("*"), body):
+            start = body.rfind("\n", 0, m.start()) + 1
+            end = body.find("\n", m.end())
+            line = body[start:end if end >= 0 else len(body)]
+            opens_line = not body[start:m.start()].strip()
+            if line.strip() == m.group(0).strip():
+                continue                          # alone on its line
+            if opens_line and m.group(1).rstrip().endswith((".", ":")):
+                continue                          # run-in paragraph label
+            text = " ".join(m.group(1).split())[:40]
+            out.append(Finding(
+                "bold-in-prose", "error",
+                f"bold {text!r} in running prose; let word order carry the "
+                f"emphasis",
+                subject=text, where=name, context=_ctx(body, m.start())))
+    return out
+
+
 def check_structure(sources: dict[str, str]) -> list[Finding]:
     """Checks that need the Typst source rather than the extracted prose.
 
@@ -1256,6 +1309,8 @@ def main() -> int:
     findings += check_derivable_numbers(targets)
     findings += check_unaccounted_numbers(targets)
     findings += check_todos(targets)
+    if cfg.runs("list-in-prose") or cfg.runs("bold-in-prose"):
+        findings += check_house_style(targets)
     findings += check_bypassed_assets(targets)
     findings += check_orphaned_assets()
     findings += check_figure_resolution(cfg=cfg)

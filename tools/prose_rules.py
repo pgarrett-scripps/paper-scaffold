@@ -69,7 +69,17 @@ RULES: dict[str, tuple[str, str]] = {
     "si-bibliography-prefix": ("error", "the prefix"),
     "missing-doi":        ("warn",  "the entry key"),
     "implausible-year":   ("warn",  "the entry key"),
+    # House style, off unless `enable` names them (see OPT_IN).
+    "list-in-prose":      ("error", "the item's first words"),
+    "bold-in-prose":      ("error", "the bold text"),
 }
+
+# Rules that run only when prose-check.toml's `enable` names them. They are a
+# house style, not a defect: some journals want running prose with no bulleted
+# lists and no bold for emphasis, others are indifferent. Off by default, so a
+# project that never asked for the rule is not handed a gate to argue with;
+# one that wants it opts in once.
+OPT_IN = {"list-in-prose", "bold-in-prose"}
 
 DEFAULT_LIMITS = {
     "max-sentence-words": 40,   # a hard run-on line, not the 25-word aim
@@ -112,6 +122,7 @@ VOCABULARIES = {
 @dataclass
 class Config:
     disable: set[str] = field(default_factory=set)
+    enable: set[str] = field(default_factory=set)    # opt-in rules switched on
     allow: dict[str, set[str]] = field(default_factory=dict)
     limits: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_LIMITS))
     severity: dict[str, str] = field(default_factory=dict)
@@ -141,6 +152,14 @@ class Config:
             else:
                 out.discard(key)
         return out
+
+    def runs(self, rule: str) -> bool:
+        """Whether the rule is on at all. An opt-in rule needs `enable`.
+
+        Distinct from `suppresses`: an opt-in rule nobody enabled produced
+        nothing to hide, so it must not inflate the "N suppressed" footer.
+        """
+        return rule not in OPT_IN or rule in self.enable
 
     def suppresses(self, f: Finding) -> bool:
         if f.rule in self.disable:
@@ -190,7 +209,8 @@ def load_config(root: Path) -> Config:
     except tomllib.TOMLDecodeError as e:
         _bad(f"is not valid TOML: {e}")
 
-    known_top = {"disable", "allow", "limits", "severity", "vocabulary"}
+    known_top = {"disable", "enable", "allow", "limits", "severity",
+                 "vocabulary"}
     unknown_top = set(raw) - known_top
     if unknown_top:
         _bad(f"unknown section(s) {sorted(unknown_top)}; "
@@ -201,6 +221,16 @@ def load_config(root: Path) -> Config:
     if bad:
         _bad(f"unknown rule(s) in disable: {sorted(bad)}\n"
              f"       known rules: {', '.join(sorted(RULES))}")
+
+    # Only the off-by-default rules. Naming any other rule here would read as
+    # "this is now on" while changing nothing, the same silent no-op as a
+    # typo'd suppression.
+    enable = set(raw.get("enable", []))
+    bad = enable - OPT_IN
+    if bad:
+        _bad(f"`enable` takes only the off-by-default rules "
+             f"({', '.join(sorted(OPT_IN))}); got {sorted(bad)}. Every other "
+             f"rule is already on.")
 
     allow_raw = raw.get("allow", {})
     bad = set(allow_raw) - set(RULES)
@@ -261,7 +291,7 @@ def load_config(root: Path) -> Config:
             _bad(f"[vocabulary.{name}].remove must be a list, got {remove!r}")
         vocab[name] = {"add": add, "remove": [str(v).lower() for v in remove]}
 
-    return Config(disable=disable, allow=allow, limits=limits,
+    return Config(disable=disable, enable=enable, allow=allow, limits=limits,
                   severity=severity, vocab=vocab, path=path)
 
 
@@ -279,7 +309,8 @@ def report(findings: list[Finding], cfg: Config, *, show_suppressed: bool,
     # Severity is applied here rather than where each Finding is built: one place
     # to get right, and no check has to know the config exists to honour it.
     # Findings are frozen, so this rebuilds rather than assigns.
-    findings = [replace(f, severity=cfg.severity_of(f.rule)) for f in findings]
+    findings = [replace(f, severity=cfg.severity_of(f.rule)) for f in findings
+                if cfg.runs(f.rule)]
 
     kept, hidden = [], []
     for f in findings:
@@ -328,11 +359,14 @@ def list_rules() -> int:
           "switched off.\n")
     for rule, (sev, subj) in sorted(RULES.items()):
         how = f'[allow].{rule} = ["..."]  ({subj})' if subj else "disable only"
-        print(f"  {rule:<{w}}  {sev:<5}  {how}")
+        off = "  (off unless enabled)" if rule in OPT_IN else ""
+        print(f"  {rule:<{w}}  {sev:<5}  {how}{off}")
 
     print(f"\nEverything below goes in {CONFIG_NAME}, beside STYLE.md.\n")
     print("  [severity]        re-rate any rule: <rule> = \"error\" | \"warn\"")
     print("  disable = [...]   switch a rule off entirely")
+    print(f"  enable = [...]    switch on an off-by-default rule: "
+          f"{', '.join(sorted(OPT_IN))}")
     print("  [allow]           keep a rule on, exempt named values")
     print(f"\n  [limits]          "
           f"{', '.join(f'{k} = {v}' for k, v in DEFAULT_LIMITS.items())}")

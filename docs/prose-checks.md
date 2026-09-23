@@ -75,6 +75,15 @@ paragraph legitimately forward-references, so it does not gate), and an acronym
 used repeatedly but never expanded (what counts as common knowledge is
 field-specific).
 
+Two house-style rules are off until `prose-check.toml` names them in
+`enable = [...]`, because only some journals want them. `list-in-prose` flags
+a bulleted (`- `) or numbered (`+ `) list item in running prose, and
+`bold-in-prose` flags bold used for emphasis, allowing a bold span alone on its
+line or a run-in label that opens a line and ends in a period or colon
+(`*Early stopping.* Extension halts...`). Both read the raw source, skipping
+comments, code, math and figure blocks, since the cleaned prose has already
+unwrapped the markup they are about.
+
 ## Numbers about the draft: `just viz`
 
 `just viz` writes `viz/report.json` alongside its plots. Read it rather than

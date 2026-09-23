@@ -311,9 +311,79 @@ def suppression_cases() -> bool:
         ok = False
     return ok
 
+def house_style_cases() -> bool:
+    """The opt-in list and bold rules: what they flag, what they leave alone,
+    and that they stay silent until a project enables them."""
+    import contextlib
+    import io
+    import prose_check as pc
+    import prose_rules as pr
+
+    ok = True
+    cases = [
+        ("bulleted item", "Two gates bound it:\n- the first gate\n", 1, 0),
+        ("numbered item", "Steps:\n+ load the data\n+ fit it\n", 2, 0),
+        ("a dash inside a sentence is not a list",
+         "The range is 3 - 5 units wide.\n", 0, 0),
+        ("a line opening with math is not a list",
+         "$\n- x + y\n$ is the residual.\n", 0, 0),
+        ("comments are not prose", "// - a note\nText.\n", 0, 0),
+        ("figure captions are not prose",
+         '#figure(image("x.png"), caption: [*(a)* and\n- b])\n', 0, 0),
+        ("bold emphasis in a sentence", "This is *not* the case.\n", 0, 1),
+        ("bold number in a sentence", "Recall was *79.9%* overall.\n", 0, 1),
+        ("run-in label alone on its line",
+         "*Early stopping.*\nExtension halts at the floor.\n", 0, 0),
+        ("run-in label opening a paragraph",
+         "*Early stopping.* Extension halts at the floor.\n", 0, 0),
+        ("bold opening a line but not a label",
+         "The gate is\n*only* applied once.\n", 0, 1),
+        ("a multiplication in math is not bold", "Here $a * b * c$ holds.\n", 0, 0),
+    ]
+    for name, src, lists, bolds in cases:
+        found = pc.check_house_style({"t": src})
+        got = (len([f for f in found if f.rule == "list-in-prose"]),
+               len([f for f in found if f.rule == "bold-in-prose"]))
+        if got != (lists, bolds):
+            print(f"  house style [{name}]: expected {(lists, bolds)}, got {got}")
+            ok = False
+
+    # Off by default: report() drops the finding outright, rather than
+    # counting it as suppressed, until `enable` names the rule.
+    f = pr.Finding("bold-in-prose", "error", "bold", "not")
+    for cfg, want_rc in [(pr.Config(), 0),
+                         (pr.Config(enable={"bold-in-prose"}), 1)]:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = pr.report([f], cfg, show_suppressed=False, strict=False)
+        if rc != want_rc or (want_rc == 0 and "suppressed" in buf.getvalue()):
+            print(f"  house style: enable={sorted(cfg.enable)} gave rc {rc}, "
+                  f"expected {want_rc} -- {buf.getvalue()!r}")
+            ok = False
+
+    # `enable` accepts only the off-by-default rules: naming a rule that is
+    # already on would read as a change and do nothing.
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        for body, want_ok in [('enable = ["list-in-prose"]\n', True),
+                              ('enable = ["em-dash"]\n', False)]:
+            (Path(d) / pr.CONFIG_NAME).write_text(body)
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    cfg = pr.load_config(Path(d))
+                got_ok = cfg.runs("list-in-prose")
+            except SystemExit:
+                got_ok = False
+            if got_ok != want_ok:
+                print(f"  house style: config {body.strip()!r} loaded={got_ok}, "
+                      f"expected {want_ok}")
+                ok = False
+    return ok
+
 def run_cases() -> bool:
     ok = True
-    for case in (structural_cases, boundary_cases, suppression_cases,):
+    for case in (structural_cases, boundary_cases, suppression_cases,
+                 house_style_cases,):
         ok &= case()
     return ok
 
