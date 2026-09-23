@@ -54,10 +54,11 @@ def locate(root: Path, name: str) -> Path:
     Only names under SHADOWED fall back; anything else is the manuscript's
     and is returned as `root/name` whether or not it exists.
     """
-    path = root / name
-    if path.exists() or not name.startswith(SHADOWED):
+    rel = Path(name).as_posix()  # "tools/" and "./tools" -> "tools"
+    path = root / rel
+    if path.exists() or not (rel + "/").startswith(SHADOWED):
         return path
-    packaged = DATA / name
+    packaged = DATA / rel
     return packaged if packaged.exists() else path
 
 

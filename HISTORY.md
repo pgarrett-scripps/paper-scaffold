@@ -64,6 +64,33 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 4.0.1
+
+Three 4.0.0 roll-out bugs in `paper migrate` and `paper path`.
+
+- **`migrate` refuses the paper's own files in `docs/`.** `docs/` is the
+  package's (docs/package.md, "What a paper holds"): `migrate` removed the
+  directory and `paper sync --check` fails on one, so a paper's study notes
+  there were either deleted or left verify failing. `migrate` now names them
+  and says to move them to `notes/`; `sync --check` stays strict (a
+  leftover `docs/` cannot be told apart from an unfinished migration) and
+  its message now says where notes go.
+- **`migrate` refuses Python that reaches the paper's `tools/`** (a
+  `sys.path` insert, an import, a glob) with each `file:line`, in the paper
+  and, for a paper in a subdirectory, in the rest of the repository when the
+  line names the paper directory. Replacement: `paper_scaffold.tools_dir()`
+  (docs/package.md, "Code that used tools/"; docs/hooks.md).
+- **`paths.locate()` normalizes the name**, so `paper path tools` (no
+  trailing slash) and `./tools` give the package's directory, not a missing
+  local `tools`.
+
+Upgrade: a paper on 4.0.0: `uv add` the v4.0.1 pin, `uv run paper sync`
+(it rewrites `analysis/scripts/_toolchain/paths.py`), then move any notes
+of the paper's own out of `docs/` to `notes/` (`git mv`, fix links) and
+replace any code that builds `PAPER / "tools"` with
+`paper_scaffold.tools_dir()`; `just verify`. A paper still on 3.x: migrate
+from a v4.0.1 clone, which refuses both cases up front.
+
 ## 4.0.0
 
 The toolchain is a package. A paper holds what it owns plus a pin, and an

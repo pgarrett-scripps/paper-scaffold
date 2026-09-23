@@ -131,7 +131,12 @@ The export runs them in this order:
 
 A step runs with the toolchain's Python, with `tools/` on its path (so
 `from word_xml import W, order_properties` works), from the manuscript
-root, and with `$PAPER_ROOT` set. A non-zero exit fails the export. Use only
+root, and with `$PAPER_ROOT` set. Other paper code that needs a tool must
+not build the path from the manuscript (`ROOT / "tools"`): on 4.x the
+tools live in the installed package, so use
+`sys.path.insert(0, str(paper_scaffold.tools_dir()))`, or run the tool as
+`uv run paper tool <name>` ([package.md](package.md), "Code that used
+tools/"). A non-zero exit fails the export. Use only
 the standard library and the toolchain's packages: the root `pyproject.toml`
 is scaffold-owned.
 

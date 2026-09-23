@@ -268,7 +268,9 @@ def check(root: Path) -> list[str]:
         if (root / name).is_dir():
             problems.append(f"{name}/: the toolchain's {name}/ now comes from the "
                             "package; this copy is never read (finish the "
-                            "migration: .paper/docs/package.md)")
+                            "migration: .paper/docs/package.md"
+                            + ("; the paper's own notes go in notes/"
+                               if name == "docs" else "") + ")")
     return problems
 
 

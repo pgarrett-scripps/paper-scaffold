@@ -128,6 +128,20 @@ def sync_cases(check) -> None:
         check("--check flags a leftover tools/", has(sm.check(root), "tools/"))
         (root / "tools" / "x.py").unlink()
         (root / "tools").rmdir()
+        write(root, {"docs/study.md": "notes\n"})
+        check("--check flags a docs/ of the paper's own notes, naming notes/",
+              has(sm.check(root), "docs/", "notes/"), sm.check(root))
+        (root / "docs/study.md").unlink()
+        (root / "docs").rmdir()
+
+        # locate(): a directory name falls back with or without the slash.
+        import paths
+        for name in ("tools", "tools/", "./tools", "journals"):
+            got = paths.locate(root, name)
+            check(f"locate({name!r}) is the package's directory",
+                  got == paths.DATA / name.strip("./") and got.is_dir(), got)
+        check("locate of a manuscript file stays in the manuscript",
+              paths.locate(root, "paper.typ") == root / "paper.typ")
 
         # An override is the paper's: never written, never flagged, and wins.
         import paths
@@ -247,6 +261,65 @@ def migrate_cases(check) -> None:
               and (project / "tests/run.py").is_file()
               and not (project / sm.LOCK).exists()
               and "paper-scaffold" not in (project / "pyproject.toml").read_text())
+
+    # The paper's own notes under docs/: refused (docs/ is the package's and
+    # would be removed), naming each file and notes/.
+    with tempfile.TemporaryDirectory() as tmp:
+        scaffold, project = migrate_fixture(Path(tmp), {
+            "docs/stability-study.md": "our study\n"})
+        plan = mg.classify(project, scaffold, None, PIN)
+        check("migrate refuses the paper's own docs/ files",
+              any(r.startswith("docs/") and "stability-study.md" in r
+                  and "notes/" in r for r in plan.refused), plan.refused)
+        check("the stock docs/ file is still removed, not refused",
+              "docs/README.md" in plan.remove, plan.remove)
+        rc = quiet_main(project, scaffold, None, PIN, False, False)
+        check("a docs/ refusal changes nothing", rc == 1
+              and (project / "docs/stability-study.md").is_file(), rc)
+
+    # Python reaching the paper's tools/: in the paper, and in the repository
+    # around a paper kept in a subdirectory. Refused with file:line.
+    with tempfile.TemporaryDirectory() as tmp:
+        scaffold, project = migrate_fixture(Path(tmp), {
+            "analysis/scripts/gen_stats.py":
+                "import sys\nfrom pathlib import Path\n"
+                "PAPER = Path(__file__).parents[2]\n"
+                "sys.path.insert(0, str(PAPER / 'tools'))\n",
+            "hooks/fix.py": "from tools.word_xml import W\n",
+            "analysis/scripts/ok.py":
+                "# see tools/check_stats.py\n"
+                "print('the two tools disagree')\n"
+                "x = PAPER / 'tools'  # paper-migrate: ignore\n",
+            "provenance/src/tools/a.py": "a = 1\n",
+            "provenance/src/tests/run.py": "p = ROOT / 'tools'\n"})
+        found = mg.tools_references(project)
+        check("tools/ on sys.path in analysis is refused with file:line",
+              has(found, "analysis/scripts/gen_stats.py:4", "tools_dir()"), found)
+        check("an import from tools in hooks/ is refused",
+              has(found, "hooks/fix.py:1"), found)
+        check("comments, prose and ignored lines are not flagged",
+              not has(found, "ok.py"), found)
+        check("a vendored snapshot with its own tools/ is not flagged",
+              not has(found, "provenance/"), found)
+        check("the references are refusals",
+              has(mg.classify(project, scaffold, None, PIN).refused,
+                  "gen_stats.py:4"))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "repo"
+        write(repo, {
+            "paper/paper.typ": "x\n",
+            "paper/analysis/scripts/gen_stats.py": "x = 1\n",
+            "benchmark/verify.py": "import sys\n"
+                                   "sys.path.insert(0, str(PAPER / 'tools'))\n",
+            "benchmark/own.py": "sys.path.insert(0, str(ROOT / 'tools'))\n",
+            "tools/repo_tool.py": "t = 1\n"})
+        sh(repo, "init", "-q")
+        found = mg.tools_references(repo / "paper")
+        check("the enclosing repository's code reaching paper/tools is refused",
+              has(found, "../benchmark/verify.py:2"), found)
+        check("the enclosing repository's own tools/ is left alone",
+              not has(found, "own.py"), found)
 
     # A customized justfile (paper sync now writes it): refused too.
     with tempfile.TemporaryDirectory() as tmp:

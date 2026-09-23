@@ -131,7 +131,7 @@ site-packages that is the package, so every tool now imports `tools/paths.py`:
 | `paths.ROOT` | The manuscript: `$PAPER_ROOT` if set, else the current directory (installed) or the directory above `tools/` (a checkout). The justfile exports `PAPER_ROOT := justfile_directory()` and `paper tool` sets it to the working directory when unset, so every recipe sees the manuscript root. `paper test` clears it, so a test's temporary manuscript is not mistaken for the caller's. |
 | `paths.TOOLS` | The directory holding the tools. |
 | `paths.DATA` | The toolchain's data root: the repository in a checkout, `paper_scaffold/data/` when installed. |
-| `paths.locate(root, name)` | `root/name` if present, else `DATA/name` (for `tools/`, `journals/`, `word/`). |
+| `paths.locate(root, name)` | `root/name` if present, else `DATA/name` (for `tools/`, `journals/`, `word/`, and the directories themselves, with or without a trailing slash). |
 
 Recipes call tools through the console script: `uv run --quiet paper tool
 check_stats --deep` runs `tools/check_stats.py` from the installed package,
@@ -163,7 +163,9 @@ lines between them first.
 - a generated file is missing, or its hash differs from the lock (edited);
 - a generated file differs from what the installed package would write now;
 - a toolchain directory that sync does not own (`tools/`, `tests/`, `docs/`)
-  still exists in the paper, which means a half-finished migration.
+  still exists in the paper, which means a half-finished migration. This
+  includes a `docs/` holding only the paper's own notes: move them to
+  `notes/`.
 
 `just verify` runs it as its first stage, "toolchain (paper sync --check)". In
 the scaffold checkout there is nothing to sync, and the stage says so.
@@ -235,6 +237,14 @@ after the identity fields new-paper.sh fills in) or customized.
 | `CLAUDE.md`, `STYLE.md`, `README.md`, `.gitignore`, `.claude/`, `.vscode/`, `cover-letter.typ`, `audio/config.py` | kept | kept |
 | `pyproject.toml` | rewritten with the pin | rewritten; extra dependencies kept, anything else **refused** |
 | a file in `tools/` or `tests/` the scaffold never had | | **refused** (move it to `hooks/`) |
+| a file in `docs/` the scaffold never had (the paper's own notes) | | **refused** (`git mv` it to `notes/`, update links) |
+| Python that puts the paper's `tools/` on `sys.path`, imports from it or reads files in it | | **refused**, with each `file:line` (below) |
+
+`docs/` is the package's, like `tools/`: the paper reads the docs from the
+`.paper/docs/` mirror, `migrate` removes the directory, and
+`paper sync --check` fails while one exists. A paper's own study notes or
+plans under `docs/` would be deleted with it, so `migrate` names them
+instead; they belong in `notes/`.
 
 A refusal lists every file and changes nothing. Move each local change into
 `project.toml`, `project.just` or `hooks/` (the 3.26.0 upgrade did this for
@@ -254,6 +264,33 @@ git add -A && git commit -m "Move to paper-scaffold 4.0.0 (toolchain package)"
 
 Do `just text-baseline` before the migration and `just text-diff` after it:
 the rendered text must not move.
+
+### Code that used tools/
+
+After migration the paper has no `tools/`, so code that found the toolchain
+there breaks: `sys.path.insert(0, str(PAPER / "tools"))`, `from tools.x
+import y`, or a glob over `PAPER / "tools"`. `migrate` scans the paper's
+Python (`analysis/`, `hooks/` and every other directory, skipping the
+toolchain copies it removes, the files `paper sync` writes and a vendored
+snapshot with a nearer `tools/` of its own) for these, and, when the paper is
+a subdirectory of a larger repository, the rest of that repository's Python
+for lines naming the paper directory (`PAPER / "tools"`, `"paper/tools"`).
+Each is refused with its `file:line`. The replacement is the installed
+package's directory:
+
+```python
+import paper_scaffold
+sys.path.insert(0, str(paper_scaffold.tools_dir()))
+```
+
+That needs the package in the environment running the code: the paper's
+root environment (`uv run ...` from the paper) has it; the analysis
+environment (`analysis/pyproject.toml`) does not, unless it adds the same
+pin. A generator that needs only `atomic_io`, `manifest_validation`,
+`hashcache` or `paths` imports them after `import _provenance`, which puts
+`_provenance.TOOLCHAIN` (`analysis/scripts/_toolchain/`, written by
+`paper sync`) on `sys.path`. A line the scan misreads can carry the comment
+`# paper-migrate: ignore`.
 
 ## What breaks (why this is 4.0.0)
 

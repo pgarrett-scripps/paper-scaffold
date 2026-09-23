@@ -18,13 +18,19 @@ docs/package.md "Migration from 3.26.x":
   refused (move the paper's own notes to notes/PROJECT-HISTORY.md);
 - pyproject.toml: rewritten with the pin, extra dependencies kept, any other
   table or key refused;
-- a file in tools/ or tests/ the scaffold never had: refused.
+- a file in tools/ or tests/ the scaffold never had: refused;
+- a file in docs/ the scaffold never had (the paper's own notes): refused,
+  since docs/ is the package's and would be removed (move it to notes/);
+- Python in the paper, or in the repository around it, that reaches the
+  paper's tools/ (sys.path, imports, globs): refused with file:line
+  (use paper_scaffold.tools_dir()).
 
 Everything else is the paper's and is not touched. A refusal changes nothing.
 """
 from __future__ import annotations
 
 import fnmatch
+import re
 import shutil
 import subprocess
 import sys
@@ -191,10 +197,22 @@ def classify(project: Path, scaffold: Path | None, base: str | None,
                 "notes/PROJECT-HISTORY.md, restore the stock file, rerun")
         else:
             plan.kept.append(rel)
+    own_docs: list[str] = []
     for rel in sorted(listing):
         if rel.startswith(("tools/", "tests/")):
             plan.refused.append(f"{rel}: a file the scaffold never had in its "
                                 "toolchain (move it to hooks/)")
+        elif rel.startswith("docs/"):
+            own_docs.append(rel)
+    if own_docs:
+        # docs/ is the package's (docs/package.md "What a paper holds"): apply
+        # removes the directory and `paper sync --check` fails on one.
+        plan.refused.append(
+            f"docs/: {len(own_docs)} file(s) of the paper's own ("
+            + ", ".join(r.removeprefix("docs/") for r in own_docs)
+            + "); from 4.0.0 docs/ is the package's. `git mv` them to notes/ "
+            "and update links to them (rg -n 'docs/'), then rerun")
+    plan.refused += tools_references(project)
     # A generated file the release did not ship but this one writes, already
     # present and untracked by the scaffold: never overwrite blindly.
     wanted = sync_mod.generated(project)
@@ -217,6 +235,84 @@ def classify(project: Path, scaffold: Path | None, base: str | None,
             plan.refused.append("uncommitted changes in " + ", ".join(sorted(dirty))
                                 + ": commit or discard them first")
     return plan
+
+
+# A path into the paper's tools/: `ROOT / "tools"`, "tools/x.py",
+# "../tools", os.path.join(root, "tools"), or `import tools` / `from tools.x`.
+TOOLS_PATH = re.compile(r"""/\s*["']tools["']"""
+                        r"""|["'](?:[^"'\s]*/)?tools(?:/[^"'\s]*)?["']""")
+TOOLS_IMPORT = re.compile(r"^\s*(?:from\s+tools[.\s]|import\s+tools\b)")
+SCAN_SKIP = {".git", ".venv", "venv", "node_modules", "__pycache__",
+             ".build-state", ".paper", "site-packages"}
+IGNORE_MARK = "paper-migrate: ignore"
+TOOLS_FIX = ("tools/ leaves the paper: use `paper_scaffold.tools_dir()` "
+             "(docs/package.md, \"Code that used tools/\")")
+
+
+def _py_files(base: Path, git_root: Path | None) -> list[Path]:
+    if git_root is not None:
+        out = subprocess.run(["git", "-C", str(base), "ls-files", "-z", "--cached",
+                              "--others", "--exclude-standard", "--", "*.py"],
+                             capture_output=True, check=False).stdout
+        files = [base / p for p in out.decode().split("\0") if p]
+    else:
+        files = list(base.rglob("*.py"))
+    return sorted(f for f in files if f.is_file()
+                  and not SCAN_SKIP.intersection(f.relative_to(base).parts))
+
+
+def tools_references(project: Path) -> list[str]:
+    """Each line of the paper's Python (and, for a paper inside a larger
+    repository, the rest of that repository) that puts the paper's tools/ on
+    sys.path or reads a file from it. After migration there is no tools/.
+
+    Inside the paper every .py outside the toolchain copies is scanned (the
+    files paper sync writes are replaced, so they are not, and neither is a
+    file with a nearer tools/ of its own, such as a vendored snapshot). Outside it, a
+    reference counts only when the line also names the paper directory (as
+    `PAPER / "tools"` or "paper/tools" do), so the repository's own tools/
+    is left alone. A line carrying `paper-migrate: ignore` is skipped.
+    """
+    import os
+    project = project.resolve()
+    top = subprocess.run(["git", "-C", str(project), "rev-parse", "--show-toplevel"],
+                         capture_output=True, text=True, check=False)
+    git_root = Path(top.stdout.strip()).resolve() if top.returncode == 0 else None
+    generated = set(GENERATED) | set(sync_mod.ANALYSIS_HELPERS)
+    found = []
+
+    def scan(path: Path, inside: bool) -> None:
+        rel = Path(os.path.relpath(path, project)).as_posix()
+        if inside and (rel in generated or rel.startswith(
+                ("tools/", "tests/", sync_mod.TOOLCHAIN_DIR + "/"))):
+            return
+        # A copy of the toolchain kept in the paper (a snapshot with its own
+        # tools/ nearer the file) refers to that tools/, not the paper's.
+        if inside and any((d / "tools").is_dir() for d in path.parents
+                          if project in d.parents):
+            return
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            return
+        for n, line in enumerate(lines, 1):
+            code = line.strip()
+            if not code or code.startswith("#") or IGNORE_MARK in line:
+                continue
+            if not (TOOLS_IMPORT.match(line) or TOOLS_PATH.search(line)):
+                continue
+            if not inside and project.name.lower() not in line.lower():
+                continue
+            found.append(f"{rel}:{n}: uses the paper's tools/ "
+                         f"(`{code[:70]}`); {TOOLS_FIX}")
+
+    for path in _py_files(project, git_root):
+        scan(path, True)
+    if git_root is not None and git_root != project:
+        for path in _py_files(git_root, git_root):
+            if project not in path.resolve().parents:
+                scan(path, False)
+    return found
 
 
 def word_table(text: str, style: dict | None) -> str:
