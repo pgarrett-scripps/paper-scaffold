@@ -47,6 +47,37 @@ def run_cases() -> bool:
         ("citations are still dropped", "shown before @smith2020.", "shown before.",
          "smith"),
         ("an unknown label is dropped, not read", "see @fig:gone.", "see.", "gone"),
+        # Layout and state calls starting a line are code, not prose (the uno
+        # SI Overview read its counter reset aloud).
+        ("counter reset is dropped",
+         "#counter(figure.where(kind: table)).update(0)\nOverview.",
+         "Overview.", "counter"),
+        ("wrapped context block is dropped whole",
+         '#context {\n  let n = counter(page).get()\n  [p #n]\n}\nProse.',
+         "Prose.", "page"),
+        ("context with a method chain", "#context counter(page).display()\nProse.",
+         "Prose.", "display"),
+        ("spacing call keeps the prose after it", "#v(1em) Then prose.",
+         "Then prose.", "1em"),
+        ("pagebreak is dropped", "Before.\n\n#pagebreak()\n\nAfter.", "Before.", "pagebreak"),
+        ("a name that only starts like one is prose", "#vector is narrated.",
+         "vector", None),
+        # Inline math config.MATH does not list is spoken structurally, never
+        # read as notation (koth: ~170 equations; dnoise: a register-driven
+        # threshold "$T = 84$" whose digits a literal map cannot follow).
+        ("register-driven threshold", "at $T = 84$ and $T_2 = 1,200$.",
+         "T equals 84 and T 2 equals 1,200", "$"),
+        ("exponent with a sign", "$p = 1.0 times 10^(-5)$", "10 to the minus 5", "^"),
+        ("absolute value and quoted subscripts",
+         '$|"median"_"orig" - "median"_"arm"|$',
+         "the absolute value of median orig minus median arm", '"'),
+        ("comparison word token", "$x gt.eq 3$", "x greater than or equal to 3", "gt"),
+        ("a literal MATH entry still wins", '$t_"obs" <= t_"max"$',
+         "t observed is at most t max", None),
+        ("bare Unicode operators are spoken", "0.4 ± 0.1, 8×, log\\u{2082}",
+         "0.4 plus or minus 0.1, 8 times, log two", "±"),
+        ("an en dash is a range only between numbers", "pages 3–5",
+         "pages 3 to 5", "–"),
     ]
     for name, src, want, forbid in cases:
         got = ep.clean(src, refs)

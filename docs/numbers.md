@@ -62,7 +62,8 @@ edited in `stats.json` directly:
 - `desc` — what the number is, for whoever audits the file later.
 - `expect` — what the *prose* assumes ("fell", "roughly 80–90%"). That
   assumption lives next to the sentence, so the author maintains it. A
-  one-sided bound (`min` with no `max`) is fine.
+  one-sided bound (`min` with no `max`) is fine; seed one with
+  `st.add(..., minimum=0)` or `maximum=`, the two-sided band with `between=`.
 
 The arguments to `st.add(...)` beyond the value are seeds: they fill in a new
 entry so the file is never born empty, and are ignored once the entry exists —
@@ -88,6 +89,11 @@ is guarded exactly as tightly as a derived one. What it cannot get is
 re-derivation: `check-stats-deep` recomputes generated values from the data and
 compares, and nothing can do that for a number that came off a printout. The
 note is the audit trail instead.
+
+Hand entries outlive every generator run. A manuscript that drops a whole
+branch of its argument can prune the ones it no longer states with
+`st.write(keep_hand_ids={...})`: every hand entry not named is removed, and the
+run prints which. Without the argument nothing hand-entered is ever deleted.
 
 That is also why `stats.json` sits at the manuscript root rather than under
 `si/`: a file you are invited to edit is not generated output, and cannot be

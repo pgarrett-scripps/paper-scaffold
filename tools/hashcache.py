@@ -28,10 +28,17 @@ import atexit
 import hashlib
 import json
 import re
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / ".hash-cache.json"
+
+# A cached digest is trusted only for a file last modified longer ago than
+# this. Two same-size writes inside the filesystem's timestamp granularity share
+# an mtime_ns, and a freshly written file is exactly when that happens: the
+# classic racy-clean window, which build tools re-check for the same reason.
+RACY_NS = 2_000_000_000
 
 _cache: dict[str, list] | None = None
 _dirty = False
@@ -59,21 +66,31 @@ def _save() -> None:
 
 
 def sha(p: Path) -> str:
-    """sha256 of the file, cached on (size, mtime_ns)."""
+    """sha256 of the file, cached on (size, mtime_ns).
+
+    A hit is only served, and a digest only stored, for a file older than
+    RACY_NS; a younger one is hashed from its bytes every time, since its
+    (size, mtime) cannot yet tell two writes apart.
+    """
     global _dirty
     cache = _load()
     st = p.stat()
     key = str(p.resolve())
     hit = cache.get(key)
-    if hit and hit[0] == st.st_size and hit[1] == st.st_mtime_ns:
+    racy = time.time_ns() - st.st_mtime_ns < RACY_NS
+    if hit and not racy and hit[0] == st.st_size and hit[1] == st.st_mtime_ns:
         return hit[2]
     h = hashlib.sha256()
     with p.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
             h.update(chunk)
     digest = "sha256:" + h.hexdigest()
-    cache[key] = [st.st_size, st.st_mtime_ns, digest]
-    _dirty = True
+    # Not stored while racy either: a same-size write later in the same tick
+    # would leave this digest filed under the new bytes' (size, mtime), and it
+    # would be served once the file ages out of the window.
+    if not racy:
+        cache[key] = [st.st_size, st.st_mtime_ns, digest]
+        _dirty = True
     return digest
 
 

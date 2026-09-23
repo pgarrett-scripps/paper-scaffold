@@ -165,6 +165,37 @@ Outside count too.
                 build(self.project, doc)
         self.assertEqual(output.read_bytes(), good)
 
+    def test_parallel_build_reaps_its_children(self):
+        # The compile and the count query run as concurrent children
+        # (dissertation). A build that stops early must not leave one running.
+        from document_build import running
+        with self.assertRaises(RuntimeError):
+            with running([sys.executable, "-c", "import time; time.sleep(60)"]) as proc:
+                raise RuntimeError("build stopped")
+        self.assertIsNotNone(proc.poll())
+
+    @unittest.skipUnless(shutil.which("typst"), "Typst needed for chapter integration")
+    def test_edit_during_parallel_scoring_is_caught(self):
+        # Readability is scored while typst compiles; an edit made then is a
+        # concurrent edit, and the last good output survives it.
+        doc = self.project.documents["one"]
+        build(self.project, doc)
+        output = self.root / doc.output
+        good = output.read_bytes()
+        path = self.root / "chapters/one.typ"
+        original = path.read_text()
+        from document_build import readability_scores as real_scores
+
+        def edit_while_scoring(*args):
+            scores = real_scores(*args)
+            path.write_text(original.replace("Alpha", "Changed"))
+            return scores
+
+        with patch("document_build.readability_scores", side_effect=edit_while_scoring):
+            with self.assertRaisesRegex(ValueError, "sources changed"):
+                build(self.project, doc)
+        self.assertEqual(output.read_bytes(), good)
+
     @unittest.skipUnless(shutil.which("typst"), "Typst needed for chapter integration")
     def test_count_order_and_duplicate_include(self):
         for src in ('#include "chapters/two.typ"\n#include "chapters/one.typ"',

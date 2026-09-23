@@ -59,6 +59,18 @@ MATH: dict[str, str] = {
     r'$t_"obs" <= t_"max"$': "t observed is at most t max",
 }
 
+# An inline equation MATH does not list is spoken structurally by
+# extract_prose.speak_math(): "$T_2 = 84$" -> "T 2 equals 84",
+# "$10^(-5)$" -> "10 to the minus 5". These extend its vocabulary: a Typst math
+# word token -> what to say. The defaults live in extract_prose.MATH_WORDS.
+#   "sigma": " sigma ",
+MATH_WORDS: dict[str, str] = {}
+
+# Bare Unicode characters in the prose -> what to say (defaults, such as the
+# minus sign, times and the subscript digits, are extract_prose.UNICODE_SPEAK).
+#   "\u00b5": " micro",
+UNICODE_SPEAK: dict[str, str] = {}
+
 # Typst symbol tokens. These are generic; extend rather than replace.
 SYM: dict[str, str] = {
     r"#sym.minus": "minus ",

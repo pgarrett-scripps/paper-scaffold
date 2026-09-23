@@ -67,9 +67,13 @@ version:
   v=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
   echo "paper-scaffold $v"
   if git rev-parse --git-dir >/dev/null 2>&1; then
-    dirty=$(git status --porcelain | wc -l)
+    # Scoped to this directory: a manuscript can live in a subdirectory of a
+    # code repository, and an unrelated code change there should not report
+    # the paper's tree dirty. At the repository root "." is the whole tree.
+    dirty=$(git status --porcelain . | wc -l)
+    where=$(git rev-parse --show-prefix)
     echo "  commit  $(git log -1 --format='%h %ad %s' --date=short)"
-    [ "$dirty" -gt 0 ] && echo "  tree    $dirty uncommitted change(s)" || echo "  tree    clean"
+    [ "$dirty" -gt 0 ] && echo "  tree    $dirty uncommitted change(s)${where:+ under $where}" || echo "  tree    clean${where:+ under $where}"
   fi
 
 # Run from a derived manuscript: HISTORY.md's Upgrade: lines since this version,
@@ -186,17 +190,32 @@ density:
 # directory, and this skips the audiobooks rather than failing. Making it a hard
 # dependency meant `just all` broke on a manuscript that had removed a feature it
 # never asked for.
-# Rebuild every artifact this directory owns: PDF, Word, the submission set, and the audiobooks if audio/ is present
+#
+# The directory being present is not enough either: audio/ is tracked, but the
+# voice model under audio/models/ is gitignored, so on a fresh clone `just all`
+# reached `_audio-check` and died on a missing download after the PDF and Word
+# were already built. The condition is the model, which is what narration
+# needs. `just audiobook` still fails hard: asking for an audiobook by name and
+# getting silence is worse than an error.
+# Rebuild every artifact this directory owns: PDF, Word, the submission set, and the audiobooks when the voice model is installed
 all: paper
   #!/usr/bin/env bash
   set -euo pipefail
+  voice=""
   if [ -d audio ]; then
+    voice=$(cd audio && python3 -c "import config; print(config.VOICE_NAME)")
+  fi
+  if [ -z "$voice" ]; then
+    echo ""
+    echo "PDF, Word and review text rebuilt from the current source (no audio/, narration skipped)."
+  elif [ ! -f "audio/models/${voice}.onnx" ]; then
+    echo ""
+    echo "PDF, Word and review text rebuilt from the current source (no voice model"
+    echo "for ${voice}, narration skipped -- run: just audio-setup)."
+  else
     just audiobook-all
     echo ""
     echo "PDF, Word, review text and both audiobooks rebuilt from the current source."
-  else
-    echo ""
-    echo "PDF, Word and review text rebuilt from the current source (no audio/, narration skipped)."
   fi
   # The upload set, from the capture `paper` just made (no second build).
   uv run --quiet python tools/submission.py all

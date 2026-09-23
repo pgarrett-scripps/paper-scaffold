@@ -12,6 +12,7 @@ import re
 import sys
 from pathlib import Path
 
+import config
 from config import (  # noqa: F401  (re-exported for make_audiobook.py)
     MATH,
     PAPER_TYP,
@@ -85,6 +86,84 @@ def extract_body(raw):
     return raw[a.end():b.start()]
 
 
+# Typst math word tokens -> spoken words, inside a $...$ span that config.MATH
+# does not list. Matched as whole words, longest first ("gt.eq" before "gt").
+# config.MATH_WORDS extends or overrides these; a config.py written before it
+# existed simply gets the defaults.
+MATH_WORDS: dict[str, str] = {
+    "plus.minus": " plus or minus ",
+    "minus.plus": " minus or plus ",
+    "arrow.r": " to ",
+    "arrow.l": " from ",
+    "tilde.op": " approximately ",
+    "gt.eq": " greater than or equal to ",
+    "lt.eq": " less than or equal to ",
+    "eq.not": " not equal to ",
+    "approx": " approximately ",
+    "prop": " proportional to ",
+    "times": " times ",
+    "dot.c": " times ",
+    "sqrt": " the square root of ",
+    "infinity": " infinity ",
+    "dots": " ",
+    "gt": " greater than ",
+    "lt": " less than ",
+    **getattr(config, "MATH_WORDS", {}),
+}
+
+# Bare Unicode operators the voice skips or mangles ("0.4 ± 0.1", "8×"),
+# including the ones unescape_unicode() just made out of \u{...} escapes.
+# config.UNICODE_SPEAK extends or overrides these. An en dash is only a range
+# between two numbers, so that one is a rule in clean(), not an entry here.
+UNICODE_SPEAK: dict[str, str] = {
+    "\u2212": " minus ",       # true minus sign
+    "\u00d7": " times ",
+    "\u00b1": " plus or minus ",
+    "\u2248": " approximately ",
+    "\u2264": " less than or equal to ",
+    "\u2265": " greater than or equal to ",
+    "\u2192": " to ",
+    "\u0394": " delta ",
+    **{chr(0x2080 + d): f" {w} " for d, w in enumerate(
+        "zero one two three four five six seven eight nine".split())},
+    **getattr(config, "UNICODE_SPEAK", {}),
+}
+
+
+def speak_math(s):
+    """The inside of a $...$ span that config.MATH does not list, in words.
+
+    A literal MATH entry reads an equation the way the author would, and still
+    wins. This is the fallback for everything else, which before was read as
+    raw notation with the dollar signs stripped ("t_obs <= t_max"). A paper
+    with many inline equations (koth carries about 170) cannot keep a literal
+    map in step with the prose, and a threshold whose digits come from
+    stats.json ("$T = #s(..)$") cannot be listed at all: "$T = 84$" was
+    "$T = 86$" before a recalibration (dnoise). The grammar is structural --
+    quotes, |x|, superscripts, subscripts, comparisons -- over the vocabulary
+    in MATH_WORDS, so an unanticipated span degrades into roughly-right English
+    rather than into notation.
+    """
+    s = s.replace('"/"', "/")                          # m"/"z -> m/z
+    s = re.sub(r'"([^"]*)"', r"\1", s)                  # t_"obs" -> t_obs
+    s = re.sub(r"\|([^|]*)\|", r" the absolute value of \1 ", s)
+    s = re.sub(r"\^\(([^)]*)\)", r" to the \1 ", s)
+    s = re.sub(r"\^(-?[0-9A-Za-z]+)", r" to the \1 ", s)
+    s = re.sub(r"_\(([^)]*)\)", r" \1 ", s)
+    s = re.sub(r"_([0-9A-Za-z]+)", r" \1 ", s)
+    # A digit-letter transition is a boundary too, so "4sigma" -> "4 sigma".
+    for k in sorted(MATH_WORDS, key=len, reverse=True):
+        s = re.sub(rf"(?<![A-Za-z]){re.escape(k)}(?![A-Za-z])", MATH_WORDS[k], s)
+    s = s.replace("..=", " to ").replace("...", " ").replace("..", " to ")
+    for sym, word in ((">=", "greater than or equal to"), ("<=", "less than or equal to"),
+                      ("!=", "not equal to"), (">", "greater than"), ("<", "less than"),
+                      ("=", "equals"), ("-", "minus"), ("+", "plus")):
+        s = s.replace(sym, f" {word} ")
+    s = re.sub(r"[{}\[\]]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return f" {s} "       # padded so it never glues to the next word (11$times$)
+
+
 # Tokens that reached clean() with no mapping in config.SYM. Collected rather
 # than ignored: an unmapped token narrates as "sym arrow r", and the fixture test
 # only pins the tokens the fixture happens to contain, so a manuscript can carry
@@ -140,11 +219,91 @@ def crossrefs():
     return _CROSSREFS
 
 
+# Calls whose result is layout or document state, never words: a counter reset
+# before the SI's tables, `#context` reading a page number, spacing and breaks.
+# A line that STARTS with one is code, and before this the voice read it out
+# ("hash counter figure dot where kind table dot update zero").
+CODE_CALLS = ("counter", "state", "context", "pagebreak", "colbreak", "v", "h",
+              "place", "metadata", "layout")
+_CODE_START = re.compile(
+    r"(?m)^[ \t]*#(?:" + "|".join(CODE_CALLS) + r")(?![\w-])")
+_IDENT = re.compile(r"[A-Za-z_][\w-]*")
+
+
+def _balanced_end(text, i):
+    """Index just past the bracket group opening at text[i], strings skipped."""
+    depth, in_str, esc = 0, False, False
+    for k in range(i, len(text)):
+        ch = text[k]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+        elif ch == '"':
+            in_str = True
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth == 0:
+                return k + 1
+    return len(text)
+
+
+def _expr_end(text, i):
+    """End of the code expression starting at text[i]: an identifier, then any
+    chain of `(...)`, `[...]`, `{...}` groups and `.method` accesses. `context`
+    takes the expression after it, so `#context counter(page).display()` goes
+    as one unit. A bare group (`#context { ... }`) is an expression too."""
+    m = _IDENT.match(text, i)
+    if m:
+        i = m.end()
+        if m[0] == "context":
+            j = i
+            while j < len(text) and text[j] in " \t":
+                j += 1
+            if j < len(text) and (text[j] in "([{" or _IDENT.match(text, j)):
+                return _expr_end(text, j)
+            return i
+    elif i < len(text) and text[i] in "([{":
+        i = _balanced_end(text, i)
+    while i < len(text):
+        if text[i] in "([{":
+            i = _balanced_end(text, i)
+        elif text[i] == "." and _IDENT.match(text, i + 1):
+            i = _IDENT.match(text, i + 1).end()
+        else:
+            break
+    return i
+
+
+def strip_code_lines(text):
+    """Drop a layout or state call (CODE_CALLS) that starts a line, however
+    many lines its brackets span. Newlines inside it are kept, so paragraph
+    breaks around it survive; prose after it on the same line is kept too."""
+    out, pos = [], 0
+    for m in _CODE_START.finditer(text):
+        if m.start() < pos:
+            continue            # inside an expression already removed
+        end = _expr_end(text, m.end() - len(m[0].lstrip(" \t#")))
+        out.append(text[pos:m.start()])
+        out.append(" " + "\n" * text.count("\n", m.start(), end))
+        pos = end
+    out.append(text[pos:])
+    return "".join(out)
+
+
 def clean(text, refs=None):
     # 0a. Typst directives and line comments. A document's front matter can carry
     #     its own `#let` helpers, and the SI's overview chapter starts before the
     #     first heading, so without this the audiobook opens by reading source.
+    #     Layout and state calls on their own line (a counter reset, #context,
+    #     #pagebreak(), #v(1em)) are code for the same reason.
     text = strip_directives(text, " ")
+    text = strip_code_lines(text)
     text = re.sub(r"(?m)^\s*//.*$", " ", text)
 
     # 0. remove fenced code blocks and #raw(...) config dumps
@@ -190,6 +349,9 @@ def clean(text, refs=None):
     #     in the shared layer (typst_prose) for the word count and was never
     #     wired in here, and the golden file blessed the broken narration.
     text = unescape_unicode(text)
+    text = re.sub(r"(?<=\d)\s*\u2013\s*(?=\d)", " to ", text)     # 3\u20135 is a range
+    for k in sorted(UNICODE_SPEAK, key=len, reverse=True):
+        text = text.replace(k, UNICODE_SPEAK[k])
 
     # 3. math and symbol tokens (do multi-char keys first)
     for k in sorted(MATH, key=len, reverse=True):
@@ -203,8 +365,8 @@ def clean(text, refs=None):
         UNMAPPED.add(m.group(0))
     text = re.sub(r"#sym\.[A-Za-z0-9.]+", " ", text)
 
-    # any leftover simple $...$ -> inner text without $
-    text = re.sub(r"\$([^$]*)\$", lambda m: m.group(1), text)
+    # any $...$ config.MATH did not list -> spoken structurally
+    text = re.sub(r"\$([^$]*)\$", lambda m: speak_math(m.group(1)), text)
 
     # 4. superscripts/subscripts helpers still around
     text = re.sub(r"#super\[([^\]]*)\]", r" to the \1", text)

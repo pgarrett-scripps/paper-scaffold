@@ -60,9 +60,10 @@ def main() -> int:
     plt.close(fig)
     # Declare it, so the manuscript can reference it as fig("fig.example")
     # instead of naming the file. inputs= is the DATA this was built from; the
-    # script and its imports are recorded automatically.
+    # script and its imports are recorded automatically. fig= lets the entry
+    # record the smallest type on the figure next to its printed size.
     record("fig.example", str(OUT.relative_to(PAPER)), kind="figure",
-           inputs=[str(SRC.relative_to(PAPER))],
+           inputs=[str(SRC.relative_to(PAPER))], fig=fig,
            desc="Observed ratio by condition, with confidence intervals")
     print(f"wrote {OUT.relative_to(PAPER)}")
     return 0

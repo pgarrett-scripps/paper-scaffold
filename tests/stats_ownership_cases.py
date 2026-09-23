@@ -223,6 +223,34 @@ def run_cases() -> bool:
         doc["values"]["m.x"]["expect"] = {}
         p.write_text(json.dumps(doc))
 
+        # 6f. hand entries survive a rewrite by default; keep_hand_ids prunes
+        #     the retired ones, names them, and never touches another owner.
+        doc = json.loads(p.read_text())
+        hand = {"value": 1, "fmt": "", "origin": {"by": "hand", "note": "n"}}
+        doc["values"]["h.live"] = dict(hand)
+        doc["values"]["h.gone"] = dict(hand)
+        doc["values"]["o.other"] = {"value": 2, "fmt": "",
+                                    "origin": {"by": "analysis/scripts/x.py"}}
+        p.write_text(json.dumps(doc))
+        st = Stats()
+        st.add("m.x", 1.0)
+        run(st)
+        if not {"h.live", "h.gone"} <= set(json.loads(p.read_text())["values"]):
+            print("  ownership: a hand entry was dropped without keep_hand_ids")
+            ok = False
+        st = Stats()
+        st.add("m.x", 1.0)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            st.write(out=p, keep_hand_ids={"h.live"})
+        vals = json.loads(p.read_text())["values"]
+        if "h.gone" in vals or "h.live" not in vals or "o.other" not in vals:
+            print(f"  ownership: keep_hand_ids pruned the wrong set -- {sorted(vals)}")
+            ok = False
+        if "h.gone" not in buf.getvalue():
+            print("  ownership: keep_hand_ids pruned a hand entry silently")
+            ok = False
+
     # 7. assets: origin.at means "the output changed", not "the script ran".
     #
     # record() insists the file it declares exists, so this needs a real one --
@@ -261,6 +289,34 @@ def run_cases() -> bool:
             at = json.loads(_assets.OUT.read_text())["values"]["fig.t"]["origin"]["at"]
             if at == old:
                 print("  asset origin.at: kept a stale date across an output change")
+                ok = False
+
+            # 8. print geometry: size read back from the file, and a stated
+            #    min_pt recorded for a figure no matplotlib canvas drew.
+            with redirect_stdout(io.StringIO()):
+                _assets.record("fig.t", fig_rel, min_pt=6, **kw)
+            geo = json.loads(_assets.OUT.read_text())["values"]["fig.t"].get("print", {})
+            if geo.get("min_pt") != 6 or not geo.get("width_in"):
+                print(f"  asset print geometry: expected size and min_pt, got {geo}")
+                ok = False
+
+            # 9. generators run in parallel must not drop each other's
+            #    entries: the read-modify-write is serialized by a lock.
+            import threading
+
+            def one(i):
+                _assets.record(f"fig.p{i}", fig_rel, **kw)
+            with redirect_stdout(io.StringIO()):
+                threads = [threading.Thread(target=one, args=(i,))
+                           for i in range(8)]
+                for t in threads:
+                    t.start()
+                for t in threads:
+                    t.join()
+            got = set(json.loads(_assets.OUT.read_text())["values"])
+            lost = {f"fig.p{i}" for i in range(8)} - got
+            if lost:
+                print(f"  asset lock: parallel records lost {sorted(lost)}")
                 ok = False
     finally:
         _assets.OUT = saved

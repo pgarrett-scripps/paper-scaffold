@@ -141,7 +141,9 @@ def stats_cases() -> bool:
 
     for name, value, kw in [
         ("guard on a non-number", "Treated", dict(sign="+")),
+        ("one-sided guard on a non-number", "Treated", dict(minimum=0)),
         ("nonsense sign", 1.0, dict(sign="up")),
+        ("between and minimum", 1.0, dict(between=(0, 2), minimum=0)),
     ]:
         try:
             Stats().add("x.y", value, **kw)
@@ -155,6 +157,8 @@ def stats_cases() -> bool:
     for name, value, kw in [
         ("sign flip", 1.09, dict(sign="-")),
         ("out of range", 1.09, dict(between=(0, 1))),
+        ("below a one-sided minimum", -1, dict(minimum=0)),
+        ("above a one-sided maximum", 0.2, dict(maximum=0.05)),
     ]:
         st = Stats()
         st.add("x.y", value, **kw)
@@ -173,6 +177,14 @@ def stats_cases() -> bool:
     # format spec, and tools/render_stats.py turns them into what Typst reads. So
     # what this asserts is that the spec survives, and that rendering it through
     # the one shared formatter gives the rounded form.
+    # A one-sided seed records only its own bound: a count has a floor and no
+    # ceiling, and inventing one would fail the day the data grows.
+    st = Stats()
+    st.add("x.n", 12, minimum=0)
+    if st._values["x.n"]["expect"] != {"min": 0}:
+        print(f"  stats guard: minimum seeded {st._values['x.n']['expect']}")
+        ok = False
+
     st = Stats()
     st.add("x.y", 84.23, fmt=".1f", sign="+", between=(0, 100))
     rec = st._values["x.y"]
@@ -345,6 +357,27 @@ def check_stats_cases() -> bool:
         want2 = "sha256:" + _hl.sha256(b"two-longer").hexdigest()
         if hashcache.sha(f) != want2:
             print("  hashcache: served a stale digest after the file changed")
+            ok = False
+        # The racy-clean window: a same-size rewrite that keeps the mtime (a
+        # coarse-timestamp filesystem, two writes in one tick). Fresh files
+        # must be re-hashed; old ones may be served from the cache.
+        import os as _os
+        st0 = f.stat()
+        f.write_bytes(b"TWO-LONGER")
+        _os.utime(f, ns=(st0.st_atime_ns, st0.st_mtime_ns))
+        want3 = "sha256:" + _hl.sha256(b"TWO-LONGER").hexdigest()
+        if hashcache.sha(f) != want3:
+            print("  hashcache: a same-size, same-mtime rewrite served the "
+                  "stale digest of a fresh file")
+            ok = False
+        if str(f.resolve()) in hashcache._load():
+            print("  hashcache: a digest was cached inside the racy window")
+            ok = False
+        old = st0.st_mtime_ns - 10 * hashcache.RACY_NS
+        _os.utime(f, ns=(old, old))
+        hashcache.sha(f)
+        if hashcache._load().get(str(f.resolve()), [None])[-1] != want3:
+            print("  hashcache: an old file's digest was not cached")
             ok = False
 
     # The deep check's summary must say what actually ran. On an

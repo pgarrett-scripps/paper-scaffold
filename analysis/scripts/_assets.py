@@ -20,6 +20,21 @@ WHAT AN ENTRY RECORDS.
                      byte-identical output keeps the old date, so the timestamp
                      says when the figure last actually moved. }
     inputs   { path: sha256 } for everything it was built from
+    print    for a figure: the size it will print at, and the smallest type
+             on it. See PRINT GEOMETRY below.
+
+PRINT GEOMETRY. A journal's figure rules are about the printed article, not the
+file: a column width in inches and a floor on type size in points. Neither is
+visible in the manuscript source, and both are easy to break by editing a
+`figsize` in a script nobody reads next to the paper. So the generator records
+them. `width_in`/`height_in`/`dpi` come from the written raster's pixel size and
+dpi -- what production will actually receive, after any `bbox_inches="tight"`
+crop. `min_pt` is measured by walking the figure's visible text artists, which
+is exact where grepping the script for `fontsize=` misses rcParams defaults and
+tick labels. Pass `fig=` to get it; without it the entry records no type size
+rather than guessing. A figure that is not a matplotlib canvas has no artists
+to walk and may pass `min_pt=` instead: the generator's own claim, weaker, and
+still better than silence.
 
 INPUTS ARE PART DECLARED, PART AUTOMATIC. The generator script and every module
 it imports from under analysis/ are recorded automatically, by walking
@@ -45,7 +60,10 @@ answer beats an implicit one that looks total.
 """
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -69,17 +87,72 @@ class AssetError(Exception):
     """A declared asset is not usable by the manuscript."""
 
 
+@contextlib.contextmanager
+def _exclusive():
+    """Serialize the read-modify-write of assets.json across generators.
 
+    Generators run serially from analysis/justfile, but nothing stops a project
+    running them in parallel (a `&`-and-`wait` loop, make -j, Snakemake), and
+    then two can each read the file, add their own entry, and write back a copy
+    missing the other's. An advisory lock is enough: every writer is a local
+    process and the critical section is a few milliseconds of JSON. The lock
+    file sits in .build-state/ (local, untracked) rather than beside
+    assets.json, and is separate from it so it survives the atomic replace
+    write_text() does.
+    """
+    lock = PAPER / ".build-state" / "assets.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    handle = os.open(lock, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(handle, fcntl.LOCK_UN)
+        os.close(handle)
+
+
+def _print_geometry(target: Path, fig, min_pt) -> dict:
+    """The printed size of a figure file, and the smallest type on it.
+
+    Geometry is read back from the written file rather than from
+    `fig.get_size_inches()`, because `bbox_inches="tight"` crops the canvas
+    after the figure is sized: the file is the only honest answer.
+    """
+    out: dict = {}
+    try:
+        from PIL import Image
+        with Image.open(target) as im:
+            dpi = im.info.get("dpi", (None,))[0]
+            if dpi:
+                out["width_in"] = round(im.width / dpi, 3)
+                out["height_in"] = round(im.height / dpi, 3)
+                out["dpi"] = round(float(dpi))
+    except Exception:
+        pass  # no Pillow, not a raster, or unreadable: size goes unrecorded
+
+    if fig is not None:
+        from matplotlib.text import Text
+        sizes = [t.get_fontsize() for t in fig.findobj(Text)
+                 if t.get_visible() and t.get_text().strip()]
+        if sizes:
+            out["min_pt"] = round(min(sizes), 2)
+    elif min_pt is not None:
+        out["min_pt"] = round(float(min_pt), 2)
+    return out
 
 
 def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
-           desc: str = "") -> None:
+           desc: str = "", fig=None, min_pt: float | None = None) -> None:
     """Declare one generated figure or table.
 
     `path`   relative to the manuscript root, e.g. "figures/cohort.png"
     `kind`   "figure" or "table"
     `inputs` data files this was built from, relative to the manuscript root.
              The generator and its imports are added automatically.
+    `fig`    the matplotlib Figure just saved. Optional, for a figure only:
+             it lets the smallest type size be measured rather than guessed.
+    `min_pt` the smallest type size on a figure no matplotlib Figure drew,
+             stated by the generator. Ignored when `fig` is given.
     """
     if kind not in KINDS:
         raise AssetError(f"{id!r}: kind must be one of {KINDS}, got {kind!r}")
@@ -113,10 +186,19 @@ def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
         "origin": {"by": caller_script()},
         "inputs": dict(sorted({**code_inputs(), **declared}.items())),
     }
+    if kind == "figure":
+        geometry = _print_geometry(target, fig, min_pt)
+        if geometry:
+            entry["print"] = geometry
 
-    # Read-modify-write, one entry at a time. Safe because analysis/justfile runs
-    # the generators SERIALLY -- if that ever becomes a parallel loop, this races
-    # and each script needs to write its own fragment for the recipe to merge.
+    # Read-modify-write, one entry at a time, under an exclusive lock so
+    # generators run in parallel cannot drop each other's entries.
+    with _exclusive():
+        _merge(id, entry)
+
+
+def _merge(id: str, entry: dict) -> None:
+    """Add one entry to assets.json. The caller holds the lock."""
     doc = {"_about": ABOUT, "values": {}}
     if OUT.is_file():
         try:
