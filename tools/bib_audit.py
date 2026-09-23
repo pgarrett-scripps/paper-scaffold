@@ -119,16 +119,50 @@ def _bib_people(value: str) -> list[tuple[str, str]]:
         raw = raw.strip(" {}")
         if not raw:
             continue
-        if "," in raw:
-            family, given = (part.strip() for part in raw.split(",", 1))
+        parts = [part.strip() for part in raw.split(",")]
+        if len(parts) >= 3 and _text(parts[1]) in SUFFIXES:
+            family, given = parts[0], ", ".join(parts[2:])   # Last, Jr, First
+        elif len(parts) >= 2:
+            family, given = parts[0], ", ".join(parts[1:])
         else:
-            words = raw.split()
-            family, given = words[-1], " ".join(words[:-1])
-        family_words = _text(family).split()
-        given_words = _text(given).split()
-        people.append((family_words[-1] if family_words else "",
-                       given_words[0][0] if given_words else ""))
+            family, given = _split_display(raw)
+        people.append((_surname(family), _initial(given)))
     return people
+
+
+# Generational suffixes are not part of the surname, wherever a registrar or a
+# BibTeX author put them: "Yates, III, John R." (BibTeX's three-part form),
+# "{Yates III}, John R." (braced), and Crossref's "given": "John R. III" all
+# name the same person as "Yates, John R". Before this, the three-part form
+# was read as surname "Yates", initial "I", and failed an author line that
+# was correct.
+SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
+
+
+def _surname(family: object) -> str:
+    # Only TRAILING suffix words go, and never the last word left: a surname
+    # that is itself "V" stays "v".
+    words = _text(family).split()
+    while len(words) > 1 and words[-1] in SUFFIXES:
+        words.pop()
+    return words[-1] if words else ""
+
+
+def _split_display(name: str) -> tuple[str, str]:
+    """(family, given) from "John R. Yates III": the surname is the last word
+    that is not a suffix, and the suffix rides with it for _surname to drop."""
+    words = name.split()
+    n = len(words)
+    while n > 2 and _text(words[n - 1]) in SUFFIXES:
+        n -= 1
+    return " ".join(words[n - 1:]), " ".join(words[:n - 1])
+
+
+def _initial(given: object) -> str:
+    # A suffix never leads a given name ("John R. III"), and an initial can
+    # spell one: "V." for Vladimir must stay "v", not vanish as a suffix.
+    words = _text(given).split()
+    return words[0][0] if words else ""
 
 
 def _registered_people(authors: object) -> tuple[list[tuple[str, str]], str]:
@@ -144,12 +178,8 @@ def _registered_people(authors: object) -> tuple[list[tuple[str, str]], str]:
             if "," in name:
                 family, given = (part.strip() for part in name.split(",", 1))
             else:
-                words = name.split()
-                family, given = words[-1], " ".join(words[:-1])
-        family_words = _text(family).split()
-        given_words = _text(given).split()
-        people.append((family_words[-1] if family_words else "",
-                       given_words[0][0] if given_words else ""))
+                family, given = _split_display(name)
+        people.append((_surname(family), _initial(given)))
         shown.append(", ".join(x for x in (family, given) if x) or name)
     return people, " and ".join(shown)
 

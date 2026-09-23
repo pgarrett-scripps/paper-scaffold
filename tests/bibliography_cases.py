@@ -138,6 +138,28 @@ def bibliography_cases() -> bool:
         print("  bib-audit metadata: TeX accents or 'and others' were reported")
         ok = False
 
+    # Generational suffixes belong to nobody's surname. BibTeX's three-part
+    # "Last, Jr, First", the braced "{Last III}", the unbraced "First Last III",
+    # and Crossref's suffix-in-given all describe the registered "Yates, John
+    # R". The three-part form once failed a correct author line as initial "I".
+    registered_suffix = dict(metadata, author=[
+        {"family": "Curie", "given": "Marie"},
+        {"family": "Yates", "given": "John R. III"},
+    ])
+    for form in ("Yates, III, John R.", "{Yates III}, John R.",
+                 "John R. Yates III", "Yates, John R."):
+        suffixed = dict(entry, author=f"Curie, M. and {form}")
+        if ba._metadata_issues(suffixed, "ok", registered_suffix):
+            print(f"  bib-audit metadata: suffix form {form!r} broke author "
+                  f"matching")
+            ok = False
+    # ...while an initial that spells a suffix ("V." for Vladimir) is kept,
+    # and a different person with the same surname is still caught.
+    vlado = dict(entry, author="Curie, M. and Einstein, V.")
+    if [i.field for i in ba._metadata_issues(vlado, "ok", metadata)] != ["author"]:
+        print("  bib-audit metadata: initial 'V.' was dropped as a suffix")
+        ok = False
+
     short_title = dict(metadata, title=["An Example"])
     issues = ba._metadata_issues(entry, "ok", short_title)
     if [(item.field, item.fatal) for item in issues] != [("title", False)]:
