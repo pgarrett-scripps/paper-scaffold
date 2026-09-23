@@ -141,7 +141,9 @@ def stats_cases() -> bool:
 
     for name, value, kw in [
         ("guard on a non-number", "Treated", dict(sign="+")),
+        ("one-sided guard on a non-number", "Treated", dict(minimum=0)),
         ("nonsense sign", 1.0, dict(sign="up")),
+        ("between and minimum", 1.0, dict(between=(0, 2), minimum=0)),
     ]:
         try:
             Stats().add("x.y", value, **kw)
@@ -155,6 +157,8 @@ def stats_cases() -> bool:
     for name, value, kw in [
         ("sign flip", 1.09, dict(sign="-")),
         ("out of range", 1.09, dict(between=(0, 1))),
+        ("below a one-sided minimum", -1, dict(minimum=0)),
+        ("above a one-sided maximum", 0.2, dict(maximum=0.05)),
     ]:
         st = Stats()
         st.add("x.y", value, **kw)
@@ -173,6 +177,14 @@ def stats_cases() -> bool:
     # format spec, and tools/render_stats.py turns them into what Typst reads. So
     # what this asserts is that the spec survives, and that rendering it through
     # the one shared formatter gives the rounded form.
+    # A one-sided seed records only its own bound: a count has a floor and no
+    # ceiling, and inventing one would fail the day the data grows.
+    st = Stats()
+    st.add("x.n", 12, minimum=0)
+    if st._values["x.n"]["expect"] != {"min": 0}:
+        print(f"  stats guard: minimum seeded {st._values['x.n']['expect']}")
+        ok = False
+
     st = Stats()
     st.add("x.y", 84.23, fmt=".1f", sign="+", between=(0, 100))
     rec = st._values["x.y"]

@@ -135,7 +135,9 @@ class Stats:
     def add(self, id: str, value, *, fmt: str | None = None,
             unit: str | None = None, desc: str | None = None,
             sign: str | None = None,
-            between: tuple[float, float] | None = None) -> None:
+            between: tuple[float, float] | None = None,
+            minimum: float | None = None,
+            maximum: float | None = None) -> None:
         """Declare one number.
 
         `value`   the raw value. A str is allowed for things that are not
@@ -149,6 +151,10 @@ class Stats:
         `sign`    "+", "-", or "nonzero". What the prose assumes about direction.
         `between` (lo, hi) inclusive. A plausibility band: catches a unit error
                   or a percentage that lands at 8400.
+        `minimum`, `maximum`
+                  one side of that band, inclusive, for a value with no natural
+                  ceiling (a count is at least zero) or floor. Either, or both;
+                  not together with `between`, which already says both.
         `desc`    what the number is, for someone auditing the file later.
 
         Guards are enforced in `write()`, against the file's `expect` for an
@@ -161,7 +167,9 @@ class Stats:
             raise StatError(f"{id!r} is not a usable id (no spaces, not empty)")
 
         numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
-        if not numeric and (sign is not None or between is not None):
+        guarded = (sign is not None or between is not None
+                   or minimum is not None or maximum is not None)
+        if not numeric and guarded:
             raise StatError(
                 f"{id!r} has a guard but its value {value!r} is not numeric. "
                 f"Drop the guard, or pass the number rather than a pre-formatted "
@@ -169,12 +177,19 @@ class Stats:
         if sign is not None and sign not in ("+", "-", "nonzero"):
             raise StatError(
                 f"{id!r}: sign must be '+', '-' or 'nonzero', got {sign!r}")
+        if between is not None and (minimum is not None or maximum is not None):
+            raise StatError(
+                f"{id!r}: pass between=(lo, hi) or minimum=/maximum=, not both")
 
         expect: dict = {}
         if sign is not None:
             expect["sign"] = sign
         if between is not None:
             expect["min"], expect["max"] = between
+        if minimum is not None:
+            expect["min"] = minimum
+        if maximum is not None:
+            expect["max"] = maximum
 
         # The seed fmt must at least apply to the value it arrives with. This
         # raises HERE, next to the analysis that chose it, rather than at render
@@ -191,7 +206,7 @@ class Stats:
         self._passed[id] = {f for f, v in
                             (("fmt", fmt), ("unit", unit), ("desc", desc))
                             if v is not None}
-        if sign is not None or between is not None:
+        if guarded:
             self._passed[id].add("expect")
         self._values[id] = {
             "value": value,
@@ -216,7 +231,8 @@ class Stats:
         if errors:
             raise StatError(f"{id!r}: " + "; ".join(errors))
 
-    def write(self, out: Path | None = None, *, inputs: list[str] = ()) -> int:
+    def write(self, out: Path | None = None, *, inputs: list[str] = (),
+              keep_hand_ids: set[str] | None = None) -> int:
         """Merge these values into stats.json and report what is unguarded.
 
         MERGES rather than overwrites, twice over. Entries whose `origin.by`
@@ -229,6 +245,12 @@ class Stats:
 
         Top-level blocks this script does not own (`pinned` above all) are
         carried through unchanged.
+
+        Hand entries are kept too, by default all of them. `keep_hand_ids` is
+        the opt-in exception for a manuscript that retires a whole branch of
+        its argument: pass the hand ids still in use, and every other hand
+        entry is dropped (and named, so the pruning is never silent). Entries
+        owned by other scripts are untouched either way.
         """
         # PAPER_STATS_OUT redirects the write, which is how tools/check_stats.py
         # re-derives the generated values into a scratch file and diffs them
@@ -274,6 +296,7 @@ class Stats:
 
         kept: dict[str, dict] = {}
         prior: dict[str, dict] = {}
+        pruned: list[str] = []
         for id, rec in existing.items():
             by = (rec.get("origin") or {}).get("by")
             if by == mine:
@@ -283,6 +306,9 @@ class Stats:
                 # script that declares it now, which is what makes upgrading
                 # an existing stats.json a no-op rather than a conflict.
                 prior[id] = rec
+            elif (by == "hand" and keep_hand_ids is not None
+                  and id not in keep_hand_ids):
+                pruned.append(id)
             else:
                 kept[id] = rec
 
@@ -392,6 +418,10 @@ class Stats:
         hand = sum(1 for v in merged.values()
                    if (v.get("origin") or {}).get("by") == "hand")
 
+        if pruned:
+            print(f"  note: removed {len(pruned)} hand entr"
+                  f"{'y' if len(pruned) == 1 else 'ies'} not in keep_hand_ids: "
+                  f"{', '.join(sorted(pruned))}")
         if overridden:
             ids = sorted({id for id, _ in overridden})
             fields = sorted({f for _, f in overridden})
