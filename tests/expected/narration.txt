@@ -24,7 +24,7 @@ A footnote attaches to the word it annotates, with no space between them Which i
 
 = Math and code
 
-Inline math such as alpha, a subscripted one such as t observed is at most t max, and a quoted-subscript one such as |"median"_"orig" - "median"_"arm"| are verbalized by the narrator and dropped by the readability report. Symbol tokens minus 3, approximately 5, and 10 plus or minus 2 become words, and an arrow reads as a word too: 0.43 to 0.49. A token with no mapping is dropped rather than spelled out: 0.5 0.9.
+Inline math such as alpha, a subscripted one such as t observed is at most t max, and a quoted-subscript one such as the absolute value of median orig minus median arm are verbalized by the narrator and dropped by the readability report. Symbol tokens minus 3, approximately 5, and 10 plus or minus 2 become words, and an arrow reads as a word too: 0.43 to 0.49. A token with no mapping is dropped rather than spelled out: 0.5 0.9.
 
 A reference list that loses its numbers must not keep the conjunction that joined them (Tables).
 
@@ -36,7 +36,7 @@ Block code is exempt from the word count and skipped by the narrator:
 
 Inline code terms, by contrast, count as ordinary words.
 
-A Unicode escape denotes a character and must reach the prose as one: a subscript written log₂ is a single word to a reader, not the four the raw escape tokenizes into, and the narrator needs a character it can speak.
+A Unicode escape denotes a character and must reach the prose as one: a subscript written log two is a single word to a reader, not the four the raw escape tokenizes into, and the narrator needs a character it can speak.
 
 = Numbers read from the analysis
 

@@ -85,9 +85,18 @@ chapters and cover art into an `.m4b` with one chapter per section.
 
 Everything project-specific is in `audio/config.py`: the voice, the metadata
 blurbs, a `PRONUNCIATION` map for words the voice mangles, and a `MATH` map from
-inline equations to spoken English. Add every inline equation that appears in
-running prose; anything unmapped falls back to reading the raw Typst, which is
-usually wrong. Display equations are dropped rather than read.
+inline equations to spoken English. A `MATH` entry reads an equation the way
+the author would and always wins. Anything it does not list is spoken
+structurally by `extract_prose.speak_math()`: quotes unwrapped, `|x|` as "the
+absolute value of x", superscripts as "to the", subscripts as a following word,
+comparisons and word tokens (`gt.eq`, `times`, `approx`) as words. So
+`$T = #s("thr")$` narrates as "T equals 84" whatever the register holds, and a
+paper with a hundred inline equations needs no hundred-entry map. Extend the
+vocabulary with `MATH_WORDS`, and the spoken form of bare Unicode (`±`, `×`,
+subscript digits) with `UNICODE_SPEAK`; both are added to defaults in
+`extract_prose.py`, so a `config.py` without them still works. An en dash
+between two numbers is read as "to". Display equations are dropped rather than
+read.
 
 Cross-references are spoken as the PDF prints them: `@tbl:roles` in the SI
 narrates as "Table S1", `@sec:methods` as "Section 2". The numbers come from
