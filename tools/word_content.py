@@ -81,8 +81,12 @@ class WordContent:
             if row['number'] is None:
                 raise ValueError(f'reference to unnumbered target {key}')
             num = content_text(row['number'])
-            return escape(num if value.get('supplement', 'auto') is None else
-                          content_text(row['supplement']) + ' ' + num)
+            # As in export_text: an explicit supplement on the reference
+            # replaces the figure's, and `@fig:x[]` prints the number alone.
+            supplement = value.get('supplement', 'auto')
+            if supplement == 'auto':
+                return escape(content_text(row['supplement']) + ' ' + num)
+            return escape(' '.join(filter(None, (content_text(supplement), num))))
         if not self.prefix or not key.startswith(self.prefix):
             raise ValueError(f'unknown reference or foreign chapter citation {key}')
         local = key[len(self.prefix):]

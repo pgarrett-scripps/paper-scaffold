@@ -7,6 +7,9 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from export_text import Renderer, export
+from word_content import WordContent
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 @unittest.skipUnless(shutil.which('typst'), 'Typst is required')
@@ -125,6 +128,25 @@ class RendererTests(unittest.TestCase):
             {'func': 'ref', 'target': '<one>'}, {'func': 'ref', 'target': '<two>'},
             {'func': 'context'}, state]}
         self.assertEqual(Renderer([]).text(group), '[one][two]')
+
+    def test_reference_supplement_is_not_repeated(self):
+        # `@fig:x[]` gives the reference an empty supplement because the prose
+        # writes the word "Figure" itself. An exporter that always prepended
+        # the figure's own supplement printed "Figure Figure 3" in the review
+        # copy and the Word file while the PDF was correct. The forms below are
+        # what `typst query` emits for auto, `[]`, `none` and `[Panel]`.
+        figure = {'label': 'fig:x', 'number': '3',
+                  'supplement': {'func': 'text', 'text': 'Figure'},
+                  'caption': None}
+        empty = {'func': 'sequence', 'children': []}
+        panel = {'func': 'text', 'text': 'Panel'}
+        cases = [('auto', 'Figure 3'), (empty, '3'), (None, '3'), (panel, 'Panel 3')]
+        renderer = Renderer([figure])
+        word = WordContent(ROOT, 'paper.typ', '', set(), [figure], [], {})
+        for supplement, expected in cases:
+            ref = {'func': 'ref', 'target': '<fig:x>', 'supplement': supplement}
+            self.assertEqual(renderer.text(ref), expected, supplement)
+            self.assertEqual(word.reference(ref), expected, supplement)
 
 
 if __name__ == '__main__':
