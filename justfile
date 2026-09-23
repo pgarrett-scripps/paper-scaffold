@@ -1005,7 +1005,9 @@ audio-setup:
   # Resolved by NAME against piper's own voice index. The old path
   # ("en/en_US/lessac/medium") was a hand-built URL into a HuggingFace repo, so a
   # renamed voice gave a 404 that looked like a network failure.
-  if (d / f"{config.VOICE_NAME}.onnx").is_file():
+  # piper needs the .onnx.json config beside the model; an interrupted download
+  # can leave the model alone, so both files count as "present".
+  if all((d / f"{config.VOICE_NAME}{x}").is_file() for x in (".onnx", ".onnx.json")):
       print(f"  voice {config.VOICE_NAME} already present")
   else:
       print(f"  downloading {config.VOICE_NAME} ...")
@@ -1033,7 +1035,7 @@ _audio-check:
   set -euo pipefail
   cd audio
   name=$(python3 -c "import config; print(config.VOICE_NAME)")
-  if [ ! -f "models/${name}.onnx" ]; then
+  if [ ! -f "models/${name}.onnx" ] || [ ! -f "models/${name}.onnx.json" ]; then
     echo "no voice model for ${name} -- run: just audio-setup"
     exit 1
   fi

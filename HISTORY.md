@@ -64,6 +64,17 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 3.26.1
+
+- **The voice check wants both files.** `audio-setup` and `_audio-check` now
+  require `<voice>.onnx.json` beside `<voice>.onnx`; an interrupted download
+  left the model alone, `audio-setup` skipped it as present, and piper failed
+  at synthesis. Brought up from spectrl-paper.
+
+Upgrade: replace `justfile` (`--apply-pristine`). A paper whose audiobook
+recipes depend on `audio-setup` instead of `_audio-check` returns them to
+stock: the audiobook never downloads on its own.
+
 ## 3.26.0
 
 Extension hooks: a paper extends the toolchain in files it owns, so an upgrade
