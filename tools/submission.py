@@ -35,6 +35,13 @@ the non-default document target manuscript.toml declares for it (compiled on
 its own, PDF only: no SI Word file) or absent, in which case the si-* steps
 write nothing and remove any SI file left from before (see si_layout).
 
+ONE REFERENCE LIST. A paper whose SI cites the main list's keys (no si-
+list of its own) would ship an SI whose citations point at a list in the
+other file. Then both SI files are compiled on their own from the SI half of
+the Word projection, closed by the main list's #bibliography call, so the
+list holds only what the SI cites, numbered 1..n in SI order; references to
+main-text floats and sections gain "of the main text" (standalone_si).
+
 STALENESS. Every output is recorded in .build-state/submission.json with the
 hashes of what it was built from, in the same shape as paper.pdf's record,
 and `check` recompares them without building anything. The split outputs are
@@ -62,6 +69,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import NamedTuple
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
@@ -98,7 +106,13 @@ SI_NOTES = {
                 "manuscript.toml document target, and there is no SI Word file.",
     "none": "The manuscript has no Supporting Information; the main files are the "
             "whole document.",
+    "standalone": "The main files are pages and text of the combined manuscript. The "
+                  "SI files are compiled on their own with a local reference list: "
+                  "only the works the SI cites, numbered in SI citation order. The SI "
+                  "calls main-text figures, tables and sections '... of the main text'.",
 }
+# The note the manifest carries: the most specific layout any record names.
+NOTE_ORDER = ("standalone", "separate", "none", "appendix")
 
 
 class SubmissionError(ValueError):
@@ -218,8 +232,9 @@ def write_manifest(root: Path) -> None:
         "journal": ({"profile": profile.id, "journal": profile.journal,
                      "type": profile.type} if profile else None),
         "files": files,
-        "note": SI_NOTES.get(next((r.get("si") for r in load_records(root).values()
-                                   if r.get("si")), "appendix")),
+        "note": SI_NOTES[next((k for k in NOTE_ORDER if k in
+                               {r.get("si") for r in load_records(root).values()}),
+                              "appendix")],
     }, indent=2) + "\n")
     (out / "manifest.json").chmod(0o644)
 
@@ -319,6 +334,12 @@ def split_pdf(root: Path, kind: str) -> str:
     with build_lock(root):
         folder, manifest = capture(root)
         layout, entry = si_layout(root, folder)
+        standalone = standalone_si((folder / "paper.word.typ").read_text()) \
+            if kind == "si-pdf" and layout == "appendix" else None
+        if standalone:
+            compile_standalone_si(root, folder, manifest, standalone, placement)
+            return (f"wrote {OUT_DIR}/{name} (the SI on its own, with a local "
+                    f"reference list of {len(standalone.keys)} works)")
         from_capture = kind == "main-pdf" or layout == "appendix"
         if from_capture:
             if layout == "appendix":
@@ -371,6 +392,90 @@ def compile_inputs(root: Path, deps: Path) -> list[str]:
     return inputs
 
 
+# ------------------------------------------- an SI on the main reference list ---
+
+class StandaloneSI(NamedTuple):
+    text: str        # SI half, qualified, closed by the main #bibliography call
+    keys: set[str]   # the works it cites
+
+
+def standalone_si(text: str) -> StandaloneSI | None:
+    """The SI as its own document, when it cites the main reference list.
+
+    Applies when the SI half of the Word projection cites keys but has no
+    #bibliography of its own (a si- paper's resolver-written list is one) and
+    the main half has exactly one. None otherwise: the page-range split
+    stands, which is right for a si- list and for an SI that cites nothing.
+    """
+    from export_docx import cited_keys
+    from manuscript_sources import BIBLIOGRAPHY, call_span
+    main, si = split_word_source(text)
+    keys = cited_keys(si)
+    if not keys or call_span(si, BIBLIOGRAPHY) is not None:
+        return None
+    calls, at = [], 0
+    while (span := call_span(main, BIBLIOGRAPHY, start=at)) is not None:
+        calls.append(main[span[0]:span[1]])
+        at = span[1]
+    if len(calls) != 1:
+        return None
+    return StandaloneSI(qualify_main_text_references(si).rstrip() + "\n\n" + calls[0] + "\n",
+                        keys)
+
+
+_NOUN = r"(?:Figures?|Tables?|Sections?)"
+_NUM = r"\d+(?:\.\d+)*[a-z]?"
+# "Figure 3", "Figures 2 and 3", "Section 2.3 and Section 2.4": main-text
+# numbers, never S-numbered ones, never a caption label ("Figure 3:"), and
+# never one already qualified. Atomic, so "Figure 12" cannot match as "1".
+MAIN_REF = re.compile(
+    rf"(?>\b{_NOUN} {_NUM}(?:(?:,? and |, |–|-)(?:{_NOUN} )?{_NUM})*)"
+    r"(?![\w:])(?!\.\d)(?! (?:of|in) the main text)")
+
+
+def qualify_main_text_references(si: str) -> str:
+    """'Figure 3' -> 'Figure 3 of the main text' in the SI's prose.
+
+    The resolver has already turned @fig/@tbl/@sec into literal numbers; once
+    the SI is its own file, a bare "Figure 3" reads as the SI's own. Comments,
+    raw text and strings are left alone.
+    """
+    from manuscript_sources import mask
+    ends = [m.end() for m in MAIN_REF.finditer(mask(si, strings=True))]
+    for end in reversed(ends):
+        si = si[:end] + " of the main text" + si[end:]
+    return si
+
+
+# The page setup the Word projection lacks (it never compiles the preamble).
+# Captions already carry their literal "Figure S1:" label from the resolver.
+SI_PREAMBLE = """#set page(paper: "us-letter", margin: 1in, numbering: "S-1")
+#set heading(numbering: none)
+#show figure.caption: it => it.body
+"""
+
+
+def compile_standalone_si(root: Path, folder: Path, manifest: dict, si: StandaloneSI,
+                          placement: str) -> None:
+    """Compile the standalone SI inside the capture, so its paths resolve."""
+    name = KIND_FILE["si-pdf"]
+    fd, tmp_name = tempfile.mkstemp(dir=folder, prefix=".submission-si-", suffix=".typ")
+    os.close(fd)
+    source = Path(tmp_name)
+    try:
+        write_text(source, SI_PREAMBLE + si.text)
+        with tempfile.TemporaryDirectory(dir=root / ".build-state") as tmp:
+            staged = Path(tmp) / name
+            subprocess.run(["typst", "compile", "--root", str(folder),
+                            str(source), str(staged)], check=True)
+            if snapshot(root, manifest["dependencies"]) != manifest["sources"]:
+                raise SubmissionError("the source changed during the export; rerun it")
+            publish(root, staged, name, manuscript_record(
+                root, manifest, placement=placement, si="standalone"))
+    finally:
+        source.unlink(missing_ok=True)
+
+
 def split_word_source(text: str) -> tuple[str, str]:
     """(main, si) halves of the Word projection, cut at the SI heading."""
     hits = list(SI_HEADING.finditer(text))
@@ -396,6 +501,9 @@ def split_docx(root: Path, kind: str) -> str:
             return no_si(root, kind)
         text = (folder / "paper.word.typ").read_text()
         main, si = split_word_source(text) if layout == "appendix" else (text, "")
+        standalone = standalone_si(text) if kind == "si-docx" else None
+        if standalone:
+            si, layout = standalone.text, "standalone"
         with tempfile.TemporaryDirectory(dir=root / ".build-state") as tmp:
             source = Path(tmp) / "part.word.typ"
             write_text(source, main if kind == "main-docx" else si)

@@ -32,6 +32,14 @@ target's PDF is `supporting-information.pdf` and no SI Word file is written.
 With no such target the SI steps write nothing, note why, and remove any
 stale SI file.
 
+An SI that cites the main list's keys (no `@si-` list of its own) cannot ship
+as a page range: its citation numbers would point at a list in the other
+file. Then both SI files are compiled on their own from the SI half of the
+Word projection, closed by the main `#bibliography` call, so the SI carries a
+local list of only the works it cites, numbered from 1 in SI order, and a
+bare "Figure 3" or "Section 2.4" becomes "... of the main text". The main
+files and their full list are unchanged.
+
 The split files refuse to build while the source differs from the last
 `just paper` capture. Each output is recorded in `.build-state/submission.json`.
 The set is outside `verify` for the audiobooks' reason: `just check` notes a

@@ -6,12 +6,15 @@ and measures inside the journal's box or fails on the resolution floor; a
 profile names only a format this can write; the submission placement defaults
 to the journal layout; a missing <si-start> probe is a clear error, not a
 wrong page range; an absent cover-letter.typ is tolerated and leaves no stale
-letter behind; and a recorded output reads stale when its source moves.
+letter behind; a paper with no SI or a separate SI target ships the right
+set; an SI citing the main list gets its own local list and qualified
+main-text references; and a recorded output reads stale when its source moves.
 """
 from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -220,6 +223,67 @@ parts = ["si"]
         self.put("si-body.typ", self.BODY.format("SI body, edited."))
         rows = {r["output"]: r["status"] for r in submission.check(self.root)}
         self.assertEqual(rows["submission/supporting-information.pdf"], "stale")
+
+    # --- an SI that cites the main reference list -----------------------------
+
+    BIB = ('@article{alpha, title={Alpha Work}, author={Aa, B}, year={2020}, journal={J}}\n'
+           '@article{beta, title={Beta Work}, author={Bb, C}, year={2021}, journal={J}}\n'
+           '@article{gamma, title={Gamma Work}, author={Cc, D}, year={2022}, journal={J}}\n')
+    MAIN_BIB = '#bibliography("references.bib", title: [References], style: "american-chemical-society")'
+
+    def single_list_word(self, si: str) -> str:
+        return WORD.replace('#bibliography("references.bib")', self.MAIN_BIB) \
+                   .replace("SI text.", si)
+
+    def test_main_text_references_are_qualified_in_the_si(self):
+        q = submission.qualify_main_text_references
+        self.assertEqual(q("as in Figure 3; Figures 2 and 3 agree."),
+                         "as in Figure 3 of the main text; Figures 2 and 3 of the main text agree.")
+        self.assertEqual(q("Section 2.3 and Section 2.4 set it."),
+                         "Section 2.3 and Section 2.4 of the main text set it.")
+        self.assertEqual(q("Table 12a lists it."), "Table 12a of the main text lists it.")
+        # S-numbered, caption labels, already qualified, comments and strings: untouched.
+        for text in ("Figure S3 shows it.", "Table S2: sizes", "Figure 3: caption",
+                     "Figure 5 in the main text.", "Figure 5 of the main text.",
+                     "// Figure 3 is a note", '#image("Figure 3.png")'):
+            self.assertEqual(q(text), text)
+
+    def test_standalone_si_only_when_the_si_cites_the_main_list(self):
+        # The SI cites nothing: the page-range split stands.
+        self.assertIsNone(submission.standalone_si(self.single_list_word("SI text.")))
+        # A si- list of its own (the resolver writes its #bibliography): unchanged.
+        own = self.single_list_word('See @si-x.\n\n#bibliography("si.bib", title: [SI References])')
+        self.assertIsNone(submission.standalone_si(own))
+        st = submission.standalone_si(self.single_list_word("See @gamma and Figure 2."))
+        self.assertEqual(st.keys, {"gamma"})
+        self.assertIn("Figure 2 of the main text.", st.text)
+        self.assertTrue(st.text.rstrip().endswith(self.MAIN_BIB))
+        self.assertNotIn("Main text.", st.text)
+
+    @unittest.skipUnless(shutil.which("typst"), "typst not installed")
+    def test_a_single_list_si_gets_a_local_reference_list(self):
+        # spectrl-paper, uno-paper, koth-lfq-paper: the SI cites main-list keys.
+        word = self.single_list_word("SI cites @gamma.")
+        folder = self.fake_capture(
+            "Main cites @alpha and @beta.\n#pagebreak()\n"
+            "#context [#metadata(here().page()) <si-start>]\nSI.\n", word)
+        (folder / "references.bib").write_text(self.BIB)
+        self.assertIn("local reference list of 1 works",
+                      submission.split_pdf(self.root, "si-pdf"))
+        record = submission.load_records(self.root)["supporting-information.pdf"]
+        self.assertEqual(record["si"], "standalone")
+        self.assertEqual(list(folder.glob(".submission-si-*")), [])
+        manifest = json.loads((self.root / "submission/manifest.json").read_text())
+        self.assertIn("local reference list", manifest["note"])
+        # The list itself: only what the SI cites, numbered from 1.
+        (folder / "si.typ").write_text(submission.standalone_si(word).text)
+        subprocess.run(["typst", "compile", "--root", str(folder), "--features", "html",
+                        "--format", "html", str(folder / "si.typ"), str(folder / "si.html")],
+                       check=True, capture_output=True)
+        html = (folder / "si.html").read_text()
+        self.assertIn("Gamma Work", html)
+        self.assertNotIn("Alpha Work", html)
+        self.assertIn("(1)", html)
 
     def test_split_refuses_without_a_captured_manuscript(self):
         with self.assertRaisesRegex(submission.SubmissionError, "just paper"):
