@@ -119,7 +119,7 @@ def _entry(id: str, rec: dict) -> list[Finding]:
             # ordinary state of a fresh clone.
             out.append(Finding("note", id, f"input {src} is not present, so it "
                                            f"could not be verified"))
-        elif _sha(p) != want_hash:
+        elif not hashcache.input_current(ROOT, src, want_hash):
             out.append(Finding("error", id,
                 f"input {src} has changed since {path} was generated -- "
                 f"run: just assets"))

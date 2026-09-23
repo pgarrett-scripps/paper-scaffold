@@ -20,6 +20,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 PAPER = HERE.parent.parent            # analysis/scripts/ -> analysis/ -> paper/
 
+sys.path.insert(0, str(PAPER / "tools"))
+# The checks compare with the same function, so recording and checking agree
+# on what a root pyproject.toml / uv.lock hash covers (not its version line).
+from hashcache import recorded_sha
+
 
 def sha(p: Path) -> str:
     h = hashlib.sha256()
@@ -90,7 +95,12 @@ def code_inputs() -> dict[str, str]:
 
 
 def declared_inputs(paths) -> dict[str, str]:
-    """Hash data files a generator says it read. Paths are relative to the root."""
+    """Hash data files a generator says it read. Paths are relative to the root.
+
+    The root pyproject.toml and uv.lock are hashed without the project's own
+    version line (tools/hashcache.py says why), so a scaffold upgrade that
+    bumps it does not mark every figure and number stale.
+    """
     out: dict[str, str] = {}
     for src in paths:
         p = PAPER / src
@@ -98,5 +108,5 @@ def declared_inputs(paths) -> dict[str, str]:
             raise RuntimeError(
                 f"declared input {src} does not exist. Paths are relative to the "
                 f"manuscript root, not to analysis/.")
-        out[Path(src).as_posix()] = sha(p)
+        out[Path(src).as_posix()] = recorded_sha(PAPER, Path(src).as_posix())
     return out

@@ -316,8 +316,9 @@ class Hardening(unittest.TestCase):
         shutil.copy(ROOT / "justfile", self.root / "justfile")
         for name in ("config.typ", "paper.typ", "si-body.typ", "code.typ"):
             self.put(name, "Text.\n")
-        run = lambda: subprocess.run(["just", "fmt-check"], cwd=self.root,  # noqa: E731
-                                     capture_output=True, text=True)
+        def run():
+            return subprocess.run(["just", "fmt-check"], cwd=self.root,
+                                  capture_output=True, text=True, check=False)
         proc = run()
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.put("paper.typ", "#let   x=1\n")

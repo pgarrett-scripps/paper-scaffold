@@ -222,9 +222,73 @@ def check_assets_cases() -> bool:
 
     return ok
 
+def toolchain_version_cases() -> bool:
+    """A scaffold version bump in the ROOT pyproject.toml / uv.lock leaves a
+    generator that declared them current; a dependency change, and any change
+    to analysis/pyproject.toml, still reads as stale (cascade/paper saw every
+    figure and number go stale on a bump)."""
+    import hashcache
+    sys.path.insert(0, str(ROOT / "analysis" / "scripts"))
+    import _provenance
+    ok = True
+
+    def expect(name, got, want):
+        nonlocal ok
+        if got != want:
+            print(f"  toolchain-version [{name}]: expected {want}, got {got}")
+            ok = False
+
+    py = ('[project]\nname = "paper"\nversion = "3.23.0"\n'
+          'dependencies = ["pillow>=10"]\n\n[tool.x]\nversion = "1"\n')
+    lock = ('version = 1\n\n[[package]]\nname = "paper"\nversion = "3.23.0"\n'
+            'source = { virtual = "." }\n\n[[package]]\nname = "pillow"\n'
+            'version = "10.0.0"\nsource = { registry = "https://pypi.org/simple" }\n')
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "analysis").mkdir()
+        (root / "pyproject.toml").write_text(py)
+        (root / "uv.lock").write_text(lock)
+        (root / "analysis" / "pyproject.toml").write_text(py)
+        rec = {n: hashcache.recorded_sha(root, n)
+               for n in ("pyproject.toml", "uv.lock", "analysis/pyproject.toml")}
+        # The generator side records through the same function.
+        with_paper = _provenance.PAPER
+        _provenance.PAPER = root
+        try:
+            expect("declared_inputs", _provenance.declared_inputs(["pyproject.toml"]),
+                   {"pyproject.toml": rec["pyproject.toml"]})
+        finally:
+            _provenance.PAPER = with_paper
+        legacy = hashcache.sha(root / "pyproject.toml")
+
+        def bump(text):
+            return text.replace('version = "3.23.0"', 'version = "3.24.0"')
+        (root / "pyproject.toml").write_text(bump(py))
+        (root / "uv.lock").write_text(bump(lock))
+        (root / "analysis" / "pyproject.toml").write_text(bump(py))
+        for n in ("pyproject.toml", "uv.lock"):
+            expect(f"{n} bump", hashcache.input_current(root, n, rec[n]), True)
+        expect("analysis/pyproject.toml bump", hashcache.input_current(
+            root, "analysis/pyproject.toml", rec["analysis/pyproject.toml"]), False)
+        # A raw-bytes hash recorded before this still matches only unchanged bytes.
+        expect("legacy raw hash after bump",
+               hashcache.input_current(root, "pyproject.toml", legacy), False)
+        (root / "pyproject.toml").write_text(py)
+        expect("legacy raw hash unchanged",
+               hashcache.input_current(root, "pyproject.toml", legacy), True)
+        # Anything else in the file still counts: a dependency, a tool's
+        # version, a locked package's version.
+        for n, text in (("pyproject.toml", py.replace("pillow>=10", "pillow>=11")),
+                        ("pyproject.toml", py.replace('version = "1"', 'version = "2"')),
+                        ("uv.lock", lock.replace('"10.0.0"', '"11.0.0"'))):
+            (root / n).write_text(text)
+            expect(f"{n} real change", hashcache.input_current(root, n, rec[n]), False)
+    return ok
+
+
 def run_cases() -> bool:
     ok = True
-    for case in (asset_cases, check_assets_cases,):
+    for case in (asset_cases, check_assets_cases, toolchain_version_cases):
         ok &= case()
     return ok
 
