@@ -2,8 +2,8 @@
 
 A throwaway scaffold repository gets three tagged releases and a derived
 project copied from the first, then customized. Everything the plan claims is
-checked against what was done to each file, and --apply-pristine is checked to
-touch exactly the pristine and new files and to refuse on a dirty tree.
+checked against what was done to each file (paper migrate relies on it), and
+upgrade-notes is checked to read the installed HISTORY from the lock's release.
 """
 from __future__ import annotations
 
@@ -217,50 +217,24 @@ def run_cases() -> bool:
                 os.environ["PAPER_SCAFFOLD"] = old
         check("sibling discovery", up.find_scaffold(None, project) == scaffold)
 
-        # --json is parseable and carries no internals.
+        # upgrade-notes: the installed package's own HISTORY, no clone.
+        notes = up.installed_notes("3.25.0", "3.26.1")
+        check("installed notes span the range",
+              notes and all(up.vkey(u.version) > (3, 25, 0) for u in notes),
+              [u.version for u in notes])
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            rc = up.main(["--project", str(project)])
+        check("no lock and no --from is an error", rc == 2
+              and "--from" in err.getvalue(), err.getvalue())
+        (project / ".paper").mkdir()
+        (project / ".paper/scaffold.lock.json").write_text(json.dumps(
+            {"schema_version": 1, "scaffold": {"version": "3.25.0"}}))
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            rc = up.main(["--project", str(project), "--scaffold",
-                          str(scaffold), "--json"])
+            rc = up.main(["--project", str(project), "--to", "3.26.1", "--json"])
         data = json.loads(buf.getvalue())
-        check("json output", rc == 0 and data["counts"]["pristine"] == 2
-              and not any(k.startswith("_") for k in data), data.get("counts"))
-
-        # --apply-pristine refuses while a path it would write is dirty: here
-        # a committed customization reverted in the work tree, which reads as
-        # pristine but would silently discard the commit's intent on apply.
-        (project / "tools/a.py").write_text("a = 'wip'\n")
-        sh(project, "commit", "-q", "-am", "customize a")
-        (project / "tools/a.py").write_text("a = 1\n")
-        with contextlib.redirect_stderr(io.StringIO()) as err:
-            rc = up.main(["--project", str(project), "--scaffold",
-                          str(scaffold), "--apply-pristine"])
-        check("dirty tree refused", rc == 2 and "tools/a.py" in err.getvalue(),
-              err.getvalue())
-        check("nothing written on refusal",
-              (project / "tools/a.py").read_text() == "a = 1\n"
-              and not (project / "tools/c.py").exists())
-        sh(project, "commit", "-q", "-am", "revert a")
-
-        # ...and on a clean tree copies exactly the pristine and new files.
-        with contextlib.redirect_stdout(io.StringIO()):
-            rc = up.main(["--project", str(project), "--scaffold",
-                          str(scaffold), "--apply-pristine"])
-        check("apply succeeded", rc == 0)
-        check("pristine replaced", (project / "tools/a.py").read_text() == "a = 2\n")
-        check("new file added", (project / "tools/c.py").read_text() == "c = 1\n")
-        check("customized untouched",
-              (project / "tools/b.py").read_text().endswith("keep = 99\n"))
-        check("removed-upstream left for a hand `git rm`",
-              (project / "tools/gone.py").exists())
-        check("project-only untouched", (project / "tools/mine.py").exists())
-        check("project identity kept",
-              'name = "proj"' in (project / "pyproject.toml").read_text())
-        after = up.build_plan(project, scaffold, None)
-        c2 = {f["path"]: f["cls"] for f in after["files"]}
-        check("re-plan shows them at target",
-              c2["tools/a.py"] == "at-target" and c2["tools/c.py"] == "at-target",
-              c2)
+        check("notes start at the lock's release", rc == 0
+              and data["from"] == "3.25.0" and data["to"] == "3.26.1", data)
 
         # A release that moves old entries into docs/history-archive.md (as
         # 3.23.0 did for 1.0.0-3.19.0). A project on 1.0.0 must still get the
@@ -284,7 +258,7 @@ def run_cases() -> bool:
               "stale duplicate." not in texts, texts)
 
     if ok:
-        print("  upgrade-plan: classification, Upgrade: lines, apply guard ok")
+        print("  upgrade-plan: classification, Upgrade: lines, upgrade-notes ok")
     return ok
 
 

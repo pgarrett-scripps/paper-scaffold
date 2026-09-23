@@ -5,12 +5,13 @@ because the tools sat in the manuscript's own `tools/`. They now also run from
 an installed package (docs/package.md), where that expression names
 site-packages. So the two questions are answered separately:
 
-- ROOT is the manuscript. Tools running from a checkout (the scaffold
-  repository, a captured manuscript under .build-state/) find it as before:
-  the directory above tools/. Tools running from the installed package use
-  `$PAPER_ROOT` if set, else the working directory; `just` runs every recipe
-  from the justfile's directory and `paper tool` sets `$PAPER_ROOT`, so a
-  recipe always sees the manuscript root.
+- ROOT is the manuscript: `$PAPER_ROOT` when set (the justfile exports it
+  as its own directory, and `paper tool` sets it to the working directory
+  otherwise), so a recipe always sees the manuscript root. Without it, tools
+  running from a checkout find the manuscript as before, the directory above
+  tools/, and tools running from the installed package use the working
+  directory. `paper test` clears it, so a test's temporary manuscript is
+  never mistaken for the one the suite was started from.
 - DATA is the toolchain: the directory holding `tools/`, `journals/`, `word/`
   and `tests/`. In the scaffold checkout that is the repository (so ROOT and
   DATA coincide there, as they always did); in an installed wheel it is
@@ -38,10 +39,10 @@ PACKAGED = DATA.name == "data" and DATA.parent.name == "paper_scaffold"
 
 
 def manuscript_root() -> Path:
-    if not PACKAGED:
-        return DATA
     env = os.environ.get("PAPER_ROOT")
-    return Path(env).resolve() if env else Path.cwd().resolve()
+    if env:
+        return Path(env).resolve()
+    return Path.cwd().resolve() if PACKAGED else DATA
 
 
 ROOT = manuscript_root()
@@ -63,3 +64,16 @@ def locate(root: Path, name: str) -> Path:
 def tool(name: str) -> Path:
     """A file among the tools, by name (`render_stats.py`)."""
     return TOOLS / name
+
+
+def version() -> str:
+    """The toolchain release these tools belong to."""
+    try:
+        from importlib.metadata import version as dist_version
+        return dist_version("paper-scaffold")
+    except Exception:  # not installed (a captured copy, a bare checkout)
+        import re
+        py = DATA / "pyproject.toml"
+        m = re.search(r'^version = "([^"]+)"', py.read_text(), re.MULTILINE) \
+            if py.is_file() else None
+        return m.group(1) if m else "unknown"

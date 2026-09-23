@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 # Compatibility entrypoint used by manuscript reports and existing projects.
+# wordcount.py finds the manuscript itself (tools/paths.py).
 set -euo pipefail
-cd "$(dirname "$0")/.."
-exec uv run --quiet python tools/wordcount.py "$@"
+exec uv run --quiet python "$(dirname "$0")/wordcount.py" "$@"

@@ -1072,9 +1072,9 @@ wheels = [
 ]
 
 [[package]]
-name = "paper"
+name = "paper-scaffold"
 version = "3.26.1"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "bibtexparser" },
     { name = "cairosvg" },

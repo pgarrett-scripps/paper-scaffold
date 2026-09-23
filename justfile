@@ -1,5 +1,11 @@
 set positional-arguments
 
+# The manuscript root, for every tool this justfile runs. The tools come from
+# the installed paper-scaffold package (docs/package.md) and find the
+# manuscript through $PAPER_ROOT (tools/paths.py), so a recipe that changes
+# directory (the audio ones) still points them here.
+export PAPER_ROOT := justfile_directory()
+
 # The paper's own recipes, in a file the scaffold never ships or replaces (see
 # docs/hooks.md). Optional: no project.just, nothing imported. A recipe there
 # with a name used here is an error rather than an override, deliberately, so
@@ -37,42 +43,41 @@ default:
 
 # List named documents declared in manuscript.toml (optional multi-chapter mode)
 documents:
-  @uv run --quiet python tools/documents.py list
+  @uv run --quiet paper tool documents list
 
 # Build a named PDF, or all PDFs, and report chapter counts/readability
 document target="":
-  @uv run --quiet python tools/documents.py build {{quote(target)}}
+  @uv run --quiet paper tool documents build {{quote(target)}}
 
 # Check selected PDF freshness without rebuilding; defaults to all targets
 document-check target="all":
-  @uv run --quiet python tools/documents.py check {{quote(target)}}
+  @uv run --quiet paper tool documents check {{quote(target)}}
 
 # Show counts from a current document build; refuses stale metrics
 document-metrics target="":
-  @uv run --quiet python tools/documents.py metrics {{quote(target)}}
+  @uv run --quiet paper tool documents metrics {{quote(target)}}
 
 # Prose, chapter bibliographies and PDF freshness; does not rebuild
 document-verify target="all":
-  @uv run --quiet python tools/documents.py verify {{quote(target)}}
+  @uv run --quiet paper tool documents verify {{quote(target)}}
 
 # Snapshot one document before a wording-only edit
 document-edit-baseline target tag="default":
-  @uv run --quiet python tools/prose_edit_guard.py snapshot {{quote(tag)}} --document {{quote(target)}}
+  @uv run --quiet paper tool prose_edit_guard snapshot {{quote(tag)}} --document {{quote(target)}}
 
 # Verify one document's wording-edit invariants against its own baseline
 document-edit-check target tag="default":
-  @uv run --quiet python tools/prose_edit_guard.py check {{quote(tag)}} --document {{quote(target)}}
+  @uv run --quiet paper tool prose_edit_guard check {{quote(tag)}} --document {{quote(target)}}
 
-# Which paper-scaffold version this manuscript is built on, and the state of the
-# working tree. The version comes from pyproject.toml, which is copied along with
-# the scaffold, so it answers the question in a derived project too.
-# See HISTORY.md for the versioning policy and how to upgrade.
+# Which paper-scaffold release this manuscript runs, and the state of the
+# working tree. `paper version` prints the installed package, the pin in
+# pyproject.toml and the release that wrote .paper/scaffold.lock.json.
+# See HISTORY.md for the versioning policy and docs/package.md for upgrading.
 # Print which paper-scaffold version this manuscript is built on
 version:
   #!/usr/bin/env bash
   set -uo pipefail
-  v=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
-  echo "paper-scaffold $v"
+  uv run --quiet paper version
   if git rev-parse --git-dir >/dev/null 2>&1; then
     # Scoped to this directory: a manuscript can live in a subdirectory of a
     # code repository, and an unrelated code change there should not report
@@ -83,20 +88,29 @@ version:
     [ "$dirty" -gt 0 ] && echo "  tree    $dirty uncommitted change(s)${where:+ under $where}" || echo "  tree    clean${where:+ under $where}"
   fi
 
-# Run from a derived manuscript: HISTORY.md's Upgrade: lines since this version,
-# and each scaffold-owned file classed pristine (safe to replace) or customized
-# (merge by hand). Read-only; --apply-pristine copies only the pristine and new
-# files. The upstream clone is --scaffold PATH, $PAPER_SCAFFOLD, or found.
-# Plan an upgrade to a newer scaffold release (default: the latest tag)
-upgrade-plan *args:
-  @uv run --quiet python tools/upgrade_plan.py "$@"
+# HISTORY.md's Upgrade: lines from the release in .paper/scaffold.lock.json to
+# the installed one, read from the installed package. An upgrade is: move the
+# pin (uv add "paper-scaffold @ git+...@vX.Y.Z"), then `uv run paper sync`,
+# which prints these too. Read-only.
+# List what each release since this paper's lock asks of a manuscript
+upgrade-notes *args:
+  @uv run --quiet paper upgrade-notes "$@"
+
+alias upgrade-plan := upgrade-notes
+
+# Rewrite the generated files (justfile, Typst modules, analysis helpers) from
+# the installed package and record them in .paper/scaffold.lock.json. Refuses
+# to overwrite an edit; --check only reports. See docs/package.md.
+# Write the files the installed toolchain generates into this paper
+sync *args:
+  @uv run --quiet paper sync "$@"
 
 # project.toml is where a paper extends the scaffold without editing it: extra
 # gate stages, Word post-processing, extra Typst sources, one shared reference
 # list. See docs/hooks.md. No project.toml means no hooks.
 # List the extension hooks this paper declares in project.toml
 hooks:
-  @uv run --quiet python tools/project_hooks.py show
+  @uv run --quiet paper tool project_hooks show
 
 # One-time (and after any pyproject change): build the Python environment. uv
 # resolves and locks it, so every machine gets the same versions. The analysis has
@@ -190,7 +204,7 @@ doctor:
 # norms. These are what make prose dense; a reading-level score cannot see them.
 # Density metrics per 1,000 words, and the sections that depart from the paper's norms
 density:
-  @uv run --quiet python tools/density.py
+  @uv run --quiet paper tool density
 
 # Rebuild everything this directory owns, from the current source, in the order
 # that fails fastest: the PDF first (any Typst error surfaces in seconds), then
@@ -217,10 +231,10 @@ all: paper
   set -euo pipefail
   just _narrate-if-voice
   # The upload set, from the capture `paper` just made (no second build).
-  uv run --quiet python tools/submission.py all
+  uv run --quiet paper tool submission all
   # The paper's own build steps after the upload set ([stages] submission in
   # project.toml, docs/hooks.md); nothing when none are declared.
-  uv run --quiet python tools/project_hooks.py stages submission
+  uv run --quiet paper tool project_hooks stages submission
   just check
 
 # Narrate when audio/ and its voice model exist, else say why not. A recipe of
@@ -292,6 +306,7 @@ verify:
     echo "note:    typstyle is not installed, skipped. See: just doctor"
   fi
 
+  stage "toolchain (paper sync --check)" "" uv run --quiet paper sync --check
   stage "extractors (just test)"         "" just test
   stage "prose rules (just prose-check)" "" just prose-check
   stage "word limits (just check-words)" "" just check-words
@@ -304,7 +319,7 @@ verify:
   stage "review actions (just check-actions)" "" just check-actions
   # The paper's own stages ([stages] verify in project.toml, docs/hooks.md).
   # Each prints its own header; nothing prints when none are declared.
-  uv run --quiet python tools/project_hooks.py stages verify || rc=1
+  uv run --quiet paper tool project_hooks stages verify || rc=1
 
   echo ""
   if [ $rc -eq 0 ]; then
@@ -347,11 +362,11 @@ preflight: submission
   echo "=== bibliography (just bib-audit) ==="
   # --require-complete unless project.toml relaxes it; a project.toml that
   # does not parse keeps the strict flag and fails the gate.
-  bib_args=$(uv run --quiet python tools/project_hooks.py bib-audit-args) \
+  bib_args=$(uv run --quiet paper tool project_hooks bib-audit-args) \
     || { rc=1; bib_args="--require-complete"; }
   just bib-audit $bib_args || rc=1
   # The paper's own stages ([stages] preflight in project.toml, docs/hooks.md).
-  uv run --quiet python tools/project_hooks.py stages preflight || rc=1
+  uv run --quiet paper tool project_hooks stages preflight || rc=1
   echo ""
   if [ $rc -eq 0 ]; then
     echo "PREFLIGHT OK -- fresh builds, the full gate, re-derived numbers and the"
@@ -386,9 +401,9 @@ check:
   # output. Rebuild them with `just audiobook-all` when you actually want them.
   just check-build || rc=1
   # The submission set is a note, never a failure: see the submission recipes.
-  uv run --quiet python tools/submission.py check --note
+  uv run --quiet paper tool submission check --note
   # The paper's own staleness checks ([stages] check in project.toml).
-  uv run --quiet python tools/project_hooks.py stages check || rc=1
+  uv run --quiet paper tool project_hooks stages check || rc=1
 
   [ $rc -eq 0 ] && echo "everything is current with the source"
   exit $rc
@@ -407,7 +422,7 @@ check:
 # Render stats.json into the stats-rendered.json that Typst reads
 [private]
 render-stats:
-  @uv run --quiet python tools/render_stats.py
+  @uv run --quiet paper tool render_stats
 
 # Both declaration checks, which is how `just verify` runs them. Kept as separate
 # recipes underneath so either can be run alone while working on one of them.
@@ -429,7 +444,7 @@ check-declared:
 # analysis.
 # Check stats.json: guards, provenance, checksums, and the hashes behind them
 check-stats *args:
-  @uv run --quiet python tools/check_stats.py "$@"
+  @uv run --quiet paper tool check_stats "$@"
 
 # The strong check, and the expensive one: re-runs gen_stats.py and diffs every
 # value it owns against what the analysis produces now. Run it before submitting,
@@ -437,11 +452,11 @@ check-stats *args:
 # numbers actually change. Not part of `just verify`.
 # Re-run the analysis and diff every generated number against it
 check-stats-deep:
-  @uv run --quiet python tools/check_stats.py --deep
+  @uv run --quiet paper tool check_stats --deep
 
 # Inspect a statistic/asset, its uses and checks; --json is the agent interface
 trace +args:
-  @uv run --quiet python tools/trace.py "$@"
+  @uv run --quiet paper tool trace "$@"
 
 # Files the author declares worth watching, beyond what any generator knows it
 # read: a raw export, a protocol document, an upstream config. Declared by hand
@@ -449,7 +464,7 @@ trace +args:
 # `just check-stats` from then on. Re-run it to accept a deliberate change.
 # Record hashes for the files listed under `pinned` in stats.json
 pin:
-  @uv run --quiet python tools/pin.py
+  @uv run --quiet paper tool pin
 
 # The review action ledger, reviews/ACTIONS.md: review skills append findings,
 # editing skills close them with a commit hash. This checks the table is still
@@ -458,7 +473,7 @@ pin:
 # `--open` lists the open rows; `--init` creates the file from the template.
 # Validate reviews/ACTIONS.md and count open review actions by severity
 check-actions *args:
-  @uv run --quiet python tools/check_actions.py "$@"
+  @uv run --quiet paper tool check_actions "$@"
 
 # For a manuscript migrating onto this scaffold with figures whose analysis is
 # gone or unrunnable: every unclaimed file under figures/ and si/ is declared
@@ -469,7 +484,7 @@ check-actions *args:
 # over. Re-run with a new note to accept a deliberate change to an adopted file.
 # Adopt committed figures/tables no generator can rebuild (migration aid)
 adopt note="":
-  @uv run --quiet python tools/adopt_assets.py --note="{{note}}"
+  @uv run --quiet paper tool adopt_assets --note="{{note}}"
 
 # assets.json is the same contract for figures and tables: declared by the script
 # that writes them, referenced from the prose by id. Because the compile resolves
@@ -484,7 +499,7 @@ adopt note="":
 # which is the nudge that replaces it.
 # Check assets.json: output hashes, generators, declared inputs, and references
 check-assets *args:
-  @uv run --quiet python tools/check_assets.py "$@"
+  @uv run --quiet paper tool check_assets "$@"
 
 # The SI is included from si-body.typ as an appendix, so this single PDF holds the
 # whole manuscript; there is no separate supplementary.pdf. si-body.typ is
@@ -525,15 +540,15 @@ paper:
   #!/usr/bin/env bash
   set -euo pipefail
   if [[ -f manuscript.toml ]]; then
-    uv run --quiet python tools/documents.py build all
+    uv run --quiet paper tool documents build all
   else
     just pdf
   fi
   # The dissertation Word adapter needs its template contract, not merely a
   # manifest: a manifest that only names PDF targets keeps the paper's route.
   if [[ -f manuscript.toml && -f lib/template.typ ]]; then
-    uv run --quiet python tools/document_docx.py
-    uv run --quiet python tools/export_text.py
+    uv run --quiet paper tool document_docx
+    uv run --quiet paper tool export_text
   else
     just docx
     just review-text
@@ -541,18 +556,18 @@ paper:
 
 # Build only the PDF, with word counts and readability
 pdf:
-  @uv run --quiet python tools/build_state.py paper
-  @uv run --quiet python tools/paper_report.py
+  @uv run --quiet paper tool build_state paper
+  @uv run --quiet paper tool paper_report
 
 # See wordcount.typ for exactly what is excluded (refs, figures/tables, captions,
 # math, code) vs. included (headings, inline code).
 # Journal-style word counts (main text / SI / total), without rebuilding the PDF
 wordcount *args: render-stats
-  @bash tools/wordcount.sh "$@"
+  @uv run --quiet paper tool wordcount "$@"
 
 # Check configured section word limits without rebuilding or regenerating stats
 check-words *args:
-  @uv run --quiet python tools/wordcount.py --check "$@"
+  @uv run --quiet paper tool wordcount --check "$@"
 
 # Journal profiles. journals/<name>.toml carries one venue's limits together
 # with the URL they were read from and the date; journal.toml picks one and
@@ -564,21 +579,21 @@ check-words *args:
 # the journal's own wording beside each rule.
 # Everything the selected journal profile says, against the manuscript
 journal *args: render-stats
-  @uv run --quiet python tools/journal.py report "$@"
+  @uv run --quiet paper tool journal report "$@"
 
 # The checkable part of the journal profile: keywords, float counts, graphical abstract
 check-journal *args:
-  @uv run --quiet python tools/journal.py check "$@"
+  @uv run --quiet paper tool journal check "$@"
 
 # List the profiles under journals/ and which one journal.toml selects
 journals:
-  @uv run --quiet python tools/journal.py list
+  @uv run --quiet paper tool journal list
 
 # Computed from the Typst source with the same exemptions as the word count. Uses
 # `textstat` if installed, else a built-in estimate. No PDF rebuild.
 # Readability metrics (Flesch-Kincaid grade, reading ease, words/sentence, fog)
 readability:
-  @uv run --quiet python tools/readability.py
+  @uv run --quiet paper tool readability
 
 # ---------------------------------------------------------------------------
 # Text-invariance, for structural refactors: preamble changes,
@@ -610,27 +625,27 @@ readability:
 # never edited. Read it when an export looks wrong; it is what pandoc was fed.
 # Capture the shared resolved manuscript and PDF; refresh the Word projection
 resolve:
-  @uv run --quiet python tools/build_state.py resolve
+  @uv run --quiet paper tool build_state resolve
 
 # Save an immutable resolved manuscript version, including figures and bibliography
 review-baseline name:
-  @uv run --quiet python tools/review.py baseline "$1"
+  @uv run --quiet paper tool review baseline "$1"
 
 # List saved review versions without rebuilding the manuscript
 review-versions:
-  @uv run --quiet python tools/review.py versions
+  @uv run --quiet paper tool review versions
 
 # Compare a saved version with the current manuscript or another saved version
 review baseline new="current":
-  @uv run --quiet python tools/review.py compare "$1" "$2"
+  @uv run --quiet paper tool review compare "$1" "$2"
 
 # Snapshot the manuscript's numbers/refs/floats/headings before an editing pass
 edit-baseline tag="default":
-  @uv run --quiet python tools/prose_edit_guard.py snapshot "$1"
+  @uv run --quiet paper tool prose_edit_guard snapshot "$1"
 
 # Prove an editing pass changed only wording: nothing invented, nothing lost
 edit-check tag="default":
-  @uv run --quiet python tools/prose_edit_guard.py check "$1"
+  @uv run --quiet paper tool prose_edit_guard check "$1"
 
 # Snapshot the current paper.pdf's extracted text as the baseline for text-diff
 text-baseline:
@@ -705,11 +720,11 @@ watch: render-stats
 # Add --strict to treat warnings as failures.
 # Check the prose against the mechanical rules in STYLE.md and prose-check.toml
 prose-check *args:
-  @uv run --quiet python tools/prose_check.py "$@"
+  @uv run --quiet paper tool prose_check "$@"
 
 # Count flagged words across the manuscript without rebuilding
 word-audit *args:
-  @uv run --quiet python tools/word_audit.py "$@"
+  @uv run --quiet paper tool word_audit "$@"
 
 # Pictures OF the manuscript, for revising it -- not pictures in it. Sentence
 # length, words per section, most-used words, a word cloud, and the age of the
@@ -723,7 +738,7 @@ word-audit *args:
 # what you have written.
 # Diagnostics about the draft -> viz/ (sentence length, word use, citation ages)
 viz:
-  @uv run --quiet python tools/viz.py
+  @uv run --quiet paper tool viz
 
 # Slide decks live in slides/ and are built by name: `just slides talk` compiles
 # slides/talk.typ to slides/talk.pdf. `just slides` with no name builds them all.
@@ -743,7 +758,7 @@ viz:
 # See slides/theme.typ for what a deck gets and how to delete the feature.
 # Build a slide deck by name, or all of them -> slides/<name>.pdf
 slides name="":
-  @uv run --quiet python tools/slides.py build "$@"
+  @uv run --quiet paper tool slides build "$@"
 
 # Handout mode flattens every #pause group to its final state, so a deck built
 # for the room prints as one page per idea instead of one page per reveal. It is
@@ -751,7 +766,7 @@ slides name="":
 # the other look current.
 # Build the handout form of a deck -> slides/<name>-handout.pdf
 slides-handout name="":
-  @uv run --quiet python tools/slides.py build "$@" --handout
+  @uv run --quiet paper tool slides build "$@" --handout
 
 # Compile with unresolved numbers shown as placeholders, exactly as `just draft`
 # does for the paper. Writes slides/<name>-draft.pdf and records NOTHING: a file
@@ -759,7 +774,7 @@ slides-handout name="":
 # about to give.
 # Compile a deck with unresolved numbers as placeholders -> slides/<name>-draft.pdf
 slides-draft name:
-  @uv run --quiet python tools/slides.py build "$@" --draft
+  @uv run --quiet paper tool slides build "$@" --draft
 
 # Two questions in one pass, neither of them in `just verify`: has a deck fallen
 # behind the material it reuses, and does its text break the four rules a slide
@@ -774,8 +789,8 @@ slides-check name="":
   #!/usr/bin/env bash
   set -uo pipefail
   rc=0
-  uv run --quiet python tools/slides.py check "$@" || rc=1
-  uv run --quiet python tools/slides.py prose "$@" || rc=1
+  uv run --quiet paper tool slides check "$@" || rc=1
+  uv run --quiet paper tool slides prose "$@" || rc=1
   exit $rc
 
 # Touying records every #speaker-note as pdfpc metadata inside the PDF. This
@@ -783,12 +798,12 @@ slides-check name="":
 # Presenter read, so the presenter view shows your notes on the second screen.
 # Export a deck's speaker notes -> slides/<name>.pdfpc
 slides-notes name:
-  @uv run --quiet python tools/slides.py notes "$@"
+  @uv run --quiet paper tool slides notes "$@"
 
 # What decks exist, and whether each is current.
 # List the slide decks
 slides-list:
-  @uv run --quiet python tools/slides.py list
+  @uv run --quiet paper tool slides list
 
 # Slides are NOT in `typst_sources` and so not in `just fmt`: fmt-check runs
 # inside `just verify`, and a deck must never be able to fail the gate. Same
@@ -810,33 +825,32 @@ slides-fmt:
 # not a defect in the bibliography.
 # Verify DOI metadata, retractions and dead links (needs network)
 bib-audit *args:
-  @uv run --quiet python tools/bib_audit.py "$@"
+  @uv run --quiet paper tool bib_audit "$@"
 
 # Assert the prose extractors still handle every construct, and still do so after
 # a reflow. Runs against tests/fixture.typ, which is NOT part of the manuscript --
 # placeholder prose in paper.typ gets deleted the moment real writing starts, so
 # anything relying on it for coverage would be tested once and never again.
 #
-# tests/run.py owns that fixture check and then runs each case module in
-# CASE_MODULES, naming whichever fails. To work on one, run it directly:
-# `uv run python tests/stats_cases.py`.
+# tests/run.py owns that fixture check. In the scaffold checkout it then runs
+# each case module in CASE_MODULES, naming whichever fails, and the unittest
+# files; those test the toolchain itself, so in a paper `paper test` runs the
+# fixture check alone, against the installed package. To work on one module,
+# run it directly: `uv run python tests/stats_cases.py`.
 # Assert the prose extractors handle every construct, before and after a reflow
 test:
-  @uv run --quiet python tests/run.py
-  @uv run --quiet python -m unittest discover -s tests -p 'test_export_text.py'
-  @uv run --quiet python -m unittest discover -s tests -p 'test_word_audit.py'
-  @uv run --quiet python -m unittest discover -s tests -p 'test_wordcount.py'
+  @uv run --quiet paper test
   @just test-docx
 
 # Plain-text review copy: prose, equations and captions; no images or reference list
 review-text target="":
-  @uv run --quiet python tools/export_text.py {{quote(target)}}
+  @uv run --quiet paper tool export_text {{quote(target)}}
 
 # Rewrite tests/expected/ from the current extractor behaviour. Review the diff:
 # this is how a regression gets blessed into the baseline by accident.
 # Rewrite the golden files from current behavior -- review the diff before committing
 test-update:
-  @uv run --quiet python tests/run.py --update
+  @uv run --quiet paper test --update
 
 # Reflow the hand-written Typst sources to `fmt_width` columns
 #
@@ -849,7 +863,7 @@ fmt:
   #!/usr/bin/env bash
   set -euo pipefail
   # typst_sources plus project.toml's [sources] typst (docs/hooks.md).
-  files=$(uv run --quiet python tools/project_hooks.py typst-sources {{typst_sources}})
+  files=$(uv run --quiet paper tool project_hooks typst-sources {{typst_sources}})
   typstyle --inplace --line-width {{fmt_width}} --wrap-text $files
   echo 'formatted. Rebuild with "just paper" and confirm nothing moved.'
 
@@ -857,7 +871,7 @@ fmt:
 fmt-check:
   #!/usr/bin/env bash
   set -euo pipefail
-  files=$(uv run --quiet python tools/project_hooks.py typst-sources {{typst_sources}})
+  files=$(uv run --quiet paper tool project_hooks typst-sources {{typst_sources}})
   typstyle --check --line-width {{fmt_width}} --wrap-text $files
 
 # Route: resolve -> pandoc's native Typst reader. The resolver replaces every
@@ -874,26 +888,26 @@ docx target="":
   #!/usr/bin/env bash
   set -euo pipefail
   if [[ -f manuscript.toml && -f lib/template.typ ]]; then
-    uv run --quiet python tools/document_docx.py {{quote(target)}}
+    uv run --quiet paper tool document_docx {{quote(target)}}
   elif [[ -n {{quote(target)}} ]]; then
     echo "Named Word targets require manuscript.toml and the lib/template.typ contract" >&2
     exit 2
   else
-    uv run --quiet python tools/build_state.py docx
+    uv run --quiet paper tool build_state docx
   fi
 
 # Build a named Word document using the dissertation template adapter
 document-docx target="":
-  @uv run --quiet python tools/document_docx.py {{quote(target)}}
+  @uv run --quiet paper tool document_docx {{quote(target)}}
 
 # Check named Word freshness without rebuilding
 docx-check target="":
   #!/usr/bin/env bash
   set -euo pipefail
   if [[ -f manuscript.toml && -f lib/template.typ ]]; then
-    uv run --quiet python tools/document_docx.py {{quote(target)}} --check
+    uv run --quiet paper tool document_docx {{quote(target)}} --check
   else
-    uv run --quiet python tools/build_state.py check
+    uv run --quiet paper tool build_state check
   fi
 
 # ---------------------------------------------------------------- submission --
@@ -910,43 +924,45 @@ docx-check target="":
 # set is stale; `just check-submission` fails on it, and preflight runs it.
 # Main text alone -> submission/manuscript.pdf (graphical abstract per [placement].submission)
 main-pdf:
-  @uv run --quiet python tools/submission.py main-pdf
+  @uv run --quiet paper tool submission main-pdf
 
 # Supporting Information alone -> submission/supporting-information.pdf
 si-pdf:
-  @uv run --quiet python tools/submission.py si-pdf
+  @uv run --quiet paper tool submission si-pdf
 
 # Main text alone, as Word -> submission/manuscript.docx
 main-docx:
-  @uv run --quiet python tools/submission.py main-docx
+  @uv run --quiet paper tool submission main-docx
 
 # Supporting Information alone, as Word -> submission/supporting-information.docx
 si-docx:
-  @uv run --quiet python tools/submission.py si-docx
+  @uv run --quiet paper tool submission si-docx
 
 # Graphical abstract as a standalone file in the journal's format and box
 toc-graphic:
-  @uv run --quiet python tools/submission.py toc-graphic
+  @uv run --quiet paper tool submission toc-graphic
 
 # Cover letter from cover-letter.typ -> submission/cover-letter.pdf (skipped without the file)
 cover-letter:
-  @uv run --quiet python tools/submission.py cover-letter
+  @uv run --quiet paper tool submission cover-letter
 
 # Build the whole upload set into submission/, after a fresh PDF and Word build
 submission: paper
   #!/usr/bin/env bash
   set -euo pipefail
-  uv run --quiet python tools/submission.py all
-  uv run --quiet python tools/project_hooks.py stages submission
+  uv run --quiet paper tool submission all
+  uv run --quiet paper tool project_hooks stages submission
 
 # Fail if any file in submission/ no longer matches the source it was built from
 check-submission:
-  @uv run --quiet python tools/submission.py check
+  @uv run --quiet paper tool submission check
 
 # Test Word content, formatting, templates and chapter reference isolation
 test-docx:
-  @uv run --quiet python -m unittest discover -s tests -p 'test_document_docx.py'
-  @uv run --quiet python -m unittest discover -s tests -p 'test_paper_word.py'
+  #!/usr/bin/env bash
+  set -euo pipefail
+  # The Word toolchain's own unit tests: in the scaffold checkout only.
+  if [ -f scripts/new-paper.sh ]; then uv run --quiet paper test --docx; fi
 
 # ---------------------------------------------------------------------------
 # Generated assets. The contract: numbers and plots in the manuscript are written
@@ -1064,11 +1080,11 @@ audio-clean:
 # Fail if paper.pdf or paper.docx no longer matches the source it was built from
 [private]
 check-build:
-  @uv run --quiet python tools/build_state.py check
+  @uv run --quiet paper tool build_state check
 
 # Source fingerprint for diagnosis; builds also record compiler dependencies.
 _stamp-manuscript:
-  @uv run --quiet python tools/build_state.py stamp
+  @uv run --quiet paper tool build_state stamp
 
 # Remove the built PDF, Word export, submission set and slide decks
 clean:

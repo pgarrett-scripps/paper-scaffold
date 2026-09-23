@@ -294,10 +294,10 @@ class Wiring(unittest.TestCase):
     def test_each_gate_runs_its_stages(self):
         text = (ROOT / "justfile").read_text()
         for gate in ph.GATES:
-            self.assertIn(f"tools/project_hooks.py stages {gate}", text, gate)
-        self.assertIn("tools/project_hooks.py bib-audit-args", text)
+            self.assertIn(f"paper tool project_hooks stages {gate}", text, gate)
+        self.assertIn("paper tool project_hooks bib-audit-args", text)
         # fmt and fmt-check both format the declared sources.
-        self.assertEqual(text.count("project_hooks.py typst-sources {{typst_sources}}"), 2)
+        self.assertEqual(text.count("project_hooks typst-sources {{typst_sources}}"), 2)
 
     def test_upgrade_plan_never_offers_the_projects_hook_files(self):
         import upgrade_plan

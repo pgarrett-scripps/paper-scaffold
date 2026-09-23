@@ -15,8 +15,11 @@ Two properties are checked:
      sits on one line, which --wrap-text stops being true.
 
 Usage:
-    python3 tests/run.py            # check
-    python3 tests/run.py --update   # rewrite the golden files (review the diff!)
+    python3 tests/run.py                 # check, then every case module
+    python3 tests/run.py --fixture-only  # the fixture check alone (`just test`
+                                         # in a paper: the case modules test
+                                         # the toolchain, in the scaffold)
+    python3 tests/run.py --update        # rewrite the golden files (review the diff!)
 """
 from __future__ import annotations
 
@@ -207,7 +210,8 @@ def main() -> int:
 
     # Named, so a failure says which suite it came from. Every module prints
     # its own detail; this only attributes it.
-    for name in CASE_MODULES:
+    modules = () if "--fixture-only" in sys.argv else CASE_MODULES
+    for name in modules:
         if not importlib.import_module(name).run_cases():
             print(f"  {name}: FAILED")
             ok = False
@@ -216,7 +220,7 @@ def main() -> int:
         note = "" if extract_prose is not None else ", no audio/ so narration skipped"
         invariant = "reflow-invariant" if shutil.which("typstyle") else "reflow skipped"
         print(f"  all extractor checks pass ({len(flat)} outputs, "
-              f"{invariant}, no leaks) + {len(CASE_MODULES)} case modules{note}")
+              f"{invariant}, no leaks) + {len(modules)} case modules{note}")
     return 0 if ok else 1
 
 

@@ -1,39 +1,25 @@
 #!/usr/bin/env python3
-"""Plan a scaffold upgrade for a derived manuscript, file by file.
+"""Upgrade notes between two releases, and the classification migrate uses.
 
-WHY THIS EXISTS. There is deliberately no automatic upgrade (HISTORY.md,
-"Upgrading a project"): a manuscript diverges from the scaffold the moment real
-writing starts, and a merge tool cannot tell a project's customization from the
-placeholder it replaced. That rule stands. What it did not require was doing the
-BOOKKEEPING by hand: ten derived papers walked 3.6 -> 3.20 one release at a
-time, reading every "Upgrade:" line, diffing every tool against upstream, and
-copying files that the project had never touched. Most of those files are
-byte-identical to the release the project came from, and replacing them is not
-a merge at all.
+From 4.0.0 a paper holds no copy of the toolchain (docs/package.md), so an
+upgrade no longer needs a per-file plan: move the pin, `uv sync`, `paper sync`.
+What still needs a person is reading what each release asks of a manuscript,
+the "Upgrade:" lines in HISTORY.md and docs/history-archive.md. `main()`
+(`just upgrade-notes`, `paper upgrade-notes`) prints them, oldest first, for
+every release after the one the paper's lock records up to the installed one,
+read from the installed package: no scaffold clone, no network.
 
-So this tool answers two questions and changes nothing unless asked:
-
-  1. What do the "Upgrade:" lines in HISTORY.md and docs/history-archive.md
-     say, for every release between the project's version and the target, in
-     order?
-  2. For each scaffold-owned file, is it pristine (identical to upstream at the
-     project's CURRENT version, so replacing it with the target loses nothing),
-     customized (needs a hand merge; a three-way summary says how much each
-     side changed), new upstream, removed upstream, project-only, or unchanged?
-
-`--apply-pristine` copies ONLY the pristine and new-upstream files, never a
-customized one, and refuses when git reports any of those paths dirty.
-
+The per-file classification against a release tag stays, as a library for
+`paper migrate` (a 3.x paper moving onto the package): for each file the
+scaffold owned at the paper's release, is it pristine (identical to that
+release, after the identity fields new-paper.sh fills in), customized, or
+project-only? Old versions are read with `git show` from a scaffold clone.
 Which files the scaffold owns is derived, not listed: the files tracked at a
 release, minus what scripts/new-paper.sh at that release leaves out of a copy,
-minus what CLAUDE.md says the project owns (the manuscript, its declarations,
-analysis/ apart from the shared helpers, the generated figures/ and si/).
-
-Old versions are read with `git show`; there is no network access.
+minus what CLAUDE.md says the project owns.
 
 Usage:
-    uv run python tools/upgrade_plan.py [TARGET] [--scaffold PATH]
-        [--project PATH] [--json] [--apply-pristine] [--all]
+    uv run paper upgrade-notes [--from VERSION] [--to VERSION] [--json]
 """
 from __future__ import annotations
 
@@ -451,23 +437,8 @@ HISTORY_FILES = ("HISTORY.md", "docs/history-archive.md")
 
 def release_notes(blobs: "Blobs", ref: str) -> str:
     """HISTORY.md followed by every archive the ref carries, as one text."""
-    seen: set[str] = set()
-    parts: list[str] = []
-    for path in HISTORY_FILES:
-        text = (blobs.show(ref, path) or b"").decode()
-        if not text:
-            continue
-        kept: list[str] = []
-        skip = False
-        for line in text.splitlines():
-            m = _SECTION.match(line)
-            if m:
-                skip = m.group(1) in seen
-                seen.add(m.group(1))
-            if not skip:
-                kept.append(line)
-        parts.append("\n".join(kept))
-    return "\n\n".join(parts)
+    return merged_history([(blobs.show(ref, path) or b"").decode()
+                           for path in HISTORY_FILES])
 
 
 def upgrade_lines(history: str, current: str, target: str,
@@ -571,52 +542,6 @@ def dirty_paths(project: Path, rels: list[str]) -> list[str]:
     return [rec[3:] for rec in out.decode().split("\0") if len(rec) > 3]
 
 
-def apply_pristine(project: Path, blobs: Blobs, tgt: dict[str, Entry],
-                   rows: list[FileRow]) -> list[str]:
-    todo = [r for r in rows
-            if r.cls == "pristine"
-            or (r.cls == "new-upstream" and read_project(project, r.path) is None)]
-    if not todo:
-        return []
-    if not _in_git(project):
-        raise PlanError(f"{project} is not a git work tree; --apply-pristine "
-                        "only writes where git can show and undo the change")
-    dirty = dirty_paths(project, [r.path for r in todo
-                                  if (project / r.path).exists()])
-    if dirty:
-        raise PlanError("refusing --apply-pristine: uncommitted changes in "
-                        + ", ".join(sorted(dirty))
-                        + ". Commit or discard them first.")
-    done = []
-    for r in todo:
-        up = r.upstream_path or r.path
-        e = tgt[up]
-        data = blobs.get(e.sha)
-        if up == "pyproject.toml":
-            # Keep the project's name and version: the version records what
-            # the manuscript is on, and it moves only after the hand merges.
-            old = (project / r.path).read_bytes()
-            for rx in (_NAME, _VERSION):
-                m = rx.search(old)
-                if m:
-                    data = rx.sub(m.group(0).replace(b"\\", b"\\\\"), data,
-                                  count=1)
-        dest = project / r.path
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        if e.mode == "120000":
-            if dest.is_symlink() or dest.exists():
-                dest.unlink()
-            os.symlink(data.decode(), dest)
-        else:
-            if dest.is_symlink():
-                dest.unlink()
-            dest.write_bytes(data)
-            os.chmod(dest, 0o755 if e.mode == "100755" else 0o644)
-        done.append(f"{'added' if r.cls == 'new-upstream' else 'replaced'} "
-                    f"{r.path}")
-    return done
-
-
 # ---------------------------------------------------------------------------
 # report
 # ---------------------------------------------------------------------------
@@ -684,125 +609,91 @@ def build_plan(project: Path, scaffold: Path, target: str | None,
     }
 
 
-def render(plan: dict, show_all: bool) -> str:
-    out: list[str] = []
-    w = out.append
-    w(f"upgrade plan: {plan['project']}")
-    w(f"  {plan['current']} -> {plan['target']}   (scaffold: {plan['scaffold']})")
-    if plan["target"].lstrip("v") == plan["current"]:
-        w("  already on the target; the file table shows local customizations")
-    w("")
-    ups = plan["upgrade_lines"]
-    w(f"1. HISTORY.md Upgrade: lines, oldest first ({len(ups)})")
-    if not ups:
-        w("   none")
-    n = 0
-    for u in ups:
-        if u["status"] == "do":
-            n += 1
-            w(f"   {n:>2}. [{u['version']}] {u['text']}")
-            nm = u["needs_merge"]
-            if nm:
-                w("       hand-merge here: " + ", ".join(nm[:6])
-                  + (f" and {len(nm) - 6} more" if len(nm) > 6 else ""))
-    skipped = [u for u in ups if u["status"] != "do"]
-    for u in skipped:
-        why = ("superseded by " + u["superseded_by"]
-               if u["status"] == "superseded" else "nothing to do")
-        w(f"     - [{u['version']}] ({why}) {u['text'][:70]}"
-          + ("..." if len(u["text"]) > 70 else ""))
-    w("")
-    c = plan["counts"]
-    w("2. Scaffold-owned files: " + ", ".join(
-        f"{c[k]} {k}" for k in CLASSES if c[k]))
-    w("")
-    order = ["customized", "pristine", "new-upstream", "removed-upstream",
-             "project-only", "at-target"] + (["unchanged"] if show_all else [])
-    for cls in order:
-        rows = [r for r in plan["files"] if r["cls"] == cls]
-        if not rows:
+def merged_history(texts: list[str]) -> str:
+    """HISTORY.md then its archives as one text, each release heading once."""
+    seen: set[str] = set()
+    parts: list[str] = []
+    for text in texts:
+        if not text:
             continue
-        w(f"   {cls} ({len(rows)})")
-        for r in rows:
-            extra = ""
-            if r["local"] is not None:
-                lo, up = r["local"], r["upstream"]
-                conf = ("clean 3-way merge" if r["conflicts"] == 0 else
-                        f"{r['conflicts']} conflict(s)" if r["conflicts"]
-                        else "binary")
-                extra = (f"  local +{lo['added']}/-{lo['removed']}"
-                         f" upstream +{up['added']}/-{up['removed']}  [{conf}]")
-            name = r["path"] + (f" (upstream {r['upstream_path']})"
-                                if r["upstream_path"] else "")
-            w(f"     {name}{extra}" + (f"  -- {r['note']}" if r["note"] else ""))
-        w("")
-    if not show_all and c["unchanged"]:
-        local = sum(1 for r in plan["files"]
-                    if r["cls"] == "unchanged" and r["note"])
-        w(f"   ({c['unchanged']} unchanged upstream, {local} of them differing "
-          "locally, which the upgrade does not touch; --all lists them)")
-        w("")
-    w("3. Next")
-    w("   - read the Upgrade: lines above; a major entry needs a manuscript edit")
-    if c["pristine"] or c["new-upstream"]:
-        w("   - `just upgrade-plan --apply-pristine` copies the pristine and "
-          "new-upstream files (never a customized one)")
-    if c["customized"]:
-        w("   - merge each customized file by hand: git -C <scaffold> diff "
-          f"{'v' + plan['current'].lstrip('v')}..{plan['target']} -- <path>")
-    w(f"   - then set version = \"{plan['target'].lstrip('v')}\" in "
-      "pyproject.toml, `just paper`, `just verify`")
-    return "\n".join(out)
+        kept: list[str] = []
+        skip = False
+        for line in text.splitlines():
+            m = _SECTION.match(line)
+            if m:
+                skip = m.group(1) in seen
+                seen.add(m.group(1))
+            if not skip:
+                kept.append(line)
+        parts.append("\n".join(kept))
+    return "\n\n".join(parts)
+
+
+def installed_notes(current: str, target: str | None = None) -> list[UpgradeLine]:
+    """Upgrade: lines after `current` up to `target` (default: the installed
+    release), from the installed package's own HISTORY files."""
+    from paths import DATA, version
+    target = (target or version()).lstrip("v")
+    current = current.lstrip("v")
+    for v in (current, target):
+        if not VERSION_RE.match(v):
+            raise PlanError(f"not a release version: {v!r}")
+    texts = [(DATA / f).read_text() if (DATA / f).is_file() else ""
+             for f in HISTORY_FILES]
+    return upgrade_lines(merged_history(texts), current, target,
+                         include_unreleased=False)
+
+
+def lock_version(project: Path) -> str | None:
+    lock = project / ".paper" / "scaffold.lock.json"
+    if not lock.is_file():
+        return None
+    return json.loads(lock.read_text()).get("scaffold", {}).get("version")
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
-        description="Plan a paper-scaffold upgrade: Upgrade: lines and a "
-                    "per-file classification. Read-only unless "
-                    "--apply-pristine.")
-    ap.add_argument("target", nargs="?", default=None,
-                    help="scaffold tag or ref (default: latest v* tag)")
-    ap.add_argument("--scaffold", help="upstream clone (default: "
-                    "$PAPER_SCAFFOLD, .agents/skills, ~/Repos/paper-scaffold)")
+        description="Print the HISTORY.md Upgrade: lines between the release "
+                    "this paper's lock records and the installed one.")
     ap.add_argument("--from", dest="base", default=None,
-                    help="treat the project as on this release instead of "
-                    "pyproject's version (when that line was bumped early "
-                    "or never)")
+                    help="start after this release (default: the version in "
+                    ".paper/scaffold.lock.json)")
+    ap.add_argument("--to", dest="target", default=None,
+                    help="stop at this release (default: the installed one)")
     ap.add_argument("--project", default=None,
                     help="manuscript directory (default: this one)")
     ap.add_argument("--json", action="store_true", help="machine output")
     ap.add_argument("--all", action="store_true",
-                    help="also list files upstream did not change")
-    ap.add_argument("--apply-pristine", action="store_true",
-                    help="copy pristine and new-upstream files into place")
+                    help="also list superseded and nothing-to-do lines")
     a = ap.parse_args(argv)
     project = Path(a.project).expanduser().resolve() if a.project else ROOT
     try:
-        scaffold = find_scaffold(a.scaffold, project)
-        plan = build_plan(project, scaffold, a.target, a.base)
-        applied = None
-        if a.apply_pristine:
-            applied = apply_pristine(project, plan["_blobs"],
-                                     plan["_tgt_files"], plan["_rows"])
+        base = a.base or lock_version(project)
+        if not base:
+            raise PlanError("no .paper/scaffold.lock.json to start from; pass "
+                            "--from VERSION")
+        items = installed_notes(base, a.target)
     except PlanError as e:
-        print(f"upgrade-plan: {e}", file=sys.stderr)
+        print(f"upgrade-notes: {e}", file=sys.stderr)
         return 2
-    public = {k: v for k, v in plan.items() if not k.startswith("_")}
-    if applied is not None:
-        public["applied"] = applied
+    from paths import version
+    target = (a.target or version()).lstrip("v")
     if a.json:
-        print(json.dumps(public, indent=2))
+        print(json.dumps({"from": base, "to": target,
+                          "upgrade_lines": [asdict(u) for u in items]}, indent=2))
         return 0
-    print(render(public, a.all))
-    if applied is not None:
-        print()
-        print(f"applied ({len(applied)}):" if applied else
-              "applied: nothing to copy")
-        for line in applied:
-            print("   " + line)
-        if applied:
-            print("   review with `git diff --stat`; customized files were "
-                  "not touched")
+    todo = [u for u in items if u.status == "do"]
+    print(f"Upgrade: lines, {base} -> {target}, oldest first ({len(todo)} to read)")
+    for n, u in enumerate(todo, 1):
+        print(f"  {n:>2}. [{u.version}] {u.text}")
+    if a.all:
+        for u in items:
+            if u.status != "do":
+                why = ("superseded by " + u.superseded_by
+                       if u.status == "superseded" else "nothing to do")
+                print(f"     - [{u.version}] ({why}) {u.text}")
+    if not todo:
+        print("  nothing to do by hand")
     return 0
 
 

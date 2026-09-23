@@ -14,7 +14,7 @@ def main(root: Path = ROOT) -> int:
     # Capture each report so concurrent processes cannot interleave tables.
     # Both must finish before returning, including when either one fails.
     commands = (
-        ["bash", str(tool("wordcount.sh"))],
+        [sys.executable, str(tool("wordcount.py"))],
         [sys.executable, str(tool("readability.py"))],
     )
     env = os.environ.copy()

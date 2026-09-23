@@ -1,10 +1,10 @@
 [project]
-name = "paper"
-# The paper-scaffold version this manuscript is built on. Travels with the
-# scaffold when it is copied, so a project can always say where it came from.
+name = "paper-scaffold"
+# The toolchain release. A paper pins it in its own pyproject.toml
+# (docs/package.md); `paper version` and the lock say which one it runs.
 # See HISTORY.md for what bumps major, minor, and patch.
 version = "3.26.1"
-description = "Python toolchain for building the manuscript"
+description = "The paper-scaffold manuscript toolchain: tools, gates and `paper sync`"
 requires-python = ">=3.10"
 
 # The manuscript toolchain. Small, stable, and the same for every project that
@@ -39,6 +39,39 @@ audio = [
   "matplotlib",       # cover art
 ]
 
-[tool.uv]
-# The scaffold ships no importable package, only scripts run directly.
-package = false
+[project.scripts]
+paper = "paper_scaffold.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# The package is small (src/paper_scaffold); everything a paper runs or reads
+# is package data under paper_scaffold/data/, laid out as in this repository so
+# tools/paths.py finds it the same way in both (docs/package.md). An editable
+# install has no data/ and reads the repository itself.
+[tool.hatch.build.targets.wheel]
+packages = ["src/paper_scaffold"]
+exclude = ["__pycache__", "*.pyc"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"tools" = "paper_scaffold/data/tools"
+"tests" = "paper_scaffold/data/tests"
+"journals" = "paper_scaffold/data/journals"
+"word" = "paper_scaffold/data/word"
+"docs" = "paper_scaffold/data/docs"
+"justfile" = "paper_scaffold/data/justfile"
+"HISTORY.md" = "paper_scaffold/data/HISTORY.md"
+"stats.typ" = "paper_scaffold/data/stats.typ"
+"assets.typ" = "paper_scaffold/data/assets.typ"
+"code.typ" = "paper_scaffold/data/code.typ"
+"wordcount.typ" = "paper_scaffold/data/wordcount.typ"
+"wordcount-sections.typ" = "paper_scaffold/data/wordcount-sections.typ"
+"slides/theme.typ" = "paper_scaffold/data/slides/theme.typ"
+"analysis/scripts/_stats.py" = "paper_scaffold/data/analysis/scripts/_stats.py"
+"analysis/scripts/_assets.py" = "paper_scaffold/data/analysis/scripts/_assets.py"
+"analysis/scripts/_provenance.py" = "paper_scaffold/data/analysis/scripts/_provenance.py"
+"audio/config.py" = "paper_scaffold/data/audio/config.py"
+"audio/extract_prose.py" = "paper_scaffold/data/audio/extract_prose.py"
+"audio/make_audiobook.py" = "paper_scaffold/data/audio/make_audiobook.py"
+"audio/make_cover.py" = "paper_scaffold/data/audio/make_cover.py"

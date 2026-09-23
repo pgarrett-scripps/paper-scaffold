@@ -1,0 +1,279 @@
+"""`paper migrate`: move a 3.x paper (a full toolchain copy) onto the package.
+
+Every file the scaffold owned at the paper's release is classed against that
+release's git tag with tools/upgrade_plan.py: pristine (identical, after the
+identity fields new-paper.sh fills in) or customized. The policy, per
+docs/package.md "Migration from 3.26.x":
+
+- toolchain files (tools/, tests/, docs/, DOCUMENTATION.md, LICENSE.scaffold):
+  pristine are removed, customized are refused;
+- files paper sync generates: pristine are replaced, customized are refused;
+- journals/ and word/: pristine are removed, customized stay as overrides;
+- HISTORY.md: pristine is removed, customized stays (the paper's own);
+- pyproject.toml: rewritten with the pin, extra dependencies kept, any other
+  table or key refused;
+- a file in tools/ or tests/ the scaffold never had: refused.
+
+Everything else is the paper's and is not touched. A refusal changes nothing.
+"""
+from __future__ import annotations
+
+import fnmatch
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from . import sync as sync_mod
+from . import use_tools, version
+
+REMOVE_OR_REFUSE = ("tools/", "tests/", "docs/")
+REMOVE_OR_REFUSE_FILES = ("DOCUMENTATION.md", "LICENSE.scaffold")
+OVERRIDABLE = ("journals/", "word/")
+GENERATED = (sync_mod.ALWAYS + sync_mod.ANALYSIS_HELPERS + sync_mod.AUDIO
+             + sync_mod.SLIDES)
+PYPROJECT_KEYS = {
+    "project": {"name", "version", "description", "requires-python",
+                "dependencies"},
+    "dependency-groups": None,  # any group, each a list of strings
+    "tool": {"uv"},
+}
+DEFAULT_PIN = "paper-scaffold @ git+https://github.com/pgarrett-scripps/paper-scaffold@v{v}"
+
+
+class MigrateError(Exception):
+    pass
+
+
+@dataclass
+class Plan:
+    project: Path
+    release: str
+    pin: str
+    remove: list[str] = field(default_factory=list)
+    replace: list[str] = field(default_factory=list)
+    overrides: list[str] = field(default_factory=list)
+    kept: list[str] = field(default_factory=list)
+    refused: list[str] = field(default_factory=list)
+    pyproject: str = ""
+    extra_deps: list[str] = field(default_factory=list)
+
+
+def _toml():
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # Python 3.10
+        import tomli as tomllib  # type: ignore[no-redef]
+    return tomllib
+
+
+def _dep_name(spec: str) -> str:
+    import re
+    m = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", spec)
+    return (m.group(1) if m else spec).lower().replace("_", "-")
+
+
+def pyproject_for(name: str, pin: str, extra: list[str],
+                  groups: dict[str, list[str]]) -> str:
+    deps = "".join(f'  "{d}",\n' for d in [pin, *extra])
+    out = [
+        "[project]",
+        f'name = "{name}"',
+        '# Not the toolchain release: that is the paper-scaffold pin below, and',
+        '# `paper version` / .paper/scaffold.lock.json say which one is installed.',
+        'version = "0.0.0"',
+        'requires-python = ">=3.10"',
+        "# The toolchain (docs/package.md). Move the pin with `uv add`, then run",
+        "# `uv run paper sync`.",
+        "dependencies = [",
+        deps.rstrip("\n"),
+        "]",
+        "",
+        "[dependency-groups]",
+    ]
+    for g, items in groups.items():
+        out.append(f"{g} = [" + ", ".join(f'"{i}"' for i in items) + "]")
+    out += ["", "[tool.uv]", "package = false", ""]
+    return "\n".join(out)
+
+
+def rewrite_pyproject(project: Path, scaffold_py: bytes | None, pin: str,
+                      refused: list[str]) -> tuple[str, list[str]]:
+    tomllib = _toml()
+    data = tomllib.loads((project / "pyproject.toml").read_text())
+    base = tomllib.loads(scaffold_py.decode()) if scaffold_py else {}
+    for table, value in data.items():
+        allowed = PYPROJECT_KEYS.get(table, "missing")
+        if allowed == "missing":
+            refused.append(f"pyproject.toml: [{table}] is not a table the "
+                           "package-era pyproject keeps")
+        elif allowed is not None and isinstance(value, dict):
+            for key in value:
+                if key not in allowed:
+                    refused.append(f"pyproject.toml: {table}.{key} would be lost")
+    uv = data.get("tool", {}).get("uv", {})
+    for key in uv:
+        if key != "package":
+            refused.append(f"pyproject.toml: tool.uv.{key} would be lost")
+    stock = {_dep_name(d) for d in base.get("project", {}).get("dependencies", [])}
+    extra = [d for d in data.get("project", {}).get("dependencies", [])
+             if _dep_name(d) not in stock and _dep_name(d) != "paper-scaffold"]
+    groups = dict(data.get("dependency-groups") or
+                  {"audio": ["piper-tts>=1.6", "imageio-ffmpeg", "pillow", "matplotlib"]})
+    name = data.get("project", {}).get("name") or project.name
+    return pyproject_for(name, pin, extra, groups), extra
+
+
+def classify(project: Path, scaffold: Path | None, base: str | None,
+             pin: str | None) -> Plan:
+    use_tools()
+    import upgrade_plan as up
+    project = project.resolve()
+    if sync_mod.is_scaffold_checkout(project):
+        raise MigrateError("this is the scaffold checkout, not a paper")
+    if (project / sync_mod.LOCK).is_file():
+        raise MigrateError(f"{project} already has {sync_mod.LOCK}: it is on "
+                           "the package; upgrade with `uv add` + `paper sync`")
+    try:
+        clone = up.find_scaffold(str(scaffold) if scaffold else None, project)
+        release = (base or up.project_version(project)).lstrip("v")
+        ref = "v" + release
+        if ref not in up.release_tags(clone):
+            raise MigrateError(f"the scaffold clone {clone} has no tag {ref}; "
+                               "fetch tags or pass --from")
+        blobs = up.Blobs(clone)
+        excludes = up.excludes_from_new_paper(
+            (blobs.show(ref, "scripts/new-paper.sh") or b"").decode())
+        files = up.owned(up.tree(clone, ref), excludes)
+        listing = up.project_listing(project)
+    except up.PlanError as e:
+        raise MigrateError(str(e)) from None
+    plan = Plan(project, release, pin or DEFAULT_PIN.format(v=version()))
+    for upstream, entry in sorted(files.items()):
+        rel = up.RENAMED.get(upstream, upstream)
+        listing.discard(rel)
+        local = up.read_project(project, rel)
+        if local is None:
+            continue
+        pristine = up.normalize(upstream, local) == up.normalize(
+            upstream, blobs.get(entry.sha))
+        if rel == "pyproject.toml":
+            continue
+        if rel.startswith(REMOVE_OR_REFUSE) or rel in REMOVE_OR_REFUSE_FILES:
+            (plan.remove if pristine else plan.refused).append(
+                rel if pristine else f"{rel}: customized toolchain file "
+                "(move the change to project.toml / project.just / hooks/, "
+                "restore the stock file, rerun)")
+        elif rel in GENERATED:
+            (plan.replace if pristine else plan.refused).append(
+                rel if pristine else f"{rel}: customized, and paper sync now "
+                "writes it (move the change to project.just / project.toml / hooks/)")
+        elif rel.startswith(OVERRIDABLE):
+            (plan.remove if pristine else plan.overrides).append(rel)
+        elif rel == "HISTORY.md":
+            (plan.remove if pristine else plan.kept).append(rel)
+        else:
+            plan.kept.append(rel)
+    for rel in sorted(listing):
+        if rel.startswith(("tools/", "tests/")):
+            plan.refused.append(f"{rel}: a file the scaffold never had in its "
+                                "toolchain (move it to hooks/)")
+    # A generated file the release did not ship but this one writes, already
+    # present and untracked by the scaffold: never overwrite blindly.
+    wanted = sync_mod.generated(project)
+    for target in wanted:
+        if (target not in plan.replace and (project / target).is_file()
+                and not any(target == r.split(":")[0] for r in plan.refused)):
+            current = (project / target).read_bytes()
+            if current != wanted[target][1].encode():
+                plan.refused.append(f"{target}: exists, is not the stock file of "
+                                    f"{release}, and paper sync writes it")
+    scaffold_py = blobs.show(ref, "pyproject.toml")
+    plan.pyproject, plan.extra_deps = rewrite_pyproject(
+        project, scaffold_py, plan.pin, plan.refused)
+    touched = plan.remove + plan.replace + ["pyproject.toml", ".gitignore"]
+    if up._in_git(project):
+        dirty = up.dirty_paths(project, [p for p in touched if (project / p).exists()])
+        if dirty:
+            plan.refused.append("uncommitted changes in " + ", ".join(sorted(dirty))
+                                + ": commit or discard them first")
+    return plan
+
+
+def report(plan: Plan) -> str:
+    lines = [f"paper migrate: {plan.project}",
+             f"  from {plan.release} (full toolchain copy) to the package, pin:",
+             f"    {plan.pin}"]
+    def block(title, items, limit=8):
+        if not items:
+            return
+        lines.append(f"  {title} ({len(items)})")
+        for i in items[:limit]:
+            lines.append(f"    {i}")
+        if len(items) > limit:
+            lines.append(f"    ... and {len(items) - limit} more")
+    block("REFUSED", plan.refused, 100)
+    block("remove (pristine toolchain copies)", plan.remove)
+    block("replace via paper sync (pristine)", plan.replace, 20)
+    block("keep as a local override", plan.overrides, 20)
+    block("keep (the paper's own)", [k for k in plan.kept
+                                     if not fnmatch.fnmatch(k, ".claude/*")], 20)
+    if plan.extra_deps:
+        block("pyproject: extra dependencies kept", plan.extra_deps, 20)
+    return "\n".join(lines)
+
+
+def apply(plan: Plan, install: bool = True) -> None:
+    project = plan.project
+    for rel in plan.remove + plan.replace:
+        path = project / rel
+        if path.is_symlink() or path.is_file():
+            path.unlink()
+    # Only ignored leftovers (caches) can remain: every tracked or unignored
+    # file under these was classified above.
+    for d in sync_mod.PACKAGE_ONLY_DIRS:
+        if (project / d).is_dir():
+            shutil.rmtree(project / d)
+    (project / "pyproject.toml").write_text(plan.pyproject)
+    gitignore = project / ".gitignore"
+    text = gitignore.read_text() if gitignore.is_file() else ""
+    if ".paper/docs/" not in text.split("\n"):
+        text += ("" if text.endswith("\n") or not text else "\n") + (
+            "\n# The package's docs, mirrored by `paper sync` for reading "
+            "(docs/package.md).\n.paper/docs/\n")
+        gitignore.write_text(text)
+    if install:
+        for cmd in (["uv", "lock"], ["uv", "sync"],
+                    ["uv", "run", "--quiet", "paper", "sync", "--force"]):
+            done = subprocess.run(cmd, cwd=project)
+            if done.returncode:
+                raise MigrateError(f"`{' '.join(cmd)}` failed in {project} "
+                                   f"(exit {done.returncode}); the files are "
+                                   "already moved, fix and rerun that command")
+    else:
+        sync_mod.sync(project, force=True)
+
+
+def main(project: Path, scaffold: Path | None, base: str | None, pin: str | None,
+         dry_run: bool, install: bool) -> int:
+    try:
+        plan = classify(project, scaffold, base, pin)
+    except MigrateError as e:
+        print(f"paper migrate: {e}", file=sys.stderr)
+        return 2
+    print(report(plan))
+    if plan.refused:
+        print("\nnothing changed: fix each REFUSED item and rerun", file=sys.stderr)
+        return 1
+    if dry_run:
+        print("\n--dry-run: nothing changed")
+        return 0
+    try:
+        apply(plan, install=install)
+    except (MigrateError, sync_mod.SyncError) as e:
+        print(f"paper migrate: {e}", file=sys.stderr)
+        return 1
+    print("\nmigrated. Next: just paper && just verify, then commit "
+          "(git add -A).")
+    return 0

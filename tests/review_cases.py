@@ -380,7 +380,7 @@ We measured #s("count") samples.
                     self.assertTrue(finished.is_set(), "worker outlived snapshot cleanup")
 
     def test_parallel_reports_keep_order_and_propagate_failures(self):
-        for failure in (None, "wordcount.sh", "readability.py"):
+        for failure in (None, "wordcount.py", "readability.py"):
             with self.subTest(failure=failure):
                 together = threading.Barrier(2)
                 finished = set()
@@ -396,9 +396,9 @@ We measured #s("count") samples.
                 with patch.object(paper_report.subprocess, "run", side_effect=report), \
                         contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                     self.assertEqual(paper_report.main(self.root), 7 if failure else 0)
-                self.assertEqual(finished, {"wordcount.sh", "readability.py"})
-                expected = "wordcount.sh\n"
-                if failure != "wordcount.sh":
+                self.assertEqual(finished, {"wordcount.py", "readability.py"})
+                expected = "wordcount.py\n"
+                if failure != "wordcount.py":
                     expected += "\nreadability.py\n"
                 if not failure:
                     expected += "  density and per-section outliers: just density\n"
