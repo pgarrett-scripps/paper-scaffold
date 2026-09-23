@@ -25,10 +25,15 @@ from config import (  # noqa: F401  (re-exported for make_audiobook.py)
 
 OUT = Path(__file__).resolve().parent / "paper_prose.txt"
 
-# The shared Typst-recognition primitives live one level up, beside the
-# manuscript. strip_balanced is re-exported because make_audiobook.py imports it
-# from here.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+# The shared Typst-recognition primitives are the toolchain's tools/: one level
+# up in the scaffold checkout, otherwise the installed paper-scaffold package
+# (a paper's root environment, which the audio group extends).
+# strip_balanced is re-exported because make_audiobook.py imports it from here.
+_TOOLS = Path(__file__).resolve().parent.parent / "tools"
+if not (_TOOLS / "typst_prose.py").is_file():
+    from paper_scaffold import tools_dir
+    _TOOLS = tools_dir()
+sys.path.insert(0, str(_TOOLS))
 import readability  # noqa: E402
 import resolve_typst  # noqa: E402
 from resolve_typst import SUPPLEMENT  # noqa: E402

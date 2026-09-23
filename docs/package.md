@@ -16,7 +16,7 @@ puts its own behaviour. The package never ships or replaces those files.
 | `paper.typ`, `config.typ`, `si-body.typ`, `cover-letter.typ` | `justfile` | `tools/` (every tool) |
 | `analysis/` (apart from the three helpers) | `stats.typ`, `assets.typ`, `code.typ` | `tests/` (fixture and cases) |
 | `stats.json`, `assets.json`, `references.bib`, `*.csl` | `wordcount.typ`, `wordcount-sections.typ` | `journals/*.toml` |
-| `journal.toml`, `project.toml`, `project.just`, `hooks/` | `analysis/scripts/_stats.py`, `_assets.py`, `_provenance.py` (when `analysis/scripts/` exists) | `word/paper-reference.docx`, `word/reference.docx` |
+| `journal.toml`, `project.toml`, `project.just`, `hooks/` | `analysis/scripts/_stats.py`, `_assets.py`, `_provenance.py` and `_toolchain/` (when `analysis/scripts/` exists) | `word/paper-reference.docx`, `word/reference.docx` |
 | `prose-check.toml`, `word-limits.toml`, `word-watchlist.toml` | `audio/extract_prose.py`, `make_audiobook.py`, `make_cover.py` (when `audio/config.py` exists) | `docs/`, `HISTORY.md` |
 | `pyproject.toml` (the pin), `uv.lock` | `slides/theme.typ` (when `slides/` exists) | |
 | `CLAUDE.md`, `AGENTS.md`, `STYLE.md`, `README.md`, `.gitignore`, `.claude/`, `.vscode/` | `.paper/scaffold.lock.json` | |
@@ -35,9 +35,14 @@ Why each generated file has to exist on disk:
 - **The analysis helpers.** `gen_*.py` scripts run in the analysis's own
   environment (`analysis/pyproject.toml`), which does not install the
   toolchain. They import `_stats`, `_assets` and `_provenance` from beside
-  themselves.
+  themselves, and those import four small toolchain modules (`atomic_io`,
+  `manifest_validation`, `hashcache`, `paths`) from
+  `analysis/scripts/_toolchain/`, also written by `paper sync`. In the
+  scaffold checkout the helpers use `tools/` directly.
 - **The audio scripts and the slide theme.** The audio recipes run inside
-  `audio/` and import the paper's `config.py`. Decks import `theme.typ` from
+  `audio/` and import the paper's `config.py`; `extract_prose.py` takes the
+  Typst primitives from the installed package's `tools/` (the audio group
+  extends the root environment, which has it). Decks import `theme.typ` from
   `slides/`. Neither is written for a paper without the feature.
 
 Everything else is read from the installed package: the tools, the journal
@@ -111,7 +116,7 @@ site-packages that is the package, so every tool now imports `tools/paths.py`:
 
 | Name | Meaning |
 |---|---|
-| `paths.ROOT` | The manuscript: `$PAPER_ROOT` if set, else the current directory. `just` runs every recipe from the justfile's directory, so this is the manuscript root. |
+| `paths.ROOT` | The manuscript: `$PAPER_ROOT` if set, else the current directory (installed) or the directory above `tools/` (a checkout). The justfile exports `PAPER_ROOT := justfile_directory()` and `paper tool` sets it to the working directory when unset, so every recipe sees the manuscript root. `paper test` clears it, so a test's temporary manuscript is not mistaken for the caller's. |
 | `paths.TOOLS` | The directory holding the tools. |
 | `paths.DATA` | The toolchain's data root: the repository in a checkout, `paper_scaffold/data/` when installed. |
 | `paths.locate(root, name)` | `root/name` if present, else `DATA/name` (for `tools/`, `journals/`, `word/`). |
@@ -222,8 +227,9 @@ refuses when git shows any file it would touch as uncommitted.
 
 When nothing is refused it removes the pristine files, rewrites
 `pyproject.toml` with the pin (`--pin` to choose it; the default is this
-release's git tag), adds `.paper/docs/` to `.gitignore`, runs `paper sync`,
-then `uv lock` and `uv sync` in the paper. Then:
+release's git tag), adds `.paper/docs/` to `.gitignore`, then runs `uv lock`, `uv sync` and
+`paper sync` in the paper (`--no-install` skips the first two and syncs from
+the environment running `migrate`). Then:
 
 ```bash
 just paper && just verify
