@@ -378,6 +378,12 @@ def bibliography_segments(src: str) -> list[Segment]:
     return out
 
 
+def cited_keys(src: str) -> set[str]:
+    """Every citation key `src` cites; cross-reference prefixes excluded."""
+    return {m.group(0)[1:] for m in re.finditer(r"(?<![\w\\:./-])" + CITE, mask(src, strings=True))
+            if m.group(0)[1:].split(":", 1)[0] not in FLOAT_PREFIX}
+
+
 def check_citations(src: str, bib_paths: list[Path]) -> list[str]:
     """Every @key cited but not defined by the bibliography files.
 
@@ -392,8 +398,7 @@ def check_citations(src: str, bib_paths: list[Path]) -> list[str]:
     matter, and each briefly failed this check as "@scripps not in the
     bibliography".
     """
-    cited = {m.group(0)[1:] for m in re.finditer(r"(?<![\w\\:./-])" + CITE, mask(src, strings=True))
-             if m.group(0)[1:].split(":", 1)[0] not in FLOAT_PREFIX}
+    cited = cited_keys(src)
     known: set[str] = set()
     for p in bib_paths:
         known.update(e["_key"] for e in entries(p))

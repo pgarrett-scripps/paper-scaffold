@@ -203,7 +203,8 @@ class Hardening(unittest.TestCase):
         if not (ROOT / "analysis/scripts/_stats.py").exists():
             self.skipTest("analysis contract removed from this manuscript")
         for name in ("analysis/scripts/_stats.py", "analysis/scripts/_provenance.py",
-                     "tools/manifest_validation.py", "tools/atomic_io.py"):
+                     "tools/manifest_validation.py", "tools/atomic_io.py",
+                     "tools/hashcache.py"):
             self.put(name, (ROOT / name).read_text())
         gen = self.put("analysis/scripts/gen_stats.py", 'from _stats import Stats\ns=Stats()\ns.add("x", 1.0)\ns.write()')
         stats = self.put("stats.json", json.dumps({"values": {
@@ -306,6 +307,23 @@ class Hardening(unittest.TestCase):
 
     def test_edit_guard_preserves_negative_single_digit(self):
         self.assertEqual(prose_edit_guard._nums("-3 and +2"), ["-3", "2"])
+
+    @unittest.skipUnless(shutil.which("just") and shutil.which("typstyle"),
+                         "just or typstyle not installed")
+    def test_fmt_check_skips_an_absent_optional_source(self):
+        # typst_sources lists cover-letter.typ; a project without one must not
+        # fail fmt-check on the missing path (exclusionms, koth-lfq deleted the
+        # entry locally), while a present file is still checked.
+        shutil.copy(ROOT / "justfile", self.root / "justfile")
+        for name in ("config.typ", "paper.typ", "si-body.typ", "code.typ"):
+            self.put(name, "Text.\n")
+        def run():
+            return subprocess.run(["just", "fmt-check"], cwd=self.root,
+                                  capture_output=True, text=True, check=False)
+        proc = run()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.put("paper.typ", "#let   x=1\n")
+        self.assertNotEqual(run().returncode, 0)
 
 
 def run_cases() -> bool:

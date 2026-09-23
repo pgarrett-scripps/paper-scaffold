@@ -241,7 +241,7 @@ def _sources(doc: dict) -> list[Finding]:
                 out.append(Finding("note", script,
                     f"input {src} is not present, so it could not be verified"))
                 continue
-            if hashcache.sha(p) != want:
+            if not hashcache.input_current(ROOT, src, want):
                 out.append(Finding("error", script,
                     f"{src} has changed since these numbers were written -- "
                     f"run: just assets  (or `just check-stats-deep` to see "
