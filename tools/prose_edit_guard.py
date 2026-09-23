@@ -47,6 +47,7 @@ import sys
 from pathlib import Path
 
 from manuscript_sources import mask, matches, CALL, source_files
+from typst_prose import DIRECTIVE, _bracket_depth
 from atomic_io import write_text
 
 # The manuscript root, one level up: this file lives in tools/.
@@ -68,6 +69,32 @@ HEADING = re.compile(r"(?m)^(=+)\s+([^\n<]+?)(?:\s*<[^>]+>)?\s*$")
 IMPORT_PATH = re.compile(r'(?m)^([ \t]*#import[ \t]+)("[^"\n]*")')
 
 
+def _blank_code(src: str) -> str:
+    """Blank `#import`, `#set` and code-valued `#let` directives, newlines
+    kept. Their numbers are code, not results: the SI's bibliographyx guard
+    (`bib.references.len() > 0`) read as an invented `0`. A `#let` bound to
+    content (`#let paper-abstract = [...]`) is prose and stays counted, as
+    does every `#show`, whose arguments can carry printed text.
+    """
+    lines, i = src.split("\n"), 0
+    while i < len(lines):
+        m = DIRECTIVE.match(lines[i])
+        if not m:
+            i += 1
+            continue
+        first, depth = i, _bracket_depth(lines[i])
+        while depth > 0 and i + 1 < len(lines):
+            i += 1
+            depth += _bracket_depth(lines[i])
+        block = "\n".join(lines[first:i + 1])
+        content = m.group(1) == "let" and re.search(r"=\s*\[", block) \
+            and not re.search(r"=\s*\{", block)
+        if m.group(1) != "show" and not content:
+            lines[first:i + 1] = [" " * len(line) for line in lines[first:i + 1]]
+        i += 1
+    return "\n".join(lines)
+
+
 def _nums(text: str) -> list[str]:
     return sorted(m.group(0).rstrip(".,:").lstrip("+") for m in NUM.finditer(text))
 
@@ -77,7 +104,7 @@ def profile(path: Path) -> dict:
                           mask(path.read_text()))
     calls = matches(CALL, src)
     return {
-        "numbers": _nums(src),
+        "numbers": _nums(_blank_code(src)),
         "stats": sorted(m.group(1) + ":" + m.group(2) for m in calls
                         if m.group(1) in ("s", "n")),
         "assets": sorted(m.group(1) + ":" + m.group(2) for m in calls

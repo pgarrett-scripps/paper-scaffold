@@ -18,7 +18,7 @@ from pathlib import Path
 
 import config
 from extract_prose import (
-    clean, extract_abstract, extract_body, report_unmapped, strip_balanced,
+    clean, crossrefs, extract_abstract, extract_body, report_unmapped, strip_balanced,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -59,7 +59,7 @@ def build_chapters(raw):
     if DOC == "si":
         # front matter: the overview paragraph before the first "= " heading
         first = raw.find("\n= ")
-        intro = clean(raw[:first])
+        intro = clean(raw[:first], crossrefs())
         chapters.append(("Overview", f"{SPOKEN_TITLE}. Overview.\n\n{intro}"))
         body = raw[first:]
     else:
@@ -77,7 +77,7 @@ def build_chapters(raw):
     for i, m in enumerate(marks):
         title = m.group(2).strip().rstrip(".")
         chunk = body[m.end():(marks[i + 1].start() if i + 1 < len(marks) else len(body))]
-        text = clean(chunk)
+        text = clean(chunk, crossrefs())
         if text:
             chapters.append((title, f"{title}.\n\n{text}"))
     return chapters

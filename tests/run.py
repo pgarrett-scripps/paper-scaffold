@@ -99,6 +99,7 @@ CASE_MODULES = (
     "upgrade_plan_cases",     # tools/upgrade_plan.py against a throwaway scaffold
     "submission_cases",       # the journal upload set in submission/
     "actions_cases",          # the review action ledger, reviews/ACTIONS.md
+    "narration_cases",        # audio/: what the audiobook voice is handed
 )
 
 

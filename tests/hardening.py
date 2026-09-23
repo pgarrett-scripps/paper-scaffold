@@ -139,6 +139,21 @@ class Hardening(unittest.TestCase):
             si.write_text("= Details\nAs @b2020 found in 0.2.0.\n")
             self.assertEqual(prose_edit_guard.check("test"), 1)
 
+    def test_edit_guard_ignores_numbers_in_code_directives(self):
+        # 3.24.2's SI guard block read as an invented `0` (koth-lfq).
+        si = self.put("si-body.typ", "= Details\nAs found.\n")
+        with patch.object(prose_edit_guard, "ROOT", self.root), patch.object(
+                prose_edit_guard, "SNAP_DIR", self.root / ".edit-guard"), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            prose_edit_guard.snapshot("test")
+            si.write_text("#let bibliographyx(\n  path,\n) = {\n  context {\n"
+                          "    if b.len() > 0 { render(b) }\n  }\n}\n"
+                          "#set text(size: 9pt)\n= Details\nAs found.\n")
+            self.assertEqual(prose_edit_guard.check("test"), 0, out.getvalue())
+            # A #let bound to content is prose: its numbers still count.
+            si.write_text("#let note = [\n  Seen in 12 runs.\n]\n= Details\nAs found.\n")
+            self.assertEqual(prose_edit_guard.check("test"), 1)
+
     def test_build_hash_tracks_includes_csl_filter_but_not_pins(self):
         self.put("paper.typ", '#include "sections/results.typ"')
         self.put("sections/results.typ", "Original.")

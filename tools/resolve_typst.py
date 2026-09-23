@@ -339,37 +339,16 @@ _FIGURE_OPEN = re.compile(r"#?figure\(")
 _CAPTION = re.compile(r"caption:\s*\[")
 
 
-def resolve_crossrefs(head: str, body: str, native: list[dict] | None = None) -> str:
-    """Every ref call becomes the literal text the PDF shows for it.
+def _number_labels(body: str, native: list[dict] | None = None
+                   ) -> tuple[dict[str, str], list[tuple[int, str]], dict]:
+    """The PDF's numbering, counted over a raw-protected `body`.
 
-    Pandoc renders a Typst ref as an EMPTY link -- there is no page number to
-    print and no target document to link into -- so every cross-reference
-    silently vanished from the Word file: "see and here". What the PDF shows
-    at that spot is text, and the numbering behind it is deterministic: floats
-    count per kind in document order, headings nest, and the SI resets both
-    with an "S" prefix (the #counter(...).update(0) block in paper.typ's back
-    matter). This reimplements that count and writes the text in.
-
-    The same count is written into the DEFINITIONS, not just the references:
-    "Figure 3: " ahead of each caption, "2.1." (SI: "S2.1") ahead of each
-    heading. Typst supplies those numbers at layout time and pandoc supplies
-    nothing, so the Word file showed unnumbered captions under prose saying
-    "Figure 3" -- every cross-reference pointed at a number no caption
-    carried. Heading numbers follow the PDF's styles: arkheion's "1."
-    pattern (trailing dot) for the main text, the back matter's "S1"
-    function (no trailing dot) for the SI.
-
-    `head` (title, authors, abstract) and `body` arrive separately because
-    only the body is scanned for numbering -- the manuscript does not number
-    the title or Abstract headings -- while references are REPLACED in both,
-    since the abstract may point into the body. A ref to a label that no
-    float or heading in the export defines is an error, not a link left to
-    vanish: the target lives in the dropped back matter or nowhere, and
-    either way the reader would get prose pointing at nothing.
+    Returns the number each labeled float or heading prints ("<fig:x>" ->
+    "S1"), the (position, text) caption and heading numbers to write into
+    `body`, and the native rows by label. resolve_crossrefs writes both into
+    the Word export; the narrator (audio/) reads only the numbers, so a
+    spoken "as seen in Table S1" keeps the table it points at.
     """
-    head, head_spans = _protect_raw(head)
-    body, body_spans = _protect_raw(body)
-
     numbered: dict[str, str] = {}
     actual = {f'<{r["label"]}>': r for r in native or [] if r["label"]}
     native_heads = iter(r for r in native or []
@@ -418,13 +397,6 @@ def resolve_crossrefs(head: str, body: str, native: list[dict] | None = None) ->
         if cap:
             inserts.append((cap.end(), f"{SUPPLEMENT[prefix]} {num}: "))
 
-    # Ref options outside this resolver's supported subset must fail visibly;
-    # leaving them to pandoc can turn a reference into an empty link.
-    for part in (head, body):
-        for call in re.finditer(r"(?<![\w-])#?refn?\(", mask(part, strings=True)):
-            if _REF.match(part, call.start()) is None:
-                raise ResolveError("unsupported reference syntax; use ref(<label>) "
-                                   "or refn(<label>) with optional supplement: none")
     definitions = mask(body, strings=True)
     definitions = _REF.sub(lambda m: "".join("\n" if c == "\n" else " "
                                             for c in m.group()), definitions)
@@ -472,11 +444,53 @@ def resolve_crossrefs(head: str, body: str, native: list[dict] | None = None) ->
                 caption_insert(m.start(), prefix,
                                numbered[m.group(0)])
 
-    for at, text in sorted(inserts, reverse=True):
-        body = body[:at] + text + body[at:]
-
     if native is not None and next(native_heads, None) is not None:
         raise ResolveError("Word export did not preserve every numbered heading")
+    return numbered, inserts, actual
+
+
+def resolve_crossrefs(head: str, body: str, native: list[dict] | None = None) -> str:
+    """Every ref call becomes the literal text the PDF shows for it.
+
+    Pandoc renders a Typst ref as an EMPTY link -- there is no page number to
+    print and no target document to link into -- so every cross-reference
+    silently vanished from the Word file: "see and here". What the PDF shows
+    at that spot is text, and the numbering behind it is deterministic: floats
+    count per kind in document order, headings nest, and the SI resets both
+    with an "S" prefix (the #counter(...).update(0) block in paper.typ's back
+    matter). This reimplements that count and writes the text in.
+
+    The same count is written into the DEFINITIONS, not just the references:
+    "Figure 3: " ahead of each caption, "2.1." (SI: "S2.1") ahead of each
+    heading. Typst supplies those numbers at layout time and pandoc supplies
+    nothing, so the Word file showed unnumbered captions under prose saying
+    "Figure 3" -- every cross-reference pointed at a number no caption
+    carried. Heading numbers follow the PDF's styles: arkheion's "1."
+    pattern (trailing dot) for the main text, the back matter's "S1"
+    function (no trailing dot) for the SI.
+
+    `head` (title, authors, abstract) and `body` arrive separately because
+    only the body is scanned for numbering -- the manuscript does not number
+    the title or Abstract headings -- while references are REPLACED in both,
+    since the abstract may point into the body. A ref to a label that no
+    float or heading in the export defines is an error, not a link left to
+    vanish: the target lives in the dropped back matter or nowhere, and
+    either way the reader would get prose pointing at nothing.
+    """
+    head, head_spans = _protect_raw(head)
+    body, body_spans = _protect_raw(body)
+
+    # Ref options outside this resolver's supported subset must fail visibly;
+    # leaving them to pandoc can turn a reference into an empty link.
+    for part in (head, body):
+        for call in re.finditer(r"(?<![\w-])#?refn?\(", mask(part, strings=True)):
+            if _REF.match(part, call.start()) is None:
+                raise ResolveError("unsupported reference syntax; use ref(<label>) "
+                                   "or refn(<label>) with optional supplement: none")
+    numbered, inserts, actual = _number_labels(body, native)
+
+    for at, text in sorted(inserts, reverse=True):
+        body = body[:at] + text + body[at:]
 
     def ref(m: re.Match) -> str:
         hash, label, bare = m.group(1), m.group(2), bool(m.group(3))
@@ -497,6 +511,14 @@ def resolve_crossrefs(head: str, body: str, native: list[dict] | None = None) ->
     head = _restore_raw(_REF.sub(ref, head), head_spans)
     body = _restore_raw(_REF.sub(ref, body), body_spans)
     return (head + body).replace(_SI_MARK, "")
+
+
+def label_numbers(body: str) -> dict[str, str]:
+    """{"fig:x": "S1", "sec:y": "2.1", ...} over an assembled body: the main
+    text, then _SI_MARK, then the SI -- the same order build() assembles."""
+    body, _ = _protect_raw(body)
+    numbered, _, _ = _number_labels(body)
+    return {label[1:-1]: num for label, num in numbered.items()}
 
 
 def export_includes(src: str, path: Path, stack=()) -> str:

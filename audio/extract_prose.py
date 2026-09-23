@@ -15,6 +15,7 @@ from pathlib import Path
 from config import (  # noqa: F401  (re-exported for make_audiobook.py)
     MATH,
     PAPER_TYP,
+    SI_TYP,
     SYM,
     CONFIG_TYP,
     speakable,
@@ -27,6 +28,9 @@ OUT = Path(__file__).resolve().parent / "paper_prose.txt"
 # manuscript. strip_balanced is re-exported because make_audiobook.py imports it
 # from here.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+import readability  # noqa: E402
+import resolve_typst  # noqa: E402
+from resolve_typst import SUPPLEMENT  # noqa: E402
 from typst_prose import (  # noqa: E402
     CITE,
     FOOTNOTE,
@@ -40,6 +44,7 @@ from typst_prose import (  # noqa: E402
     resolve_stats,
     BIBLIOGRAPHY_CALLS,
     strip_balanced,
+    strip_directives,
 )
 
 BODY_START = re.compile(r"(?m)^// >>> BODY START.*$")
@@ -65,7 +70,7 @@ def extract_abstract():
     m = re.search(r"#let\s+paper-abstract\s*=\s*\[", raw)
     if not m:
         sys.exit(f"error: could not find `#let paper-abstract = [...]` in {CONFIG_TYP}")
-    return clean(_bracket_block(raw, m.end() - 1))
+    return clean(_bracket_block(raw, m.end() - 1), crossrefs())
 
 
 def extract_body(raw):
@@ -86,12 +91,59 @@ def extract_body(raw):
 # at build time instead of on playback.
 UNMAPPED: set[str] = set()
 
+_FLOAT_REF = re.compile(
+    r"#refn?\(\s*<((?:fig|tbl|tab|eq|sec):[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*)>"
+    r"\s*(,\s*supplement:\s*none\s*)?,?\s*\)"
+    r"|@((?:fig|tbl|tab|eq|sec):[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*)(?:\[([^\[\]\n]*)\])?")
 
-def clean(text):
+
+def speak_crossrefs(text, refs):
+    """`@tbl:x` -> "Table S1", the words the PDF prints there.
+
+    Dropping them, as clean() once did, narrated "as seen in" and moved on:
+    the sentence lost the very thing it pointed at. `refs` maps a label to
+    its printed number (resolve_typst.label_numbers, the Word export's own
+    count). A label it lacks is left for clean() to drop as before.
+    """
+    def repl(m):
+        if m[1]:
+            label, bare = m[1], bool(m[2]) or m[0].startswith("#refn")
+            shown = None
+        else:
+            label, bare, shown = m[3], m[4] is not None, (m[4] or "").strip()
+        if label not in refs:
+            return m[0]
+        num = refs[label]
+        if shown:
+            return f"{shown} {num}"
+        return num if bare else f"{SUPPLEMENT[label.split(':', 1)[0]]} {num}"
+    return _FLOAT_REF.sub(repl, text)
+
+
+_CROSSREFS = None
+
+
+def crossrefs():
+    """The printed number of every labeled float and heading, main text then
+    SI, counted exactly as the Word export counts them. Cached: both
+    audiobooks and the abstract share one count."""
+    global _CROSSREFS
+    if _CROSSREFS is None:
+        body = readability.slice_body(PAPER_TYP.read_text())
+        if SI_TYP.is_file():
+            body += "\n\n" + resolve_typst._SI_MARK + "\n" + SI_TYP.read_text()
+        try:
+            _CROSSREFS = resolve_typst.label_numbers(body)
+        except resolve_typst.ResolveError:
+            _CROSSREFS = {}
+    return _CROSSREFS
+
+
+def clean(text, refs=None):
     # 0a. Typst directives and line comments. A document's front matter can carry
     #     its own `#let` helpers, and the SI's overview chapter starts before the
     #     first heading, so without this the audiobook opens by reading source.
-    text = re.sub(r"(?m)^\s*#(?:import|let|set|show)\b.*$", " ", text)
+    text = strip_directives(text, " ")
     text = re.sub(r"(?m)^\s*//.*$", " ", text)
 
     # 0. remove fenced code blocks and #raw(...) config dumps
@@ -155,7 +207,10 @@ def clean(text):
     text = re.sub(r"#super\[([^\]]*)\]", r" to the \1", text)
     text = re.sub(r"#sub\[([^\]]*)\]", r"\1", text)
 
-    # 5. cross-refs: #refn(<...>) and bare @label citations (labels may contain -)
+    # 5. cross-refs: a known float or heading label is spoken as the PDF prints
+    #    it; what is left (citations, unknown labels) is dropped.
+    if refs:
+        text = speak_crossrefs(text, refs)
     text = re.sub(REFN, "", text)
     text = re.sub(r"\(@[^)]*\)", "", text)              # (@fig:x) parenthetical refs
     text = re.sub(CITE, "", text)                       # remaining @citekeys / @refs
@@ -245,7 +300,7 @@ def main():
         return f"\n\n{title}.\n\n"
 
     body = re.sub(r"(?m)^(=+)\s+([^\n<]+?)(?:\s*<[^>]+>)?\s*$", heading_repl, body)
-    body = clean(body)
+    body = clean(body, crossrefs())
 
     parts = [spoken_title(), "Abstract.", abstract, body]
     OUT.write_text("\n\n".join(parts) + "\n")

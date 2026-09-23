@@ -79,8 +79,8 @@ in `slides/theme.typ` says what to change when that is fixed upstream.
 ## Audio
 
 Offline Piper TTS. `audio/extract_prose.py` rewrites the Typst source into
-speakable text (citations, cross-references, math, `#sym.*` tokens, figure blocks
-and code blocks all removed or verbalized), Piper narrates it, and ffmpeg muxes
+speakable text (citations, math, `#sym.*` tokens, figure blocks, directives and
+code blocks all removed or verbalized), Piper narrates it, and ffmpeg muxes
 chapters and cover art into an `.m4b` with one chapter per section.
 
 Everything project-specific is in `audio/config.py`: the voice, the metadata
@@ -89,9 +89,11 @@ inline equations to spoken English. Add every inline equation that appears in
 running prose; anything unmapped falls back to reading the raw Typst, which is
 usually wrong. Display equations are dropped rather than read.
 
-One inherent trait: stripped cross-references leave sentences like "resolves to
-and the bare-number kind" in the narration. Write around it in prose you care
-about hearing, or accept it.
+Cross-references are spoken as the PDF prints them: `@tbl:roles` in the SI
+narrates as "Table S1", `@sec:methods` as "Section 2". The numbers come from
+the Word export's own count (`resolve_typst.label_numbers`), over the main text
+and then the SI. Citations are still dropped, and so is a reference to a label
+nothing defines.
 
 The engine is `piper-tts`, a uv dependency in the `audio` group, exactly like
 pandoc and ffmpeg elsewhere in this directory: nothing is installed system-wide

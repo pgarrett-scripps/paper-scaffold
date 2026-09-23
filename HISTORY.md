@@ -64,6 +64,28 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 3.24.3
+
+Audiobook fixes from the spectrl SI narration, plus one edit-check false alarm.
+
+- **The SI audiobook no longer opens by reading code.** The narrator dropped
+  only the first line of a directive, so 3.24.2's multi-line
+  `#import (...)` and `#let bibliographyx(...) = {...}` in `si-body.typ`
+  were narrated for twenty seconds. It now uses `typst_prose.strip_directives`,
+  the bracket-following strip the word count already used.
+- **Cross-references are spoken, not deleted.** "as seen in @tbl:roles" was
+  narrated as "as seen in". The narrator now says "Table S1", numbered by the
+  Word export's own count, which `resolve_typst.label_numbers` exposes.
+- **`just edit-check` ignores numbers in code directives.** The `0` in the
+  SI guard's `bib.references.len() > 0` read as an invented number. A `#let`
+  bound to content (`#let paper-abstract = [...]`) is still checked.
+
+Upgrade: copy `audio/extract_prose.py`, `audio/make_audiobook.py`,
+`tools/resolve_typst.py`, `tools/typst_prose.py`, `tools/prose_edit_guard.py`,
+`tests/narration_cases.py`, `tests/hardening.py`, `docs/slides-and-audio.md`,
+and add `"narration_cases"` to `CASE_MODULES` in `tests/run.py`. Then
+`just audiobook-all` if you want the audiobooks refreshed.
+
 ## 3.24.2
 
 Two fixes from rolling out the SI's own reference list.

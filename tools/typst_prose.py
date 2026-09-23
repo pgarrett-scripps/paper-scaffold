@@ -283,7 +283,7 @@ def markup(delim: str) -> str:
 BIBLIOGRAPHY_CALLS = ("#bibliography(", "#bibliographyx(")
 
 
-DIRECTIVE = re.compile(r"^\s*#(?:import|let|set|show)\b")
+DIRECTIVE = re.compile(r"^\s*#(import|let|set|show)\b")
 
 
 def strip_directives(text: str, gap: str = "") -> str:
