@@ -59,6 +59,19 @@ staleness record. It belongs to the paper: `paper sync` never writes it and
 with its hash, and `paper sync` prints it, so a reader can see that the paper
 does not use the stock file.
 
+**With 3.27.0 (`[word.style]`, branch `word-style`).** The Word reference
+document stops being a shipped file: the build generates it from the
+`[word.style]` settings in `project.toml`, and `[word] reference = "..."`
+names a paper's own document as the escape hatch. The package then ships no
+`.docx` and `paper sync` writes none; this design never vendors or syncs a
+reference document. What remains of the override rule for Word is the lock
+recording the hash of a paper-owned file under `word/`, so `paper sync`
+reports that the paper does not use the generated reference. The merge of the
+two branches touches only the lookup in `tools/export_docx.py` (here a
+`locate()` call) and the staleness list in `tools/build_state.py`, which must
+hash the `[word] reference` file or the generating settings instead of
+`word/paper-reference.docx`.
+
 The lookup is one function, `paths.locate(root, name)`: the manuscript's copy
 if it exists, else the package's. It applies to `tools/`, `journals/` and
 `word/`. A local `tools/` file is not an override; `paper sync --check` flags

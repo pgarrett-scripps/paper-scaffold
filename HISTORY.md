@@ -64,6 +64,51 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 4.0.0 (draft: not released; the version is still 3.26.1)
+
+The toolchain is a package. A paper holds what it owns plus a pin, and an
+upgrade is: move the pin, run `paper sync`. Reference: docs/package.md.
+
+- **`paper-scaffold` installs as a Python package** with a `paper` console
+  script. `tools/`, `tests/`, `journals/`, `word/` and `docs/` are package
+  data, read from the installed release; a paper no longer carries them.
+  Recipes run tools as `uv run paper tool NAME`.
+- **`paper sync`** writes the few files a paper must hold on disk (the
+  justfile, the five Typst modules, the `analysis/scripts/_*.py` helpers and
+  `_toolchain/`, the audio scripts, `slides/theme.typ`), each headed
+  GENERATED, and records them in `.paper/scaffold.lock.json`. It refuses to
+  overwrite an edit. `.paper/docs/` is a gitignored copy of the docs.
+- **`paper sync --check`** is the first `just verify` stage: it fails on a
+  missing or edited generated file, a lock from another release, or a leftover
+  `tools/`, `tests/` or `docs/`.
+- **Overrides.** A paper's own `word/*.docx` or `journals/*.toml` wins over the
+  package's copy (`tools/paths.py` `locate()`), is never written or flagged,
+  and is listed in the lock.
+- **Staleness** hashes the build tools, reference document and journal
+  profiles by content wherever they resolve, so a pin bump marks outputs stale
+  only when a build input changed.
+- **`just upgrade-plan`** is now `just upgrade-notes` (the old name is an
+  alias): the upgrade instructions between the lock's release and the
+  installed one.
+  `--apply-pristine` is gone; there is nothing to copy.
+- **`paper migrate`** moves a 3.26.x paper once: pristine toolchain copies are
+  removed, generated files replaced, customized reference documents and
+  journal profiles kept as overrides; a customized tool, test or generated
+  file is refused and nothing changes.
+- **In a paper, `just test` is the extractor fixture check**; the case suites
+  test the toolchain and run in this repository.
+- `scripts/new-paper.sh` writes the pinned `pyproject.toml` and runs
+  `paper sync` instead of copying the toolchain (`--pin` to choose).
+
+Upgrade: from 3.26.x, run `just upgrade-plan` first and settle every
+customized scaffold file into `project.toml`, `project.just` or `hooks/`
+(3.26.0), commit, then from a scaffold clone at v4.0.0:
+`uv run paper migrate --project PAPER --dry-run`, then without `--dry-run`.
+It rewrites `pyproject.toml` with the pin, runs `uv lock`, `uv sync` and
+`paper sync`. Then `just text-baseline` (before) and `just paper`,
+`just text-diff`, `just verify`; commit with `git add -A`. A hook that ran
+`python tools/x.py` now runs `uv run paper tool x`.
+
 ## 3.26.1
 
 - **The voice check wants both files.** `audio-setup` and `_audio-check` now

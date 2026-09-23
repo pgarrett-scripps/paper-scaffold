@@ -43,7 +43,7 @@ import io
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-# The manuscript root, one level up: this file lives in tools/.
+# The manuscript root (tools/paths.py: $PAPER_ROOT, or above tools/ in a checkout).
 from paths import ROOT, locate  # the manuscript (tools/paths.py)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
