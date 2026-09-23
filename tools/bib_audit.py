@@ -78,6 +78,41 @@ class MetadataIssue:
     fatal: bool
 
 
+# Words an ISO 4 / CASSI abbreviation drops outright: articles, prepositions,
+# conjunctions. Not "a": in "U. S. A." it is an initial, not an article.
+_VENUE_STOPWORDS = {"of", "the", "for", "and", "in", "on", "at", "to", "an"}
+
+
+def _abbreviates(short: str, full: str) -> bool:
+    """True if `short` is an ISO 4 / CASSI abbreviation of `full`.
+
+    Both arguments are _text() output. ACS style wants "J. Proteome Res.", but
+    Crossref registers the full title and only some publishers add a
+    short-container-title, so a correct abbreviation was reported as the wrong
+    journal on nearly every entry. Stopwords aside, the two must align ONE TO
+    ONE, in order: each abbreviated word is a prefix of its full word ("Mol."
+    for "Molecular") or a contraction of it ("Natl." for "National": four
+    letters or more, the word's own first and last letters, the rest in
+    order; shorter, "Res." would contract "Reviews"). One to one is the part
+    that matters.
+    Letting the full title keep unmatched words accepted "Nature" for
+    "Nature Methods", which is a real miscitation, not a style difference.
+    "Anal. Chem." still does not match "Analytical Biochemistry".
+    """
+    def words(s: str) -> list[str]:
+        return [w for w in s.split() if w not in _VENUE_STOPWORDS]
+
+    def shortens(a: str, w: str) -> bool:
+        if w.startswith(a):
+            return True
+        it = iter(w[1:-1])
+        return (len(a) >= 4 and a[0] == w[0] and a[-1] == w[-1]
+                and all(c in it for c in a[1:-1]))
+
+    s, f = words(short), words(full)
+    return bool(s) and len(s) == len(f) and all(map(shortens, s, f))
+
+
 def _text(value: object) -> str:
     """Plain comparison text from BibTeX, Crossref, or DataCite markup."""
     if value is None:
@@ -220,6 +255,7 @@ def _record(state: str, message: dict) -> dict:
         "authors": message.get("author") or [],
         "years": _years(message),
         "venues": [*list(message.get("container-title") or []),
+                   *list(message.get("short-container-title") or []),
                    _one(event)],
         "volume": _one(message.get("volume")),
         "issue": _one(message.get("issue")),
@@ -274,6 +310,8 @@ def _metadata_issues(entry: dict, state: str,
         local_venue == candidate
         or (min(len(local_venue), len(candidate)) >= 15
             and (local_venue in candidate or candidate in local_venue))
+        or _abbreviates(local_venue, candidate)
+        or _abbreviates(candidate, local_venue)
         for candidate in registered_venues
     )
     if venue and venues and not venue_matches:

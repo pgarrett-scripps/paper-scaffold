@@ -185,6 +185,37 @@ def bibliography_cases() -> bool:
               f"{sorted(warnings)}, expected issue/pages/venue/volume")
         ok = False
 
+    # Journal abbreviations. Crossref registers the full title, the entry
+    # carries the ISO 4 / CASSI form a style wants, and the two must match
+    # word for word: a prefix ("Proteome Res."), a contraction ("Natl."),
+    # dropped stopwords. The negative cases are real miscitations: an
+    # abbreviation of a different journal, and a journal whose name is the
+    # first word of another's.
+    venues = [
+        ("J. Proteome Res.", "Journal of Proteome Research", True),
+        ("Mol. Cell. Proteomics", "Molecular & Cellular Proteomics", True),
+        ("Proc. Natl. Acad. Sci. U. S. A.", "Proceedings of the National "
+         "Academy of Sciences of the United States of America", True),
+        ("J. Am. Chem. Soc.", "Journal of the American Chemical Society", True),
+        ("Journal of Proteome Research", "J. Proteome Res.", True),
+        ("Anal. Chem.", "Analytical Biochemistry", False),
+        ("Nature", "Nature Methods", False),
+        ("Chem. Res.", "Chemical Reviews", False),
+    ]
+    for local, registered, want in venues:
+        issues = ba._metadata_issues(dict(entry, journal=local), "ok",
+                                     dict(metadata, **{"container-title": [registered]}))
+        got = "venue" not in {i.field for i in issues}
+        if got != want:
+            print(f"  bib-audit venue: {local!r} vs registered {registered!r} "
+                  f"matched={got}, expected {want}")
+            ok = False
+    # Crossref's own short-container-title counts as a registered venue.
+    abbreviated = dict(metadata, **{"short-container-title": ["J. Ex."]})
+    if ba._metadata_issues(dict(entry, journal="J Ex"), "ok", abbreviated):
+        print("  bib-audit venue: short-container-title was not consulted")
+        ok = False
+
     datacite = {
         "titles": [{"title": "A Dataset"}],
         "creators": [{"familyName": "Curie", "givenName": "Marie"}],
