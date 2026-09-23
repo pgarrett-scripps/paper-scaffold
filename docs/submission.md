@@ -24,6 +24,14 @@ from), after a fresh `just paper`:
   from `config.typ`, numbers through `#s()`, and the journal name from the
   profile. Delete the file and the step is skipped.
 
+Where the SI lives is read, never configured. When `paper.typ` does not
+include `si-body.typ`, the manuscript files are the whole capture. If
+`manuscript.toml` then declares a separate SI document target (not
+`paper.typ`, and named `si` or carrying the `si-body.typ` part), that
+target's PDF is `supporting-information.pdf` and no SI Word file is written.
+With no such target the SI steps write nothing, note why, and remove any
+stale SI file.
+
 The split files refuse to build while the source differs from the last
 `just paper` capture. Each output is recorded in `.build-state/submission.json`.
 The set is outside `verify` for the audiobooks' reason: `just check` notes a

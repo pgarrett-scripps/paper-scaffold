@@ -29,6 +29,12 @@ This is the one upstream version, and it adds no second source of truth:
       cover-letter.typ, compiled with the profile's journal and article type
       as inputs. Optional: without the file, no letter, and no stale one left.
 
+WITHOUT AN APPENDIX SI. The cut above assumes paper.typ includes si-body.typ.
+When it does not, the main files are the whole capture, and the SI is either
+the non-default document target manuscript.toml declares for it (compiled on
+its own, PDF only: no SI Word file) or absent, in which case the si-* steps
+write nothing and remove any SI file left from before (see si_layout).
+
 STALENESS. Every output is recorded in .build-state/submission.json with the
 hashes of what it was built from, in the same shape as paper.pdf's record,
 and `check` recompares them without building anything. The split outputs are
@@ -82,6 +88,17 @@ OUTPUTS = {
 }
 KIND_FILE = {"main-pdf": "manuscript.pdf", "si-pdf": "supporting-information.pdf",
              "main-docx": "manuscript.docx", "si-docx": "supporting-information.docx"}
+
+
+# What the manifest says about numbering, by where the SI lives (si_layout).
+SI_NOTES = {
+    "appendix": "Page, figure and reference numbers are those of the combined "
+                "manuscript; the SI is an appendix of the same compilation.",
+    "separate": "The main files are the whole of paper.typ; the SI PDF is its own "
+                "manuscript.toml document target, and there is no SI Word file.",
+    "none": "The manuscript has no Supporting Information; the main files are the "
+            "whole document.",
+}
 
 
 class SubmissionError(ValueError):
@@ -193,7 +210,7 @@ def write_manifest(root: Path) -> None:
         files[name] = {"role": role, "bytes": path.stat().st_size,
                        "sha256": digest(path), "status": status(root, name, record),
                        **{k: record[k] for k in ("manuscript_id", "pages", "placement",
-                                                 "format", "dpi", "pixels")
+                                                 "format", "dpi", "pixels", "si")
                           if k in record}}
     write_text(out / "manifest.json", json.dumps({
         "schema_version": 1,
@@ -201,8 +218,8 @@ def write_manifest(root: Path) -> None:
         "journal": ({"profile": profile.id, "journal": profile.journal,
                      "type": profile.type} if profile else None),
         "files": files,
-        "note": "Page, figure and reference numbers are those of the combined "
-                "manuscript; the SI is an appendix of the same compilation.",
+        "note": SI_NOTES.get(next((r.get("si") for r in load_records(root).values()
+                                   if r.get("si")), "appendix")),
     }, indent=2) + "\n")
     (out / "manifest.json").chmod(0o644)
 
@@ -249,26 +266,109 @@ def si_start(folder: Path, placement: str) -> int:
     return page
 
 
+# ------------------------------------------------ where the SI lives ---
+# Three shapes, read from the capture and manuscript.toml, never configured:
+#   appendix  paper.typ includes si-body.typ (the scaffold's layout): the SI
+#             is cut out of the one compilation, PDF at <si-start>, Word at
+#             the SI heading the resolver writes for exactly that include.
+#   separate  paper.typ does not include the SI, and manuscript.toml declares
+#             another document target for it (cascade/paper): main = the
+#             whole capture, SI PDF = that target compiled on its own, and no
+#             SI Word file, since document targets are PDF-only.
+#   none      no SI at all (exclusionms-paper): main = the whole capture, and
+#             the si-* steps write nothing and clear any stale SI file.
+
+def separate_si_entry(root: Path) -> str | None:
+    """The entrypoint of the SI's own document target in manuscript.toml.
+
+    The SI target is the non-default document that is not paper.typ and
+    either is named "si" or carries the part whose source is si-body.typ.
+    """
+    if not (root / "manuscript.toml").is_file():
+        return None
+    from document_project import load_project
+    project = load_project(root)
+    si_parts = {p.id for p in project.parts.values() if p.source == "si-body.typ"}
+    found = [d for d in project.documents.values()
+             if d.id != project.default and d.entrypoint != "paper.typ"
+             and (d.id == "si" or si_parts & set(d.parts))]
+    if len(found) > 1:
+        raise SubmissionError("manuscript.toml declares more than one SI document target: "
+                              + ", ".join(d.id for d in found))
+    return found[0].entrypoint if found else None
+
+
+def si_layout(root: Path, folder: Path) -> tuple[str, str | None]:
+    """("appendix" | "separate" | "none", the separate SI entrypoint or None)."""
+    if SI_HEADING.search((folder / "paper.word.typ").read_text()):
+        return "appendix", None
+    entry = separate_si_entry(root)
+    return ("separate", entry) if entry else ("none", None)
+
+
+def no_si(root: Path, kind: str) -> str:
+    name = KIND_FILE[kind]
+    forget(root, name)
+    return f"note: paper.typ includes no Supporting Information; no {OUT_DIR}/{name} written"
+
+
 def split_pdf(root: Path, kind: str) -> str:
     from journal import placement as toc_placement
     name = KIND_FILE[kind]
     placement = toc_placement(root, "submission")
     with build_lock(root):
         folder, manifest = capture(root)
-        start = si_start(folder, placement)
-        pages = f"1-{start - 1}" if kind == "main-pdf" else f"{start}-"
-        with tempfile.TemporaryDirectory(dir=root / ".build-state") as tmp:
-            staged = Path(tmp) / name
-            # A page range cannot carry PDF tags; journals do not read them.
-            subprocess.run(["typst", "compile", "--root", str(folder), "--no-pdf-tags",
-                            "--input", f"toc={placement}", "--pages", pages,
-                            str(folder / "paper.typ"), str(staged)], check=True)
-            if snapshot(root, manifest["dependencies"]) != manifest["sources"]:
-                raise SubmissionError("the source changed during the export; rerun it")
-            publish(root, staged, name, manuscript_record(
-                root, manifest, pages=pages, placement=placement))
-    return f"wrote {OUT_DIR}/{name} (pages {pages} of the combined manuscript, " \
-           f"graphical abstract: {placement})"
+        layout, entry = si_layout(root, folder)
+        from_capture = kind == "main-pdf" or layout == "appendix"
+        if from_capture:
+            if layout == "appendix":
+                start = si_start(folder, placement)
+                pages = f"1-{start - 1}" if kind == "main-pdf" else f"{start}-"
+            else:
+                pages = "1-"   # paper.typ is the main text alone
+            with tempfile.TemporaryDirectory(dir=root / ".build-state") as tmp:
+                staged = Path(tmp) / name
+                # A page range cannot carry PDF tags; journals do not read them.
+                subprocess.run(["typst", "compile", "--root", str(folder), "--no-pdf-tags",
+                                "--input", f"toc={placement}", "--pages", pages,
+                                str(folder / "paper.typ"), str(staged)], check=True)
+                if snapshot(root, manifest["dependencies"]) != manifest["sources"]:
+                    raise SubmissionError("the source changed during the export; rerun it")
+                publish(root, staged, name, manuscript_record(
+                    root, manifest, pages=pages, placement=placement, si=layout))
+    if not from_capture:
+        # Outside the lock: the separate target takes it itself.
+        return separate_si_pdf(root, entry) if layout == "separate" else no_si(root, kind)
+    what = (f"pages {pages} of the combined manuscript" if layout == "appendix"
+            else "the whole manuscript; paper.typ carries no SI")
+    return f"wrote {OUT_DIR}/{name} ({what}, graphical abstract: {placement})"
+
+
+def separate_si_pdf(root: Path, entry: str) -> str:
+    """The SI's own manuscript.toml target, compiled and recorded by its inputs."""
+    name = KIND_FILE["si-pdf"]
+    subprocess.run([sys.executable, str(root / "tools/render_stats.py")], cwd=root,
+                   check=True, stdout=subprocess.DEVNULL)
+    with build_lock(root), tempfile.TemporaryDirectory(dir=root / ".build-state") as tmp:
+        staged, deps = Path(tmp) / name, Path(tmp) / "deps.json"
+        subprocess.run(["typst", "compile", "--root", str(root), "--deps", str(deps),
+                        entry, str(staged)], cwd=root, check=True)
+        sources = file_sources(root, ["manuscript.toml", *compile_inputs(root, deps)])
+        sources["tools/submission.py"] = tool_digest()
+        publish(root, staged, name, {"kind": "files", "sources": sources, "si": "separate"})
+    return f"wrote {OUT_DIR}/{name} (the separate SI target {entry})"
+
+
+def compile_inputs(root: Path, deps: Path) -> list[str]:
+    """The files a `typst compile --deps` read, relative to root where possible."""
+    inputs = []
+    for p in json.loads(deps.read_text())["inputs"]:
+        path = Path(p)
+        try:
+            inputs.append(path.resolve().relative_to(root.resolve()).as_posix())
+        except ValueError:
+            inputs.append(str(path))
+    return inputs
 
 
 def split_word_source(text: str) -> tuple[str, str]:
@@ -287,7 +387,15 @@ def split_docx(root: Path, kind: str) -> str:
     name = KIND_FILE[kind]
     with build_lock(root):
         folder, manifest = capture(root)
-        main, si = split_word_source((folder / "paper.word.typ").read_text())
+        layout, entry = si_layout(root, folder)
+        if kind == "si-docx" and layout != "appendix":
+            if layout == "separate":
+                forget(root, name)
+                return (f"note: the SI is the separate PDF target {entry}; "
+                        f"no {OUT_DIR}/{name} written")
+            return no_si(root, kind)
+        text = (folder / "paper.word.typ").read_text()
+        main, si = split_word_source(text) if layout == "appendix" else (text, "")
         with tempfile.TemporaryDirectory(dir=root / ".build-state") as tmp:
             source = Path(tmp) / "part.word.typ"
             write_text(source, main if kind == "main-docx" else si)
@@ -301,7 +409,7 @@ def split_docx(root: Path, kind: str) -> str:
                            check=True, stdout=subprocess.DEVNULL)
             if snapshot(root, manifest["dependencies"]) != manifest["sources"]:
                 raise SubmissionError("the source changed during the export; rerun it")
-            publish(root, staged, name, manuscript_record(root, manifest))
+            publish(root, staged, name, manuscript_record(root, manifest, si=layout))
     return f"wrote {OUT_DIR}/{name} (from captured manuscript {manifest['id'][:12]})"
 
 
@@ -414,13 +522,7 @@ def cover_letter(root: Path) -> str:
         staged, deps = Path(tmp) / name, Path(tmp) / "deps.json"
         subprocess.run(["typst", "compile", "--root", str(root), "--deps", str(deps),
                         *args, str(source), str(staged)], cwd=root, check=True)
-        inputs = []
-        for p in json.loads(deps.read_text())["inputs"]:
-            path = Path(p)
-            try:
-                inputs.append(path.resolve().relative_to(root.resolve()).as_posix())
-            except ValueError:
-                inputs.append(str(path))
+        inputs = compile_inputs(root, deps)
         sel = load_selection(root)
         inputs.append(CONFIG)
         if sel and sel["profile"]:

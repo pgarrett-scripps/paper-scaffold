@@ -123,6 +123,104 @@ class SubmissionCases(unittest.TestCase):
                               "#context [#metadata(here().page()) <si-start>]\nSI.\n")
         self.assertEqual(submission.si_start(self.root, "journal"), 2)
 
+    # --- where the SI lives ----------------------------------------------------
+
+    def fake_capture(self, paper: str, word: str) -> Path:
+        """A sealed-looking capture of `paper` whose Word projection is `word`."""
+        self.put("paper.typ", paper)
+        folder = self.root / ".build-state" / "manuscripts" / "cap"
+        folder.mkdir(parents=True)
+        (folder / "paper.typ").write_text(paper)
+        (folder / "paper.word.typ").write_text(word)
+        self.put(".build-state/manuscript.json", json.dumps(
+            {"id": "cap" * 8, "path": ".build-state/manuscripts/cap"}))
+        self.put("journal.toml", 'schema_version = 1\nprofile = ""\n')
+        # Records hash the running tool; check reads root/tools/submission.py.
+        self.put("tools/submission.py", (ROOT / "tools/submission.py").read_text())
+        self.reseal()
+        return folder
+
+    def reseal(self) -> None:
+        """Record the tree as it is now as the capture's sources."""
+        from build_state import snapshot
+        deps = ["paper.typ"]
+        (self.root / ".build-state/manuscripts/cap/manifest.json").write_text(json.dumps({
+            "schema_version": 1, "id": "cap" * 8, "files": {}, "dependencies": deps,
+            "sources": snapshot(self.root, deps)}))
+
+    SEPARATE = """schema_version = 1
+default_document = "main"
+[parts.main]
+source = "paper.typ"
+[parts.si]
+source = "si-body.typ"
+[documents.main]
+entrypoint = "paper.typ"
+output = "build/main.pdf"
+parts = ["main"]
+[documents.supplement]
+entrypoint = "si.typ"
+output = "build/si.pdf"
+parts = ["si"]
+"""
+    BODY = "// >>> BODY START\n{}\n// <<< BODY END\n"
+
+    def test_si_layout_reads_the_capture_and_manuscript_toml(self):
+        folder = self.fake_capture("Main.\n", WORD)
+        self.assertEqual(submission.si_layout(self.root, folder), ("appendix", None))
+        (folder / "paper.word.typ").write_text(WORD.replace(HEADING, ""))
+        self.assertEqual(submission.si_layout(self.root, folder), ("none", None))
+        # A separate SI target is found by the part it carries, not its name.
+        self.put("paper.typ", self.BODY.format("Main."))
+        self.put("si-body.typ", self.BODY.format("SI."))
+        self.put("si.typ", '#include "si-body.typ"\n')
+        self.put("manuscript.toml", self.SEPARATE)
+        self.assertEqual(submission.si_layout(self.root, folder), ("separate", "si.typ"))
+
+    @unittest.skipUnless(shutil.which("typst"), "typst not installed")
+    def test_a_manuscript_without_si_ships_main_only(self):
+        # exclusionms-paper: no si-body include, so no <si-start> and no SI
+        # heading. The main file is the whole PDF; the si-* steps note, write
+        # nothing, and clear a stale SI file; check agrees with the set.
+        self.fake_capture("Main text.\n", WORD.replace(HEADING, "").replace("SI text.", ""))
+        self.put("submission/supporting-information.pdf", "stale")
+        submission.save_records(self.root, {"supporting-information.pdf": {
+            "kind": "files", "sources": {}, "output_hash": "x"}})
+        self.reseal()
+        self.assertIn("whole manuscript", submission.split_pdf(self.root, "main-pdf"))
+        for kind in ("si-pdf", "si-docx"):
+            self.assertIn("no Supporting Information", submission.split_pdf(self.root, kind)
+                          if kind == "si-pdf" else submission.split_docx(self.root, kind))
+        self.assertFalse((self.root / "submission/supporting-information.pdf").exists())
+        self.assertEqual(submission.check(self.root), [
+            {"output": "submission/manuscript.pdf", "status": "current"}])
+        records = submission.load_records(self.root)
+        self.assertEqual((records["manuscript.pdf"]["pages"], records["manuscript.pdf"]["si"]),
+                         ("1-", "none"))
+        manifest = json.loads((self.root / "submission/manifest.json").read_text())
+        self.assertIn("no Supporting Information", manifest["note"])
+
+    @unittest.skipUnless(shutil.which("typst"), "typst not installed")
+    def test_a_separate_si_target_is_the_si_pdf_and_has_no_word_file(self):
+        # cascade/paper: the SI is manuscript.toml's second document target.
+        self.fake_capture(self.BODY.format("Main."), WORD.replace(HEADING, ""))
+        self.put("si-body.typ", self.BODY.format("SI body."))
+        self.put("si.typ", '#include "si-body.typ"\n')
+        self.put("manuscript.toml", self.SEPARATE)
+        self.put("tools/render_stats.py", "")
+        self.reseal()
+        self.assertIn("whole manuscript", submission.split_pdf(self.root, "main-pdf"))
+        self.assertIn("separate SI target si.typ", submission.split_pdf(self.root, "si-pdf"))
+        self.assertIn("no submission/supporting-information.docx",
+                      submission.split_docx(self.root, "si-docx"))
+        rows = {r["output"]: r["status"] for r in submission.check(self.root)}
+        self.assertEqual(rows, {"submission/manuscript.pdf": "current",
+                                "submission/supporting-information.pdf": "current"})
+        # The SI PDF is recorded by what it read: an SI edit makes it stale.
+        self.put("si-body.typ", self.BODY.format("SI body, edited."))
+        rows = {r["output"]: r["status"] for r in submission.check(self.root)}
+        self.assertEqual(rows["submission/supporting-information.pdf"], "stale")
+
     def test_split_refuses_without_a_captured_manuscript(self):
         with self.assertRaisesRegex(submission.SubmissionError, "just paper"):
             submission.capture(self.root)
