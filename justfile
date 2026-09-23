@@ -1,5 +1,11 @@
 set positional-arguments
 
+# The paper's own recipes, in a file the scaffold never ships or replaces (see
+# docs/hooks.md). Optional: no project.just, nothing imported. A recipe there
+# with a name used here is an error rather than an override, deliberately, so
+# a paper cannot quietly replace a gate; change a gate through project.toml.
+import? "project.just"
+
 # Manuscript build (Typst). See README.md for the tour.
 #
 # CONVENTION: `just --list` shows the LAST comment line before each recipe as

@@ -10,10 +10,11 @@ replaces:
 | File | Holds |
 |---|---|
 | `project.toml` | The declarations: extra gate stages and the bibliography-audit setting |
+| `project.just` | Extra `just` recipes, imported by the scaffold's `justfile` |
 | `hooks/` | Scripts the declarations name (suggested location) |
 
 `just upgrade-plan` treats them as project-owned, like `paper.typ`.
-Every hook is opt-in: with no `project.toml`, every
+Every hook is opt-in: with no `project.toml` and no `project.just`, every
 recipe behaves exactly as it did before hooks existed. `just hooks` lists
 what this paper declares.
 
@@ -76,8 +77,48 @@ match:
 bib_audit_require_complete = false
 ```
 
+## Project recipes
+
+The `justfile` ends its settings with `import? "project.just"`. Recipes in
+that file appear in `just --list` with their descriptions and run like any
+other recipe. Their paths are relative to the manuscript root. A stage can
+call one:
+
+```just
+# project.just
+# Package the source-data workbook the journal asks for
+source-data:
+  uv run --quiet python hooks/package_source_data.py
+
+# Fail if the source-data workbook is behind the figures
+check-source-data:
+  uv run --quiet python hooks/package_source_data.py --check
+```
+
+```toml
+# project.toml
+[[stages.submission]]
+name = "source data"
+run = "just source-data"
+
+[[stages.preflight]]
+name = "source data"
+run = "just check-source-data"
+```
+
+A recipe with the same name as a scaffold recipe is an error from `just`,
+not an override. The scaffold deliberately leaves `allow-duplicate-recipes`
+off: with it on, `just` silently keeps the scaffold's recipe, and the
+paper's version would never run. Give the recipe a new name. To change what
+a gate does, declare a stage.
+
+The recipes run with the scaffold's settings (`positional-arguments`). Keep
+`set` lines out of `project.just`: `just` applies settings to the whole
+justfile, so one there would change every scaffold recipe too.
+
 ## What is not hooked
 
+- **Replacing a built-in recipe.** See [project recipes](#project-recipes).
 - **Resolver and extractor behaviour.** These are the pipeline's contract
   with the PDF, the Word file and the word count. A paper that needs a change
   there needs an upstream fix, so every paper gets it.

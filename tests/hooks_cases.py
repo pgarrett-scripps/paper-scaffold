@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import contextlib
 import io
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -113,9 +115,40 @@ class Wiring(unittest.TestCase):
             self.assertTrue(upgrade_plan.project_owned(path), path)
 
 
+@unittest.skipUnless(shutil.which("just"), "just is not installed")
+class ProjectJust(Tmp):
+    """project.just adds recipes; it can never replace one."""
+
+    def just(self, *argv: str) -> subprocess.CompletedProcess:
+        shutil.copyfile(ROOT / "justfile", self.root / "justfile")
+        return subprocess.run(["just", "--justfile", str(self.root / "justfile"),
+                               "--working-directory", str(self.root), *argv],
+                              capture_output=True, text=True)
+
+    def test_absent_file_imports_nothing(self):
+        self.assertEqual(self.just("--summary").returncode, 0)
+
+    def test_project_recipes_are_listed_and_run(self):
+        (self.root / "project.just").write_text(
+            "# Package the source data for the journal\n"
+            "source-data:\n  @echo packaged > packaged.txt\n")
+        listed = self.just("--list")
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        self.assertIn("source-data", listed.stdout)
+        self.assertIn("Package the source data", listed.stdout)
+        self.assertEqual(self.just("source-data").returncode, 0)
+        self.assertEqual((self.root / "packaged.txt").read_text(), "packaged\n")
+
+    def test_a_scaffold_recipe_cannot_be_overridden(self):
+        (self.root / "project.just").write_text("verify:\n  @true\n")
+        done = self.just("--summary")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("verify", done.stderr)
+
+
 def run_cases() -> bool:
     suite = unittest.TestSuite()
-    for case in (Stages, Wiring):
+    for case in (Stages, Wiring, ProjectJust):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(case))
     return unittest.TextTestRunner(verbosity=1).run(suite).wasSuccessful()
 
