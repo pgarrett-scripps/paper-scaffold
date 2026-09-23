@@ -67,13 +67,20 @@ def tool(name: str) -> Path:
 
 
 def version() -> str:
-    """The toolchain release these tools belong to."""
+    """The toolchain release these tools belong to.
+
+    A checkout's pyproject.toml is the truth there (whatever else the running
+    interpreter has installed); an installed wheel has none and asks the
+    distribution metadata.
+    """
+    import re
+    py = DATA / "pyproject.toml"
+    if not PACKAGED and py.is_file():
+        m = re.search(r'^version = "([^"]+)"', py.read_text(), re.MULTILINE)
+        if m:
+            return m.group(1)
     try:
         from importlib.metadata import version as dist_version
         return dist_version("paper-scaffold")
-    except Exception:  # not installed (a captured copy, a bare checkout)
-        import re
-        py = DATA / "pyproject.toml"
-        m = re.search(r'^version = "([^"]+)"', py.read_text(), re.MULTILINE) \
-            if py.is_file() else None
-        return m.group(1) if m else "unknown"
+    except Exception:  # a captured copy with no metadata
+        return "unknown"

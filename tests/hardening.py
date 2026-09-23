@@ -323,14 +323,16 @@ class Hardening(unittest.TestCase):
         if not script.exists():
             self.skipTest("new-paper is not shipped into derived manuscripts")
         source = self.root / "source"
-        for name in ("scripts/new-paper.sh", "config.typ", "pyproject.toml", "LICENSE", ".gitignore"):
+        # The whole scaffold as git sees it: new-paper.sh runs `paper sync`
+        # from the copy's package source and data (docs/package.md).
+        listed = subprocess.run(["git", "ls-files", "-co", "--exclude-standard", "-z"],
+                                cwd=ROOT, capture_output=True, text=True, check=True)
+        for name in filter(None, listed.stdout.split("\0")):
+            if not (ROOT / name).exists() and not (ROOT / name).is_symlink():
+                continue  # deleted in the working tree
             target = source / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(ROOT / name, target)
-        shutil.copytree(ROOT / "plugins/paper/skills", source / "plugins/paper/skills")
-        (source / ".agents").mkdir()
-        shutil.copy2(ROOT / ".agents/skills", source / ".agents/skills",
-                     follow_symlinks=False)
+            shutil.copy2(ROOT / name, target, follow_symlinks=False)
         artifacts = ("paper.resolved.typ", ".text-baseline", ".edit-guard/old.json",
                      ".build-state/paper.pdf.json", "audio/paper.m4b")
         for name in artifacts:

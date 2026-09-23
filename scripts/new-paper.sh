@@ -377,7 +377,9 @@ fi
 RELEASE="$(grep -m1 '^version = ' "$SCAFFOLD/pyproject.toml" | cut -d'"' -f2)"
 slug="$(basename "$DEST" | tr '[:upper:] _' '[:lower:]--' | tr -cd 'a-z0-9-')"
 echo "writing pyproject.toml and the generated files (paper sync)"
-PIN="$PIN" uv run --project "$SCAFFOLD" --quiet python - "$DEST" "${slug:-paper}" <<'PY'
+# Run from this checkout's source, not an environment: the scaffold's own
+# .venv need not exist, and nothing here needs more than the standard library.
+PIN="$PIN" PYTHONPATH="$SCAFFOLD/src" python3 - "$DEST" "${slug:-paper}" <<'PY'
 import os, sys
 from pathlib import Path
 from paper_scaffold.migrate import DEFAULT_PIN, pyproject_for, _toml
@@ -387,7 +389,7 @@ groups = _toml().loads((data_dir() / "pyproject.toml").read_text()).get("depende
 pin = os.environ.get("PIN") or DEFAULT_PIN.format(v=version())
 (dest / "pyproject.toml").write_text(pyproject_for(name, pin, [], groups))
 PY
-uv run --project "$SCAFFOLD" --quiet paper sync --root "$DEST" >/dev/null
+PYTHONPATH="$SCAFFOLD/src" python3 -m paper_scaffold.cli sync --root "$DEST" >/dev/null
 
 # ---------------------------------------------------------------------------
 # Build before the first commit. Neither output is tracked any more, so the order

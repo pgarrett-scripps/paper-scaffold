@@ -104,6 +104,7 @@ CASE_MODULES = (
     "actions_cases",          # the review action ledger, reviews/ACTIONS.md
     "narration_cases",        # audio/: what the audiobook voice is handed
     "hooks_cases",            # project.toml: the paper's extension hooks
+    "package_cases",          # paper sync, sync --check, paper migrate
 )
 
 
