@@ -71,6 +71,11 @@ RULES: dict[str, tuple[str, str]] = {
     "si-bibliography-prefix": ("error", "the prefix"),
     "missing-doi":        ("warn",  "the entry key"),
     "implausible-year":   ("warn",  "the entry key"),
+    # Read by bib_audit.py, not prose_check: a DOI record the registrar has
+    # wrong ("McLaffertycor"), or one missing a published correction. The
+    # bibliography is the correct side and must not be edited to match, so
+    # the mismatch is allowed here, with the reason as a comment beside it.
+    "doi-metadata":       ("error", "the entry key, or key:field (smith2020:author)"),
     # House style, off unless `enable` names them (see OPT_IN).
     "list-in-prose":      ("error", "the item's first words"),
     "bold-in-prose":      ("error", "the bold text"),

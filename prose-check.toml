@@ -44,6 +44,12 @@ unexpanded-acronym = [
 # uncited-reference = ["somekey"]
 # missing-doi = ["somekey"]   # a preprint or dataset with no DOI issued
 
+# A DOI record the registrar has wrong, read by `just bib-audit`: the entry
+# key, or key:field to excuse one field (title, author, year, venue, volume,
+# issue, pages). Check the publisher's page first; the bibliography is only
+# the correct side if the record really is the error.
+# doi-metadata = ["somekey:author"]   # Crossref fuses the surname with "cor"
+
 # A figure or table cited only from somewhere the checker does not read.
 # uncited-figure = ["fig:example"]
 

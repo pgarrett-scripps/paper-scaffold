@@ -259,11 +259,37 @@ def bibliography_cases() -> bool:
     # preflight fail, not merely print an advisory that can scroll past.
     import contextlib
     import io
-    with contextlib.redirect_stdout(io.StringIO()):
-        rc = ba.audit(entries=[wrong],
-                      fetch=lambda doi, timeout: ("ok", metadata), pause=False)
+    def run(allowed):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = ba.audit(entries=[wrong], allowed=allowed, pause=False,
+                          fetch=lambda doi, timeout: ("ok", metadata))
+        return rc, out.getvalue()
+
+    rc, _ = run(set())
     if rc != 1:
         print("  bib-audit metadata: a core mismatch did not fail the audit")
+        ok = False
+
+    # [allow].doi-metadata in prose-check.toml: the registrar is wrong, not
+    # the entry. The key excuses every field; key:field excuses only that one,
+    # so a wrong year beside an allowed author still fails. Excused mismatches
+    # stay printed, and an allowance that excuses nothing is reported.
+    rc, out = run({"curie2020"})
+    if rc != 0 or "allowed by [allow].doi-metadata" not in out:
+        print("  bib-audit allow: a key allowance did not excuse the entry")
+        ok = False
+    rc, _ = run({"curie2020:author", "curie2020:title"})
+    if rc != 1:
+        print("  bib-audit allow: key:field excused fields it did not name")
+        ok = False
+    rc, _ = run({"curie2020:author", "curie2020:title", "curie2020:year"})
+    if rc != 0:
+        print("  bib-audit allow: naming every mismatched field did not pass")
+        ok = False
+    rc, out = run({"curie2020:volume"})
+    if "no longer excuse anything" not in out or "curie2020:volume" not in out:
+        print("  bib-audit allow: an allowance matching nothing was not reported")
         ok = False
     return ok
 

@@ -13,6 +13,11 @@ in addition to checking for retractions and dead DOI links. A paper can also be
 retracted years after you cite it, so the answer has a shelf life and the check
 is worth re-running late.
 
+A registrar record can itself be wrong. Name the entry in prose-check.toml's
+[allow].doi-metadata, as its key or as key:field to excuse one field, with
+the reason as a comment beside it; the mismatch is still printed, but no
+longer fails, and an allowance that stops matching anything is reported.
+
 Crossref is free, needs no key, and asks only that you identify yourself in the
 User-Agent so they can contact you about a misbehaving script.
 
@@ -400,17 +405,51 @@ def _fetch(doi: str, timeout: float):
         return "error", str(e)[:60]
 
 
+def _allowed() -> set[str]:
+    """prose-check.toml's [allow].doi-metadata: entry keys, or key:field.
+
+    Lower-cased, as every [allow] value is. A registrar record can be wrong
+    (Crossref once fused an author's name with "cor"), or lack a published
+    correction the entry carries; then the bibliography is right and must not
+    be edited to match. The allowance lives with every other exception, where
+    its reason is written as a comment, rather than in the .bib.
+    """
+    sys.path.insert(0, str(ROOT / "tools"))
+    from prose_rules import load_config
+    return set(load_config(ROOT).allow.get("doi-metadata", set()))
+
+
+def _checked_keys(entries: list[dict], errors: list, missing: list) -> set[str]:
+    """Keys whose DOI record was actually compared this run."""
+    skipped = {key for key, _doi, _msg in errors + missing}
+    return {e["_key"] for e in entries
+            if (e.get("doi") or "").strip() and e["_key"] not in skipped}
+
+
 def audit(timeout: float = 15.0, *, entries: list[dict] | None = None,
-          fetch=None, pause: bool = True, require_complete: bool = False) -> int:
+          fetch=None, pause: bool = True, require_complete: bool = False,
+          allowed: set[str] | None = None) -> int:
     """Audit the bibliography; injectable inputs keep regression tests offline."""
     entries = _entries() if entries is None else entries
     if not entries:
         return 0
     fetch = fetch or _fetch
+    allowed = _allowed() if allowed is None else allowed
 
     withdrawn, concerns, missing, errors = [], [], [], []
-    metadata_errors, metadata_warnings = [], []
+    metadata_errors, metadata_warnings, metadata_allowed = [], [], []
+    used: set[str] = set()
     checked = datacite = 0
+
+    def sort_issues(key: str, doi: str, e: dict, state: str, msg: dict):
+        for item in _metadata_issues(e, state, msg):
+            names = {key.lower(), f"{key}:{item.field}".lower()} & allowed
+            if names:
+                used.update(names)
+                metadata_allowed.append((key, doi, item))
+            else:
+                target = metadata_errors if item.fatal else metadata_warnings
+                target.append((key, doi, item))
 
     for e in entries:
         doi = (e.get("doi") or "").strip()
@@ -428,13 +467,9 @@ def audit(timeout: float = 15.0, *, entries: list[dict] | None = None,
             errors.append((key, doi, msg))
         elif state == "datacite":
             datacite += 1                       # resolves; no retraction data
-            for item in _metadata_issues(e, state, msg):
-                target = metadata_errors if item.fatal else metadata_warnings
-                target.append((key, doi, item))
+            sort_issues(key, doi, e, state, msg)
         else:
-            for item in _metadata_issues(e, state, msg):
-                target = metadata_errors if item.fatal else metadata_warnings
-                target.append((key, doi, item))
+            sort_issues(key, doi, e, state, msg)
             kinds = {(u.get("type") or "").lower()
                      for u in (msg.get(UPDATED_BY) or [])}
             title = ((msg.get("title") or [""])[0] or "").strip().lower()
@@ -475,6 +510,24 @@ def audit(timeout: float = 15.0, *, entries: list[dict] | None = None,
         for key, doi, item in metadata_warnings:
             print(f"  {key}  {doi}  {item.field}: "
                   f"bibliography={item.local!r}; registered={item.registered!r}")
+    if metadata_allowed:
+        # Still printed: the allowance excuses the mismatch, it does not hide
+        # it, and the reason sits beside the key in prose-check.toml.
+        print("\nmismatch allowed by [allow].doi-metadata in prose-check.toml "
+              "(the registrar is wrong; see the reason there):")
+        for key, doi, item in metadata_allowed:
+            print(f"  {key}  {doi}  {item.field}: "
+                  f"bibliography={item.local!r}; registered={item.registered!r}")
+    checked_keys = {k.lower() for k in _checked_keys(entries, errors, missing)}
+    stale = sorted(a for a in allowed - used
+                   if a.split(":", 1)[0] in checked_keys)
+    if stale:
+        # The registrar fixed its record, or the entry changed: an allowance
+        # that excuses nothing would silently excuse the next real mismatch.
+        print("\n[allow].doi-metadata entries that no longer excuse anything "
+              "(delete them from prose-check.toml):")
+        for a in stale:
+            print(f"  {a}")
     if errors:
         # NOT a failure. Being offline is not a bibliography defect, and treating
         # it as one is how a network check starts getting skipped.
@@ -483,7 +536,7 @@ def audit(timeout: float = 15.0, *, entries: list[dict] | None = None,
             print(f"  {key}  {doi}  {msg}")
 
     if not (withdrawn or concerns or missing or errors or metadata_errors
-            or metadata_warnings):
+            or metadata_warnings or metadata_allowed):
         print("every DOI resolves, matches its bibliography entry, and none "
               "is retracted")
     return rc or (2 if errors and require_complete else 0)

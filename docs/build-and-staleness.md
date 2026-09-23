@@ -45,6 +45,14 @@ versus full given names, and the different dashes used for BibTeX page ranges.
 If a registrar omitted a field, the audit says nothing about that field rather
 than pretending it verified information it never received.
 
+Sometimes the registrar is the side that is wrong: a surname fused with a
+footnote marker, or a record that never picked up a published correction. Do
+not edit the bibliography to match. Name the entry in `prose-check.toml` as
+`[allow] doi-metadata = ["key"]`, or `"key:author"` to excuse one field only,
+with the reason in a comment beside it. The mismatch is still printed but no
+longer fails, and an allowance that stops excusing anything is listed for
+deletion.
+
 **Neither output is tracked in git**, and neither is `.build-state/`. Git keeps
 every version of a binary forever, a clone pays for all of them, and removing one
 means rewriting history. Ship the PDF as a release asset or a CI artifact.
