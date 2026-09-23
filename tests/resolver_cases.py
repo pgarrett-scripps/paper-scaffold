@@ -156,10 +156,84 @@ def run_cases() -> bool:
             ok = False
         except rt.ResolveError:
             pass
+
+        ok = _si_contents_cases(rt) and ok
     finally:
         typst_prose.STATS_JSON = saved
         tbl_tmp.cleanup()
     return ok
+
+
+def _si_contents_cases(rt) -> bool:
+    """`#si-contents`: the Word sentence matches what the PDF prints.
+
+    The PDF builds the sentence in a `context` block (docs/manuscript.md),
+    the Word export rebuilds it from the numbering pass (koth-paper, whose
+    hand-written paragraph had drifted from the SI's headings). Two
+    implementations of one sentence drift too, so the documented block is
+    compiled here and the two texts compared.
+    """
+    import shutil
+    import subprocess
+    ok = True
+    si = ("= Methods <sec:m>\n"
+          '#figure(rect(), caption: [a]) <fig:a>\n'
+          "== Detail\n"
+          "#figure(table([x]), caption: [t]) <tbl:t>\n"
+          "= Data\n"
+          '#figure(rect(), caption: [b]) <fig:b>\n')
+    main = ("= Intro\n#si-contents\n"
+            '#figure(rect(), caption: [m]) <fig:m>\n')
+    want = "Sections S1 Methods, S2 Data. Figures S1–S2 and Table S1 (PDF)."
+    got = rt.resolve_crossrefs("", main + rt._SI_MARK + "\n" + si)
+    if want not in got or "#si-contents" in got:
+        print(f"  resolver [si-contents]: expected {want!r} in {got!r}")
+        ok = False
+    for summary, sentence in (
+            ({"sections": [("S1", "Methods")], "fig": 1, "tbl": 0},
+             "Section S1 Methods. Figure S1 (PDF)."),
+            ({"sections": [], "fig": 0, "tbl": 3}, "Tables S1–S3 (PDF)."),
+            ({"sections": [("S1", "A"), ("S2", "B")], "fig": 0, "tbl": 0},
+             "Sections S1 A, S2 B (PDF).")):
+        if rt.si_contents_sentence(summary) != sentence:
+            print(f"  resolver [si-contents]: {summary} gave "
+                  f"{rt.si_contents_sentence(summary)!r}, not {sentence!r}")
+            ok = False
+    try:
+        rt.resolve_crossrefs("", main)
+        print("  resolver [si-contents]: listed an SI the export does not hold")
+        ok = False
+    except rt.ResolveError:
+        pass
+
+    if not (shutil.which("typst") and shutil.which("pdftotext")):
+        print("  resolver [si-contents]: typst or pdftotext missing; "
+              "PDF parity not checked")
+        return ok
+    doc = (ROOT / "docs" / "manuscript.md").read_text(encoding="utf-8")
+    block = re.search(r"```typst\n((?:(?!```).)*#let si-contents(?:(?!```).)*)```",
+                      doc, re.S)
+    if block is None:
+        print("  resolver [si-contents]: docs/manuscript.md lost the helper")
+        return False
+    setup = ("#pagebreak()\n#context [#metadata(here().page()) <si-start>]\n"
+             "#counter(figure.where(kind: image)).update(0)\n"
+             "#counter(figure.where(kind: table)).update(0)\n"
+             "#counter(heading).update(0)\n"
+             '#set heading(numbering: (..n) => "S" + n.pos().map(str).join("."))\n')
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "si.typ"
+        src.write_text(block.group(1) + main + setup + si, encoding="utf-8")
+        proc = subprocess.run(["typst", "compile", str(src)],
+                              capture_output=True, text=True)
+        text = subprocess.run(["pdftotext", str(src.with_suffix(".pdf")), "-"],
+                              capture_output=True, text=True).stdout
+    if proc.returncode or want not in " ".join(text.split()):
+        print(f"  resolver [si-contents]: the PDF printed {' '.join(text.split())[:160]!r}"
+              f"{proc.stderr[:200]}, the Word export {want!r}")
+        ok = False
+    return ok
+
 
 if __name__ == "__main__":
     raise SystemExit(0 if run_cases() else 1)
