@@ -20,10 +20,20 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 PAPER = HERE.parent.parent            # analysis/scripts/ -> analysis/ -> paper/
 
-sys.path.insert(0, str(PAPER / "tools"))
+# The toolchain modules these helpers share with the checks (atomic_io,
+# manifest_validation, hashcache, paths). The analysis environment does not
+# install the toolchain package, so in a paper `paper sync` writes copies to
+# _toolchain/ beside this file; the scaffold checkout reads its own tools/.
+TOOLCHAIN = PAPER / "tools" if (PAPER / "tools" / "paths.py").is_file() else HERE / "_toolchain"
+sys.path.insert(0, str(TOOLCHAIN))
 # The checks compare with the same function, so recording and checking agree
 # on what a root pyproject.toml / uv.lock hash covers (not its version line).
-from hashcache import recorded_sha
+import hashcache  # noqa: E402
+from hashcache import recorded_sha  # noqa: E402
+
+# hashcache places its cache at the manuscript root it reads from the working
+# directory (tools/paths.py); a generator runs from analysis/scripts/.
+hashcache.CACHE = PAPER / ".hash-cache.json"
 
 
 def sha(p: Path) -> str:

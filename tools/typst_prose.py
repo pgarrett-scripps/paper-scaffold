@@ -21,6 +21,8 @@ import json
 import re
 from pathlib import Path
 
+from paths import ROOT  # the manuscript (tools/paths.py)
+
 # A number pulled from the analysis through the manuscript's `s` helper:
 # `#s("effect.treated_fold")`. Tolerant of a reflow putting a break inside the
 # call, like every other pattern here.
@@ -68,8 +70,7 @@ TODO = r'#todo\(\s*"([^"]*)"\s*,?\s*\)'
 
 
 # Written by analysis/scripts/gen_stats.py, beside the generated SI tables.
-# .parent.parent because this file lives in tools/; si/ is at the root.
-STATS_JSON = Path(__file__).resolve().parent.parent / "stats.json"
+STATS_JSON = ROOT / "stats.json"
 
 # An explicit cross-reference call: Typst's own `#ref(<x>)` or a manuscript's
 # `#refn(<x>)` helper. BOTH forms have to be here. `#ref(` is the more natural
@@ -278,7 +279,7 @@ def data_file_registry(root: Path | None = None) -> dict:
     if root is not None or DATA_FILES is None:
         import subprocess
         cache = root is None
-        root = root or Path(__file__).resolve().parent.parent
+        root = root or ROOT
         try:
             proc = subprocess.run(
                 ["typst", "query", "--root", str(root), "-", "<data-files>",

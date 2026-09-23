@@ -15,7 +15,7 @@ import sys
 
 from document_project import keys, tomllib
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 CONFIG = "word-limits.toml"
 # "references" is the main text's reference list as citeproc sets it for the
 # Word file, from tools/journal.py; a journal whose limit covers the list

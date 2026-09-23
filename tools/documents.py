@@ -11,7 +11,7 @@ import sys
 from document_project import load_project
 import document_build
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT, tool  # the manuscript (tools/paths.py)
 
 
 def print_metrics(data: dict):
@@ -44,7 +44,7 @@ def main() -> int:
             for manifest, checker in (("stats.json", "check_stats.py"),
                                       ("assets.json", "check_assets.py")):
                 if (project.root / manifest).is_file():
-                    result = subprocess.run([sys.executable, str(project.root / "tools" / checker)],
+                    result = subprocess.run([sys.executable, str(tool(checker))],
                                             cwd=project.root)
                     rc = max(rc, int(result.returncode != 0))
         for doc in selected:

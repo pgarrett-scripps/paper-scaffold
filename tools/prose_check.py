@@ -37,7 +37,7 @@ from manuscript_sources import mask, si_bibliography
 from prose_rules import Config, Finding, list_rules, load_config, report
 
 # The manuscript root, one level up: this file lives in tools/.
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 
 # --- ERRORS: no legitimate exception --------------------------------------
 

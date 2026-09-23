@@ -32,9 +32,9 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT, TOOLS  # the manuscript (tools/paths.py)
 LEDGER = ROOT / "reviews" / "ACTIONS.md"
-TEMPLATE = ROOT / "tools" / "actions-template.md"
+TEMPLATE = TOOLS / "actions-template.md"
 
 COLUMNS = ("id", "severity", "status", "source", "summary", "fix", "closed")
 SEVERITIES = ("blocker", "major", "minor")

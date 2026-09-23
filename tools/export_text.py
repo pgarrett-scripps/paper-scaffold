@@ -20,7 +20,7 @@ from atomic_io import write_text
 from document_project import body_span, load_project
 from manuscript_sources import matches, source_files, without_si_bibliography
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 
 INVENTORY = r'''
 #context [#metadata((

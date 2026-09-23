@@ -31,7 +31,7 @@ import prose_check                      # noqa: E402  (COMMON, the bib reader)
 import readability                      # noqa: E402
 
 # The manuscript root, one level up: this file lives in tools/.
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 OUT = ROOT / "viz"
 
 # Determinism, so a rebuild with no edits produces the same bytes and does not

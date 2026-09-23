@@ -41,7 +41,7 @@ from typst_prose import (
 )
 
 # The manuscript root, one level up: this file lives in tools/.
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 PAPER = ROOT / "paper.typ"
 SI = ROOT / "si-body.typ"
 

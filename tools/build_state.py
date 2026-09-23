@@ -23,7 +23,7 @@ from manuscript_sources import source_files
 from manifest_validation import load
 from project_hooks import build_inputs
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import DATA, ROOT, locate, tool  # the manuscript (tools/paths.py)
 BUILD_TOOLS = ("render_stats.py", "typst_prose.py", "journal.py",
                "resolve_typst.py", "export_docx.py", "word_xml.py",
                "paper_word_reference.py", "readability.py",
@@ -48,12 +48,17 @@ def snapshot(root: Path, dependencies=()) -> dict[str, str | None]:
                                          "pyproject.toml", "uv.lock", "justfile", "journal.toml"))
     # The selected journal profile steers where the graphical abstract lands,
     # so a placement change is a source change to both outputs.
-    paths.update(root.glob("journals/*.toml"))
-    paths.update(root / "tools" / name for name in BUILD_TOOLS)
+    # Journals, build tools and the reference docx may come from the installed
+    # toolchain (tools/paths.py): hash their CONTENTS under the manuscript-
+    # relative name, so an upgrade that changes one is a source change and a
+    # paper's own override is captured the same way.
+    toolchain = {f"tools/{name}" for name in BUILD_TOOLS}
+    toolchain.add("word/paper-reference.docx")
+    toolchain.update(f"journals/{p.name}" for base in (root, DATA)
+                     for p in (base / "journals").glob("*.toml"))
     # project.toml and the Word steps it names (docs/hooks.md), captured with
     # the manuscript so a build of it converts the way it was built.
     paths.update(root / name for name in build_inputs(root))
-    paths.add(root / "word/paper-reference.docx")
     paths.update(root.glob("*.bib"))
     paths.update(root.glob("*.csl"))
     for folder in ("figures", "si", "csl"):
@@ -67,6 +72,9 @@ def snapshot(root: Path, dependencies=()) -> dict[str, str | None]:
             name = path.relative_to(root).as_posix()
         except ValueError:
             name = str(path)
+        result[name] = digest(path) if path.is_file() else None
+    for name in sorted(toolchain):
+        path = locate(root, name)
         result[name] = digest(path) if path.is_file() else None
     result["stats.json"] = stats_digest(root)
     return result
@@ -168,7 +176,7 @@ def build(mode: str, root: Path = ROOT) -> int:
             def run(*args):
                 subprocess.run(args, cwd=root, check=True)
 
-            run(sys.executable, str(root / "tools/render_stats.py"))
+            run(sys.executable, str(tool("render_stats.py")))
             # Discover actual inputs before capturing them, including dynamic
             # image/data paths. This probe is never published as the final PDF.
             run("typst", "compile", "--deps", str(depfile), "--input", f"toc={toc_pdf}",
@@ -183,7 +191,7 @@ def build(mode: str, root: Path = ROOT) -> int:
                 if mode in ("paper", "resolve"):
                     shutil.copyfile(folder / "paper.pdf", staged)
                 else:
-                    run(sys.executable, str(root / "tools/export_docx.py"),
+                    run(sys.executable, str(tool("export_docx.py")),
                         "--root", str(folder), "--source", str(folder / "paper.word.typ"),
                         "--output", str(staged))
                 if snapshot(root, dependencies) != before:

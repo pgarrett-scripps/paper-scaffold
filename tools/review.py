@@ -21,7 +21,7 @@ from urllib.parse import unquote
 from atomic_io import write_text
 from manuscript_snapshot import validate
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 
 
 def make_document(folder: Path) -> dict:

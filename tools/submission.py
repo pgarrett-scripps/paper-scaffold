@@ -71,8 +71,8 @@ import tempfile
 from pathlib import Path
 from typing import NamedTuple
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
+from paths import ROOT, locate, tool  # the manuscript (tools/paths.py)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from atomic_io import write_text
 from build_state import build_lock, digest, snapshot, stats_digest
@@ -145,7 +145,7 @@ def file_sources(root: Path, names) -> dict[str, str | None]:
     """{name: hash} for a small explicit input set (graphic, letter)."""
     out = {}
     for name in sorted(set(names)):
-        path = Path(name) if Path(name).is_absolute() else root / name
+        path = Path(name) if Path(name).is_absolute() else locate(root, name)
         if name in ("stats.json", "stats-rendered.json"):
             # Derived from stats.json by every compile; hash the source instead,
             # so a stats edit not yet rendered still reads as a change.
@@ -160,8 +160,7 @@ def current_sources(root: Path, record: dict) -> dict:
         now = snapshot(root, record["dependencies"])
     else:
         now = file_sources(root, record["sources"])
-    now["tools/submission.py"] = digest(root / "tools/submission.py") \
-        if (root / "tools/submission.py").is_file() else None
+    now["tools/submission.py"] = tool_digest()
     return now
 
 
@@ -368,7 +367,7 @@ def split_pdf(root: Path, kind: str) -> str:
 def separate_si_pdf(root: Path, entry: str) -> str:
     """The SI's own manuscript.toml target, compiled and recorded by its inputs."""
     name = KIND_FILE["si-pdf"]
-    subprocess.run([sys.executable, str(root / "tools/render_stats.py")], cwd=root,
+    subprocess.run([sys.executable, str(tool("render_stats.py"))], cwd=root,
                    check=True, stdout=subprocess.DEVNULL)
     with build_lock(root), tempfile.TemporaryDirectory(dir=root / ".build-state") as tmp:
         staged, deps = Path(tmp) / name, Path(tmp) / "deps.json"
@@ -513,7 +512,7 @@ def split_docx(root: Path, kind: str) -> str:
             # The captured tools/, so a capture converts the way it was built.
             export = folder / "tools" / "export_docx.py"
             if not export.is_file():
-                export = root / "tools" / "export_docx.py"
+                export = tool("export_docx.py")
             subprocess.run([sys.executable, str(export), "--root", str(folder),
                             "--source", str(source), "--output", str(staged)],
                            check=True, stdout=subprocess.DEVNULL)
@@ -621,7 +620,7 @@ def cover_letter(root: Path) -> str:
         return f"note: no {LETTER_SOURCE}; no cover letter written"
     from journal import CONFIG, current, load_selection
     profile, _ = current(root)
-    subprocess.run([sys.executable, str(root / "tools/render_stats.py")], cwd=root,
+    subprocess.run([sys.executable, str(tool("render_stats.py"))], cwd=root,
                    check=True, stdout=subprocess.DEVNULL)
     name = "cover-letter.pdf"
     args = []

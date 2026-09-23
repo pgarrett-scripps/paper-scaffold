@@ -7,15 +7,15 @@ import os
 import subprocess
 import sys
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT, tool  # the manuscript (tools/paths.py)
 
 
 def main(root: Path = ROOT) -> int:
     # Capture each report so concurrent processes cannot interleave tables.
     # Both must finish before returning, including when either one fails.
     commands = (
-        ["bash", str(root / "tools/wordcount.sh")],
-        [sys.executable, str(root / "tools/readability.py")],
+        ["bash", str(tool("wordcount.sh"))],
+        [sys.executable, str(tool("readability.py"))],
     )
     env = os.environ.copy()
     if sys.stdout.isatty():

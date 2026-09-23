@@ -301,12 +301,11 @@ parts = ["si"]
         self.assertEqual(submission.load_records(self.root), {})
 
     def test_recorded_output_goes_stale_and_replaced(self):
-        # The record hashes the running tool; point the tool path at this root.
-        self.put("tools/submission.py", "# tool\n")
+        # The record hashes the running tool (tools/paths.py), wherever it is.
         self.put("cover-letter.typ", "Dear Editors,\n")
         staged = self.put("staged.pdf", "pdf")
         sources = submission.file_sources(self.root, ["cover-letter.typ"])
-        sources["tools/submission.py"] = submission.digest(self.root / "tools/submission.py")
+        sources["tools/submission.py"] = submission.tool_digest()
         submission.publish(self.root, staged, "cover-letter.pdf",
                            {"kind": "files", "sources": sources})
         rows = submission.check(self.root)

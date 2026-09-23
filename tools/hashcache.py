@@ -31,7 +31,7 @@ import re
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 CACHE = ROOT / ".hash-cache.json"
 
 # A cached digest is trusted only for a file last modified longer ago than

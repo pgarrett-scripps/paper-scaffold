@@ -27,8 +27,8 @@ import tempfile
 from pathlib import Path
 
 # The manuscript root, one level up: this file lives in tools/.
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
+from paths import ROOT  # the manuscript (tools/paths.py)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import readability  # noqa: E402
 import typst_prose  # noqa: E402

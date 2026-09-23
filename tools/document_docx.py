@@ -35,7 +35,7 @@ from word_capture import capture, composed_artwork
 from word_content import WordContent, escape
 from word_pagination import paginate
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT, locate  # the manuscript (tools/paths.py)
 TOOLS = ('document_docx.py', 'word_capture.py', 'word_content.py', 'export_docx.py',
          'export_text.py', 'manuscript_snapshot.py', 'bibliography.py', 'word_pagination.py', 'word_reference.py', 'word_xml.py')
 W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -51,7 +51,7 @@ def sources_fingerprint(project, document, dependencies):
     result = fingerprint(project, document, dependencies)
     for name in TOOLS:
         result['@word-tool/' + name] = digest(Path(__file__).parent / name)
-    result['@word-reference'] = digest(project.root / REFERENCE)
+    result['@word-reference'] = digest(locate(project.root, REFERENCE.as_posix()))
     result['american-chemical-society.csl'] = digest(project.root / 'american-chemical-society.csl')
     return result
 
@@ -538,7 +538,7 @@ def build(project, document):
         expected['equations'] = sum(n.get('t') == 'Math' for n in walk(tree['blocks']))
         import pypandoc
         output = temp/'output.docx'
-        pypandoc.convert_text(json.dumps(tree), 'docx', format='json', outputfile=str(output), extra_args=['--fail-if-warnings', '--reference-doc', str(project.root / REFERENCE)])
+        pypandoc.convert_text(json.dumps(tree), 'docx', format='json', outputfile=str(output), extra_args=['--fail-if-warnings', '--reference-doc', str(locate(project.root, REFERENCE.as_posix()))])
         format_docx(output)
         if data['front']:
             print('dissertation: calculating Word contents and list page numbers', flush=True)

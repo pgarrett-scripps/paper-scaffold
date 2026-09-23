@@ -18,7 +18,7 @@ from manuscript_sources import mask, matches
 import readability
 import typst_prose
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 TOKEN = re.compile(r"\b[^\W\d_]+(?:[-'’][^\W\d_]+)*\b")
 INCLUDE = re.compile(r'#include\s+"([^"\n]+)"')
 

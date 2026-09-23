@@ -41,8 +41,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
+from paths import ROOT, locate, tool  # the manuscript (tools/paths.py)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from atomic_io import write_text  # noqa: E402
 from build_state import (  # noqa: E402
@@ -141,7 +141,7 @@ def snapshot(root: Path, name: str, dependencies=()) -> dict[str, str | None]:
     paths = {root / n for n in source_files(root, entrypoints=(deck,))}
     paths.update(root / n for n in ("assets.json", "pyproject.toml",
                                     "uv.lock", "justfile"))
-    paths.update(root / "tools" / n for n in DECK_TOOLS)
+    paths.update(locate(root, f"tools/{n}") for n in DECK_TOOLS)
     paths.update(root.glob("*.bib"))
     paths.update(root.glob("*.csl"))
     paths.update(Path(p) if Path(p).is_absolute() else root / p
@@ -187,7 +187,7 @@ def build(name: str, *, handout: bool = False, draft: bool = False,
     with build_lock(root), tempfile.TemporaryDirectory(dir=root / ".build-state") as tmp:
         staged = Path(tmp) / out.name
         deps = Path(tmp) / "deps.json"
-        subprocess.run([sys.executable, str(root / "tools/render_stats.py")],
+        subprocess.run([sys.executable, str(tool("render_stats.py"))],
                        cwd=root, check=True)
         before = snapshot(root, name, dependency_list(root, name, handout=handout))
         _compile(root, name, staged, deps, handout=handout, draft=draft)

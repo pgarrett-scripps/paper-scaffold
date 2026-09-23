@@ -47,7 +47,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # The manuscript root, one level up: this file lives in tools/.
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 API = "https://api.crossref.org/works/"
 
 # Crossref registers journal articles. Software and dataset DOIs -- Zenodo,
@@ -511,7 +511,7 @@ def _allowed() -> set[str]:
     be edited to match. The allowance lives with every other exception, where
     its reason is written as a comment, rather than in the .bib.
     """
-    sys.path.insert(0, str(ROOT / "tools"))
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from prose_rules import load_config
     return set(load_config(ROOT).allow.get("doi-metadata", set()))
 

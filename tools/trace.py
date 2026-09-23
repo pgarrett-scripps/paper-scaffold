@@ -17,7 +17,7 @@ from manifest_validation import load
 from manuscript_sources import usages
 from typst_prose import display_of
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 
 
 def inspect(id: str, root: Path = ROOT, kind: str | None = None) -> dict:

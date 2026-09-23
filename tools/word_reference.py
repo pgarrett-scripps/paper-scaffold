@@ -10,7 +10,7 @@ from word_xml import order_properties
 
 W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 NS = {'w': W}
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 REFERENCE = Path('word/reference.docx')
 
 

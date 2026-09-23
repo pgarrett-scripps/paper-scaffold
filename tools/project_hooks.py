@@ -29,7 +29,7 @@ try:
 except ModuleNotFoundError:            # Python 3.10
     import tomli as tomllib            # type: ignore
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 
 FILE = "project.toml"
 # Where each gate's project stages run:

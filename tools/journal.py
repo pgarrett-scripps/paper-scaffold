@@ -40,8 +40,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
+from paths import DATA, ROOT, locate  # the manuscript (tools/paths.py)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from document_project import keys as _keys, tomllib  # noqa: E402
 
@@ -125,14 +125,14 @@ def _positive(table: dict, key: str, where: str, *, number=False) -> None:
 
 
 def available(root: Path = ROOT) -> list[str]:
-    folder = root / PROFILES
-    if not folder.is_dir():
-        return []
-    return sorted(p.stem for p in folder.glob("*.toml"))
+    # The toolchain's profiles plus any the manuscript adds or overrides
+    # (tools/paths.py: a paper's own journals/<id>.toml wins).
+    return sorted({p.stem for base in (root, DATA)
+                   for p in (base / PROFILES).glob("*.toml")})
 
 
 def load_profile(root: Path, id: str) -> Profile:
-    path = root / PROFILES / f"{id}.toml"
+    path = locate(root, f"{PROFILES}/{id}.toml")
     if not path.is_file():
         known = ", ".join(available(root)) or "none"
         raise JournalError(f"{CONFIG}: no profile {id!r} under {PROFILES}/ "

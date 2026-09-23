@@ -70,7 +70,6 @@ from pathlib import Path
 
 from _provenance import PAPER, caller_script, code_inputs, declared_inputs, sha
 
-sys.path.insert(0, str(PAPER / "tools"))
 from atomic_io import write_text
 from manifest_validation import validate, ManifestError
 

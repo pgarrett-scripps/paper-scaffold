@@ -49,7 +49,7 @@ import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 
 # What the project owns, per CLAUDE.md ("This project owns the manuscript").
 # Everything else in a new-paper.sh copy is the scaffold's. The analysis/

@@ -6,7 +6,7 @@ import zipfile
 from export_docx import style_code
 from word_xml import order_properties, W
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 
 
 def create_reference(root=ROOT, *, black_headings=False):

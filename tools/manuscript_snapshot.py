@@ -18,7 +18,7 @@ from atomic_io import write_text
 from manuscript_sources import mask
 from resolve_typst import _paren_end, front_matter_probe
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT, locate, tool  # the manuscript (tools/paths.py)
 SCHEMA = 1
 HELPER = re.compile(r'(?<![\w.\-])(#?)(s|n|lit|fig|tbl)\(\s*("(?:\\.|[^"\\])*")')
 
@@ -132,7 +132,7 @@ def materialize(root: Path, destination: Path, sources: dict) -> None:
     for name, value in sources.items():
         if value is None or Path(name).is_absolute():
             continue  # External compiler packages are fingerprinted, not vendored.
-        path = root / name
+        path = locate(root, name)
         if not path.is_file():
             raise ValueError(f"snapshot input disappeared: {name}")
         target = destination / name
@@ -213,7 +213,7 @@ def query_numbers(folder: Path, *, front_matter: Path | None = None) -> list[dic
 def project_word(folder: Path, numbers: list[dict], *, front_matter: Path | None = None,
                  toc: str | None = None) -> None:
     write_text(folder / "numbering.json", json.dumps(numbers, indent=2))
-    args = [sys.executable, str(ROOT / "tools/resolve_typst.py"),
+    args = [sys.executable, str(tool("resolve_typst.py")),
             "--root", str(folder), "--numbers", str(folder / "numbering.json"),
             "--output", str(folder / "paper.word.typ")]
     if front_matter is not None:

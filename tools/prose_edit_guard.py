@@ -51,7 +51,7 @@ from typst_prose import DIRECTIVE, _bracket_depth
 from atomic_io import write_text
 
 # The manuscript root, one level up: this file lives in tools/.
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 SNAP_DIR = ROOT / ".edit-guard"
 DOCUMENT = None
 

@@ -25,7 +25,7 @@ from pathlib import Path
 import readability
 
 # The manuscript root, one level up: this file lives in tools/.
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 
 # A section that exceeds the manuscript's own median by this factor is flagged.
 OUTLIER_FACTOR = 1.6

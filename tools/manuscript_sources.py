@@ -9,7 +9,7 @@ import json
 import re
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 ENTRYPOINTS = ("paper.typ", "config.typ", "si-body.typ")
 
 # Slide decks. A deck is a .typ file directly under slides/; theme.typ and any

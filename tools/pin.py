@@ -31,7 +31,7 @@ import json
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+from paths import ROOT  # the manuscript (tools/paths.py)
 STATS = ROOT / "stats.json"
 
 HOW = ('add  "pinned": {"path/relative/to/root": null}  to stats.json, then '
