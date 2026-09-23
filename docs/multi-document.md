@@ -204,6 +204,9 @@ chapter B invalidates B and the combined dissertation, while A stays current
 unless a shared input changes. A failed compile, changed input during build,
 unstable dependency graph, or failed count query preserves the last good PDF.
 Builds share the existing project lock, so simultaneous publishers are refused.
+The compile, the count query and readability scoring run concurrently; the
+fingerprint checks cover all three, and a build that stops early kills the
+compilers it started.
 
 Keep one toolchain per dissertation. Upgrade tooling together, preserving the
 manifest, prose, templates, bibliography rules, and local exceptions. Follow

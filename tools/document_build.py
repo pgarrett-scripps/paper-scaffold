@@ -2,9 +2,11 @@
 
 No Word adaptation is involved. Only a stable successful build replaces the
 last good PDF. Counts are queried from a temporary instrumented source tree.
+The compile, the count query and readability scoring run concurrently.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -65,10 +67,27 @@ def compiler_dependencies(root: Path, path: Path) -> list[str]:
     return sorted(set(out))
 
 
-def metrics(project: Project, document: Document, sources: dict, temporary: Path) -> dict:
-    """Keep include scopes and layout, adding count metadata only in the copy."""
+@contextmanager
+def running(args: list[str], **kwargs):
+    """A subprocess that is killed if the build stops before it is collected."""
+    proc = subprocess.Popen(args, **kwargs)
+    try:
+        yield proc
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        proc.communicate()
+
+
+def count_query(project: Project, document: Document, sources: dict, temporary: Path) -> list[str]:
+    """Keep include scopes and layout, adding count metadata only in the copy.
+
+    Returns the query command for the copy at temporary/counts, so the query
+    can run alongside the real compile.
+    """
     root = project.root
     captured = temporary / "counts"
+    shutil.rmtree(captured, ignore_errors=True)
     captured.mkdir()
     for name, checksum in sources.items():
         if name.startswith("@") or checksum is None or Path(name).is_absolute():
@@ -89,35 +108,40 @@ def metrics(project: Project, document: Document, sources: dict, temporary: Path
             + ', words: scaffold-count(scaffold-counted-body, '
               'exclude: (figure, raw.where(block: true))).words)) <scaffold-part-count>\n'
             + src[b:])
-    result = subprocess.run(
-        ["typst", "query", "--root", str(captured), str(captured / document.entrypoint),
-         "<scaffold-part-count>", "--field", "value"],
-        cwd=captured, check=True, capture_output=True, text=True)
-    values = json.loads(result.stdout)
-    if (len(values) != len(document.parts)
-            or [v["id"] for v in values] != list(document.parts)):
-        raise ValueError(f"{document.id}: counted parts differ from manifest order; "
-                         "check duplicate, conditional, or reordered includes")
+    return ["typst", "query", "--root", str(captured), str(captured / document.entrypoint),
+            "<scaffold-part-count>", "--field", "value"]
+
+
+def readability_scores(project: Project, document: Document) -> tuple[list[dict], dict]:
+    """Per-part and combined readability, in manifest part order."""
+    root = project.root
     saved = typst_prose.STATS_JSON
     typst_prose.STATS_JSON = root / "stats.json"
     try:
         from prose_rules import load_config
         cfg = load_config(root)
         readability.add_abbreviations(sorted(cfg.vocabulary("abbreviations", set())))
-        rows, combined = [], []
-        for value in values:
-            prose = readability.clean(project.prose(project.parts[value["id"]]))
-            combined.append(prose)
-            rows.append({"id": value["id"], "words": value["words"],
-                         "readability": readability.metrics(prose)})
-        return {"document": document.id, "parts": rows,
-                "words": sum(v["words"] for v in values),
-                "readability": readability.metrics("\n\n".join(combined)),
-                "scope": "BODY markers in declared parts; excludes front/back matter, "
-                         "citations, floats/captions, math and block code; includes headings "
-                         "and inline code. Readability excludes headings."}
+        prose = [readability.clean(project.prose(project.parts[name])) for name in document.parts]
+        return ([readability.metrics(text) for text in prose],
+                readability.metrics("\n\n".join(prose)))
     finally:
         typst_prose.STATS_JSON = saved
+
+
+def metrics(document: Document, values: list, scores: tuple[list[dict], dict]) -> dict:
+    if (len(values) != len(document.parts)
+            or [v["id"] for v in values] != list(document.parts)):
+        raise ValueError(f"{document.id}: counted parts differ from manifest order; "
+                         "check duplicate, conditional, or reordered includes")
+    parts, combined = scores
+    return {"document": document.id,
+            "parts": [{"id": v["id"], "words": v["words"], "readability": r}
+                      for v, r in zip(values, parts)],
+            "words": sum(v["words"] for v in values),
+            "readability": combined,
+            "scope": "BODY markers in declared parts; excludes front/back matter, "
+                     "citations, floats/captions, math and block code; includes headings "
+                     "and inline code. Readability excludes headings."}
 
 
 def build(project: Project, document: Document) -> dict:
@@ -142,17 +166,29 @@ def build(project: Project, document: Document) -> dict:
         # input aborts instead of blessing a mixture of source revisions.
         for attempt in range(2):
             before = fingerprint(project, document, dependencies)
-            subprocess.run(["typst", "compile", "--root", str(root), "--deps", str(deps),
-                            document.entrypoint, str(staged)], cwd=root, check=True)
-            if fingerprint(project, document, dependencies) != before:
-                raise ValueError("sources changed during build; last good output preserved")
-            dependencies = compiler_dependencies(root, deps)
-            after = fingerprint(project, document, dependencies)
-            if before != after:
-                if attempt:
-                    raise ValueError("compiler dependencies did not stabilize; rerun build")
-                continue
-            report = metrics(project, document, before, temporary)
+            # The count copy is taken from the same sources the compile reads.
+            # Both are covered by the fingerprint checks below, as is the
+            # readability pass that runs while the two compilers work.
+            with running(count_query(project, document, before, temporary),
+                         cwd=temporary / "counts", text=True,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE) as query, \
+                 running(["typst", "compile", "--root", str(root), "--deps", str(deps),
+                          document.entrypoint, str(staged)], cwd=root) as compiler:
+                scores = readability_scores(project, document)
+                if compiler.wait():
+                    raise subprocess.CalledProcessError(compiler.returncode, compiler.args)
+                if fingerprint(project, document, dependencies) != before:
+                    raise ValueError("sources changed during build; last good output preserved")
+                dependencies = compiler_dependencies(root, deps)
+                after = fingerprint(project, document, dependencies)
+                if before != after:
+                    if attempt:
+                        raise ValueError("compiler dependencies did not stabilize; rerun build")
+                    continue
+                counted, errors = query.communicate()
+                if query.returncode:
+                    raise subprocess.CalledProcessError(query.returncode, query.args, counted, errors)
+            report = metrics(document, json.loads(counted), scores)
             # Re-read the manifest too: the Project object predates compilation.
             from document_project import load_project
             fresh = load_project(root)
