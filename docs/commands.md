@@ -51,6 +51,7 @@ Every `just` recipe a manuscript uses, in one table.
 | `just setup` | Build the Python environment (uv, locked) |
 | `just version` | Which scaffold version this manuscript is built on |
 | `just upgrade-plan [vX.Y.Z]` | Upgrade: lines since this version, and each scaffold file classed pristine or customized; read-only unless `--apply-pristine` |
+| `just hooks` | The extension hooks this paper declares in `project.toml` ([hooks](hooks.md)) |
 | `just audio-setup` | One-time: install the audio deps and download the voice model |
 | `just audiobook` | Chaptered `.m4b` of the main text |
 | `just all` | PDF + Word + both audiobooks + the upload set, then `just check` |

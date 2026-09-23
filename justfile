@@ -84,6 +84,13 @@ version:
 upgrade-plan *args:
   @uv run --quiet python tools/upgrade_plan.py "$@"
 
+# project.toml is where a paper extends the scaffold without editing it: extra
+# gate stages, Word post-processing, extra Typst sources, one shared reference
+# list. See docs/hooks.md. No project.toml means no hooks.
+# List the extension hooks this paper declares in project.toml
+hooks:
+  @uv run --quiet python tools/project_hooks.py show
+
 # One-time (and after any pyproject change): build the Python environment. uv
 # resolves and locks it, so every machine gets the same versions. The analysis has
 # its own separate environment; `just assets` builds it on demand.
@@ -204,6 +211,9 @@ all: paper
   just _narrate-if-voice
   # The upload set, from the capture `paper` just made (no second build).
   uv run --quiet python tools/submission.py all
+  # The paper's own build steps after the upload set ([stages] submission in
+  # project.toml, docs/hooks.md); nothing when none are declared.
+  uv run --quiet python tools/project_hooks.py stages submission
   just check
 
 # Narrate when audio/ and its voice model exist, else say why not. A recipe of
@@ -285,6 +295,9 @@ verify:
   stage "declarations (stats + assets)"  "" just check-declared
   stage "staleness (just check)"         "" just check
   stage "review actions (just check-actions)" "" just check-actions
+  # The paper's own stages ([stages] verify in project.toml, docs/hooks.md).
+  # Each prints its own header; nothing prints when none are declared.
+  uv run --quiet python tools/project_hooks.py stages verify || rc=1
 
   echo ""
   if [ $rc -eq 0 ]; then
@@ -325,7 +338,13 @@ preflight: submission
   just check-stats-deep || rc=1
   echo ""
   echo "=== bibliography (just bib-audit) ==="
-  just bib-audit --require-complete || rc=1
+  # --require-complete unless project.toml relaxes it; a project.toml that
+  # does not parse keeps the strict flag and fails the gate.
+  bib_args=$(uv run --quiet python tools/project_hooks.py bib-audit-args) \
+    || { rc=1; bib_args="--require-complete"; }
+  just bib-audit $bib_args || rc=1
+  # The paper's own stages ([stages] preflight in project.toml, docs/hooks.md).
+  uv run --quiet python tools/project_hooks.py stages preflight || rc=1
   echo ""
   if [ $rc -eq 0 ]; then
     echo "PREFLIGHT OK -- fresh builds, the full gate, re-derived numbers and the"
@@ -361,6 +380,8 @@ check:
   just check-build || rc=1
   # The submission set is a note, never a failure: see the submission recipes.
   uv run --quiet python tools/submission.py check --note
+  # The paper's own staleness checks ([stages] check in project.toml).
+  uv run --quiet python tools/project_hooks.py stages check || rc=1
 
   [ $rc -eq 0 ] && echo "everything is current with the source"
   exit $rc
@@ -899,7 +920,10 @@ cover-letter:
 
 # Build the whole upload set into submission/, after a fresh PDF and Word build
 submission: paper
-  @uv run --quiet python tools/submission.py all
+  #!/usr/bin/env bash
+  set -euo pipefail
+  uv run --quiet python tools/submission.py all
+  uv run --quiet python tools/project_hooks.py stages submission
 
 # Fail if any file in submission/ no longer matches the source it was built from
 check-submission:
