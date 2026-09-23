@@ -1382,6 +1382,23 @@ def check_structure(sources: dict[str, str]) -> list[Finding]:
     return out
 
 
+def project_sources(root: Path | None = None) -> tuple[dict[str, str], list[Finding]]:
+    """The extra hand-written sources project.toml declares ([sources] typst).
+
+    A reviewer-response letter or a shared macro file gets the sentence rules
+    and the #todo check, and nothing that assumes a manuscript half: its
+    "line 212" and "Reviewer 2" are not results to trace, and it has no
+    figures, sections or reference list of its own. See docs/hooks.md.
+    """
+    from project_hooks import typst_sources
+    r = root or ROOT
+    try:
+        names = typst_sources(r)
+    except (OSError, ValueError) as exc:
+        return {}, [Finding("project-config", "error", str(exc), where="project.toml")]
+    return {name: (r / name).read_text() for name in names}, []
+
+
 def main() -> int:
     if "--list-rules" in sys.argv:
         return list_rules()
@@ -1393,16 +1410,16 @@ def main() -> int:
     body = readability.slice_body((ROOT / "paper.typ").read_text())
     si = (ROOT / "si-body.typ").read_text()
     targets = {"main": body, "SI": si}
+    extra, findings = project_sources()
 
-    findings: list[Finding] = []
-    for label, src in targets.items():
+    for label, src in {**targets, **extra}.items():
         findings += check(label, readability.clean(src),
                           readability.clean(no_code(src)),
                           readability.clean(src, gap=GAP), cfg)
     findings += check_structure(targets)
     findings += check_derivable_numbers(targets)
     findings += check_unaccounted_numbers(targets)
-    findings += check_todos(targets)
+    findings += check_todos({**targets, **extra})
     if cfg.runs("list-in-prose") or cfg.runs("bold-in-prose"):
         findings += check_house_style(targets)
     findings += check_bypassed_assets(targets)

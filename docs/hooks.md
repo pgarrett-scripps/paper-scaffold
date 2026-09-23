@@ -77,6 +77,37 @@ match:
 bib_audit_require_complete = false
 ```
 
+## Extra Typst sources
+
+The `justfile`'s `typst_sources` lists the scaffold's hand-written files.
+A paper adds its own in `project.toml` rather than editing that line:
+
+```toml
+[sources]
+typst = ["reviewer_response.typ", "macros.typ"]
+```
+
+A declared file is:
+
+- formatted by `just fmt` and checked by `just fmt-check`;
+- checked by `just prose-check` for the sentence rules (spelling, em dashes,
+  doubled words, long sentences and the rest) and for open `#todo` notes,
+  reported under its file name.
+
+A declared file that does not exist is an error (`project-config`), not a
+silent skip. A typo would otherwise leave the file unformatted and
+unchecked for good.
+
+Only the checks that make sense outside a manuscript half run on these
+files. They are not word-counted, and they get no section-order,
+figure-citation or derivable-number checks. A response letter's "line 212"
+and "Reviewer 2" are not results to trace.
+
+They are also not staleness inputs of `paper.pdf` or `paper.docx`. A file
+the manuscript `#include`s or `#import`s is one already: the build records
+every file the compiler reads. A reviewer response is not, so editing it
+does not mark the paper stale.
+
 ## Project recipes
 
 The `justfile` ends its settings with `import? "project.just"`. Recipes in

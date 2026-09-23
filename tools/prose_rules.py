@@ -70,6 +70,8 @@ RULES: dict[str, tuple[str, str]] = {
     "misrouted-citation": ("error", "the entry key"),
     "si-bibliography-prefix": ("error", "the prefix"),
     "missing-doi":        ("warn",  "the entry key"),
+    # project.toml (docs/hooks.md) does not parse, or names a missing file.
+    "project-config":     ("error", ""),
     "implausible-year":   ("warn",  "the entry key"),
     # Read by bib_audit.py, not prose_check: a DOI record the registrar has
     # wrong ("McLaffertycor"), or one missing a published correction. The

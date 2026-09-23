@@ -13,6 +13,7 @@ existed. docs/hooks.md is the reference; this is the reader.
     uv run python tools/project_hooks.py show            # what is declared
     uv run python tools/project_hooks.py stages verify   # run one gate's stages
     uv run python tools/project_hooks.py bib-audit-args  # preflight's flags
+    uv run python tools/project_hooks.py typst-sources   # for fmt / fmt-check
 """
 from __future__ import annotations
 
@@ -49,6 +50,7 @@ class Project:
     stages: dict[str, tuple[Stage, ...]] = field(
         default_factory=lambda: {g: () for g in GATES})
     bib_audit_require_complete: bool = True
+    typst_sources: tuple[str, ...] = ()
     declared: bool = False
 
 
@@ -84,7 +86,7 @@ def load(root: Path = ROOT) -> Project:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as exc:
         raise ValueError(f"{FILE}: {exc}") from None
-    keys(data, {"schema_version", "stages", "preflight"}, FILE)
+    keys(data, {"schema_version", "stages", "preflight", "sources"}, FILE)
     if type(data.get("schema_version")) is not int or data["schema_version"] != 1:
         raise ValueError(f"{FILE}: schema_version must be 1")
 
@@ -100,8 +102,46 @@ def load(root: Path = ROOT) -> Project:
     if not isinstance(complete, bool):
         raise ValueError(f"{FILE} [preflight]: bib_audit_require_complete must be true or false")
 
+    sources = data.get("sources", {})
+    keys(sources, {"typst"}, f"{FILE} [sources]")
+    typst = _paths(sources.get("typst", []), f"{FILE} sources.typst", (".typ",))
+
     return Project(stages=stages, bib_audit_require_complete=complete,
-                   declared=True)
+                   typst_sources=typst, declared=True)
+
+
+def _paths(value, where: str, suffixes: tuple[str, ...]) -> tuple[str, ...]:
+    """Project-relative file paths with one of `suffixes`, in order, once each."""
+    if not isinstance(value, list):
+        raise ValueError(f"{where}: expected a list of project-relative paths")
+    out: list[str] = []
+    for item in value:
+        path = Path(item) if isinstance(item, str) and item else None
+        if (path is None or path.is_absolute() or ".." in path.parts
+                or path.suffix not in suffixes):
+            raise ValueError(f"{where}: expected a project-relative "
+                             f"{' or '.join(suffixes)} path, got {item!r}")
+        if path.as_posix() not in out:
+            out.append(path.as_posix())
+    return tuple(out)
+
+
+def typst_sources(root: Path = ROOT, defaults: tuple[str, ...] = (),
+                  project: Project | None = None) -> list[str]:
+    """The hand-written Typst sources: the justfile's list, then the paper's.
+
+    A default that does not exist is skipped (the cover letter is optional);
+    a file the paper DECLARED and that does not exist is an error, since the
+    likeliest cause is a typo that would otherwise go unformatted and
+    unchecked for good.
+    """
+    project = project or load(root)
+    missing = [p for p in project.typst_sources if not (root / p).is_file()]
+    if missing:
+        raise ValueError(f"{FILE} sources.typst names missing file(s): "
+                         + ", ".join(missing))
+    out = [d for d in defaults if (root / d).is_file()]
+    return out + [p for p in project.typst_sources if p not in out]
 
 
 def run_stages(gate: str, root: Path = ROOT, project: Project | None = None) -> int:
@@ -130,6 +170,8 @@ def describe(project: Project) -> list[str]:
     for gate in GATES:
         for stage in project.stages[gate]:
             lines.append(f"stage      {gate:<10} {stage.name}: {stage.run}")
+    for path in project.typst_sources:
+        lines.append(f"source     typst      {path} (fmt, prose-check)")
     if not project.bib_audit_require_complete:
         lines.append("preflight  bib-audit runs without --require-complete")
     return lines or [f"{FILE} declares no hooks"]
@@ -144,6 +186,9 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     stages = sub.add_parser("stages", help="run one gate's project stages")
     stages.add_argument("gate", choices=GATES)
     sub.add_parser("bib-audit-args", help="the flags preflight passes bib-audit")
+    sources = sub.add_parser("typst-sources",
+                             help="the existing hand-written Typst sources, one per line")
+    sources.add_argument("defaults", nargs="*", help="the justfile's typst_sources")
     args = parser.parse_args(argv)
     try:
         project = load(root)
@@ -155,6 +200,13 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
         return 2
     if args.command == "show":
         print("\n".join(describe(project)))
+        return 0
+    if args.command == "typst-sources":
+        try:
+            print("\n".join(typst_sources(root, tuple(args.defaults), project)))
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         return 0
     if args.command == "bib-audit-args":
         print("--require-complete" if project.bib_audit_require_complete else "")

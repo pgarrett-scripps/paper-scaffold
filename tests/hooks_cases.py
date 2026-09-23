@@ -98,6 +98,51 @@ class Stages(Tmp):
         self.assertIn("preflight  figure qc: just check-figure-qc", out)
 
 
+class Sources(Tmp):
+    """[sources] typst: extra hand-written files for fmt and prose-check."""
+
+    def test_defaults_skip_missing_and_declared_files_follow(self):
+        for name in ("paper.typ", "reviewer_response.typ"):
+            (self.root / name).write_text("Text.\n")
+        self.write('[sources]\ntypst = ["reviewer_response.typ", "paper.typ"]\n')
+        self.assertEqual(ph.typst_sources(self.root, ("paper.typ", "cover-letter.typ")),
+                         ["paper.typ", "reviewer_response.typ"])
+        rc, out = self.main("typst-sources", "paper.typ", "cover-letter.typ")
+        self.assertEqual((rc, out), (0, "paper.typ\nreviewer_response.typ\n"))
+
+    def test_no_declaration_is_the_justfile_list(self):
+        (self.root / "paper.typ").write_text("Text.\n")
+        self.assertEqual(self.main("typst-sources", "paper.typ", "si-body.typ"),
+                         (0, "paper.typ\n"))
+
+    def test_a_declared_file_that_is_missing_is_an_error(self):
+        self.write('[sources]\ntypst = ["reviewer_respnse.typ"]\n')
+        with self.assertRaisesRegex(ValueError, "reviewer_respnse.typ"):
+            ph.typst_sources(self.root)
+        self.assertEqual(self.main("typst-sources")[0], 2)
+
+    def test_paths_must_be_project_relative_typst(self):
+        for bad in ('"/abs/x.typ"', '"../x.typ"', '"notes.md"', '""', "3"):
+            with self.subTest(bad=bad):
+                self.write(f"[sources]\ntypst = [{bad}]\n")
+                with self.assertRaises(ValueError):
+                    ph.load(self.root)
+
+    def test_prose_check_reads_the_declared_files(self):
+        import prose_check
+        (self.root / "reviewer_response.typ").write_text(
+            'We thank the reviewer. #todo("answer point 3")\n')
+        self.write('[sources]\ntypst = ["reviewer_response.typ"]\n')
+        extra, findings = prose_check.project_sources(self.root)
+        self.assertEqual((list(extra), findings), (["reviewer_response.typ"], []))
+        todos = prose_check.check_todos(extra)
+        self.assertEqual([(f.rule, f.where) for f in todos],
+                         [("unresolved-todo", "reviewer_response.typ")])
+        self.write('[sources]\ntypst = ["gone.typ"]\n')
+        extra, findings = prose_check.project_sources(self.root)
+        self.assertEqual((extra, [f.rule for f in findings]), ({}, ["project-config"]))
+
+
 class Wiring(unittest.TestCase):
     """The justfile calls the hooks at each gate; a refactor that drops one
     would leave a project's stage silently unrun."""
@@ -107,6 +152,8 @@ class Wiring(unittest.TestCase):
         for gate in ph.GATES:
             self.assertIn(f"tools/project_hooks.py stages {gate}", text, gate)
         self.assertIn("tools/project_hooks.py bib-audit-args", text)
+        # fmt and fmt-check both format the declared sources.
+        self.assertEqual(text.count("project_hooks.py typst-sources {{typst_sources}}"), 2)
 
     def test_upgrade_plan_never_offers_the_projects_hook_files(self):
         import upgrade_plan
@@ -148,7 +195,7 @@ class ProjectJust(Tmp):
 
 def run_cases() -> bool:
     suite = unittest.TestSuite()
-    for case in (Stages, Wiring, ProjectJust):
+    for case in (Stages, Sources, Wiring, ProjectJust):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(case))
     return unittest.TextTestRunner(verbosity=1).run(suite).wasSuccessful()
 

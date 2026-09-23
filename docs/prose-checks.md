@@ -31,7 +31,9 @@ paper the long lines are the prose.
 | `just fmt-check` | Exit non-zero if reformatting is needed (CI / pre-commit gate) |
 
 `typst_sources` deliberately excludes `si/*.typ`, which the generator scripts own
-and would rewrite unformatted on the next run. `.vscode/settings.json` marks them
+and would rewrite unformatted on the next run. A paper's own extra sources (a
+reviewer response, a macro file) go in `project.toml`, not in that line; see
+[extension hooks](hooks.md#extra-typst-sources). `.vscode/settings.json` marks them
 read-only in the editor for the same reason.
 
 **Reformatting can break the prose extractors.** typstyle will break a long line
