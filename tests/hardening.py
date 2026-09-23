@@ -364,6 +364,29 @@ class Hardening(unittest.TestCase):
         self.put("paper.typ", "#let   x=1\n")
         self.assertNotEqual(run().returncode, 0)
 
+    @unittest.skipUnless(shutil.which("just"), "just not installed")
+    def test_all_skips_narration_without_the_voice_model(self):
+        # audio/ is tracked but its voice model is not, so a fresh clone must
+        # get the PDF and Word from `just all` rather than die in _audio-check.
+        # The build steps are stubbed: this is about the audio condition only.
+        text = (ROOT / "justfile").read_text()
+        self.put("justfile", "set allow-duplicate-recipes\n" + text +
+                 "\npaper:\n  @true\n\ncheck:\n  @true\n\n"
+                 "audiobook-all:\n  @echo NARRATED\n")
+        self.put("tools/submission.py", "")
+        self.put("audio/config.py", 'VOICE_NAME = "v"\n')
+        def run():
+            return subprocess.run(["just", "all"], cwd=self.root,
+                                  capture_output=True, text=True, check=False)
+        proc = run()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("no voice model", proc.stdout)
+        self.assertNotIn("NARRATED", proc.stdout)
+        self.put("audio/models/v.onnx", "")
+        proc = run()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("NARRATED", proc.stdout)
+
 
 def run_cases() -> bool:
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Hardening)

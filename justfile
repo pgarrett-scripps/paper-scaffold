@@ -186,17 +186,32 @@ density:
 # directory, and this skips the audiobooks rather than failing. Making it a hard
 # dependency meant `just all` broke on a manuscript that had removed a feature it
 # never asked for.
-# Rebuild every artifact this directory owns: PDF, Word, the submission set, and the audiobooks if audio/ is present
+#
+# The directory being present is not enough either: audio/ is tracked, but the
+# voice model under audio/models/ is gitignored, so on a fresh clone `just all`
+# reached `_audio-check` and died on a missing download after the PDF and Word
+# were already built. The condition is the model, which is what narration
+# needs. `just audiobook` still fails hard: asking for an audiobook by name and
+# getting silence is worse than an error.
+# Rebuild every artifact this directory owns: PDF, Word, the submission set, and the audiobooks when the voice model is installed
 all: paper
   #!/usr/bin/env bash
   set -euo pipefail
+  voice=""
   if [ -d audio ]; then
+    voice=$(cd audio && python3 -c "import config; print(config.VOICE_NAME)")
+  fi
+  if [ -z "$voice" ]; then
+    echo ""
+    echo "PDF, Word and review text rebuilt from the current source (no audio/, narration skipped)."
+  elif [ ! -f "audio/models/${voice}.onnx" ]; then
+    echo ""
+    echo "PDF, Word and review text rebuilt from the current source (no voice model"
+    echo "for ${voice}, narration skipped -- run: just audio-setup)."
+  else
     just audiobook-all
     echo ""
     echo "PDF, Word, review text and both audiobooks rebuilt from the current source."
-  else
-    echo ""
-    echo "PDF, Word and review text rebuilt from the current source (no audio/, narration skipped)."
   fi
   # The upload set, from the capture `paper` just made (no second build).
   uv run --quiet python tools/submission.py all
