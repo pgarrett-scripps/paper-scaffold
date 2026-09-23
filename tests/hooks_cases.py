@@ -143,6 +143,109 @@ class Sources(Tmp):
         self.assertEqual((extra, [f.rule for f in findings]), ({}, ["project-config"]))
 
 
+LUA = '''function Str(el)
+  if el.text == "Main" then return pandoc.Str("MAINFILTERED") end
+end
+'''
+# Logs its phase and whether any keepNext exists yet: none before pagination
+# (which keeps the bold run-in label with what follows), some after. The after
+# step then puts a <w:jc> FIRST in that paragraph's properties, out of schema
+# order, for the export to put back.
+STEP = '''import sys, zipfile
+from pathlib import Path
+phase, docx = sys.argv[0].rsplit("_", 1)[1][:-3], Path(sys.argv[1])
+with zipfile.ZipFile(docx) as z:
+    parts = {n: z.read(n) for n in z.namelist()}
+xml = parts["word/document.xml"].decode()
+with open("steps.log", "a") as log:
+    log.write(f"{phase} {'<w:keepNext' in xml}\\n")
+if phase == "after":
+    import word_xml  # tools/ is on the path
+    start = xml.rindex("<w:pPr>", 0, xml.index("<w:keepNext")) + len("<w:pPr>")
+    xml = xml[:start] + '<w:jc w:val="center"/>' + xml[start:]
+    parts["word/document.xml"] = xml.encode()
+    with zipfile.ZipFile(docx, "w") as z:
+        for n, data in parts.items():
+            z.writestr(n, data)
+'''
+
+
+class Word(Tmp):
+    """[word]: Lua filters and Python steps in the Word export."""
+
+    def setUp(self):
+        super().setUp()
+        (self.root / "hooks").mkdir()
+        (self.root / "hooks/mark.lua").write_text(LUA)
+        for phase in ("before", "after"):
+            (self.root / f"hooks/step_{phase}.py").write_text(STEP)
+        (self.root / "hooks/widths.json").write_text("{}")
+        self.full = ('[word]\nlua_filters = ["hooks/mark.lua"]\n'
+                     'before_pagination = ["hooks/step_before.py"]\n'
+                     'after_pagination = ["hooks/step_after.py"]\n'
+                     'inputs = ["hooks/widths.json"]\n')
+
+    def export(self) -> int:
+        import export_docx
+        from unittest.mock import patch
+        source = self.root / "paper.resolved.typ"
+        source.write_text("= Main\n\n*Run-in label.*\n\nMore prose.\n")
+        out = io.StringIO()
+        with patch.multiple(export_docx, ROOT=self.root, SRC=source,
+                            OUT=self.root / "paper.docx"), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            return export_docx.main()
+
+    def test_filters_and_steps_run_in_their_places(self):
+        import zipfile
+        self.write(self.full)
+        self.assertEqual(self.export(), 0)
+        self.assertEqual((self.root / "steps.log").read_text(),
+                         "before False\nafter True\n")
+        with zipfile.ZipFile(self.root / "paper.docx") as z:
+            xml = z.read("word/document.xml").decode()
+        self.assertIn("MAINFILTERED", xml)
+        # Property order restored: the <w:jc> the step put first is back
+        # after <w:keepNext>, where the schema wants it.
+        start = xml.rindex("<w:pPr>", 0, xml.index("<w:keepNext"))
+        ppr = xml[start:xml.index("</w:pPr>", start)]
+        self.assertIn("<w:jc ", ppr)
+        self.assertLess(ppr.index("<w:keepNext"), ppr.index("<w:jc "))
+
+    def test_no_word_table_is_the_plain_export(self):
+        self.assertEqual(self.export(), 0)
+        self.assertFalse((self.root / "steps.log").exists())
+
+    def test_a_failing_step_fails_the_export(self):
+        (self.root / "hooks/step_before.py").write_text("raise SystemExit(4)\n")
+        self.write(self.full)
+        self.assertEqual(self.export(), 1)
+
+    def test_word_files_are_build_inputs(self):
+        from build_state import snapshot
+        self.assertEqual(ph.build_inputs(self.root), [])
+        self.write(self.full)
+        self.assertEqual(ph.build_inputs(self.root),
+                         ["project.toml", "hooks/mark.lua", "hooks/step_before.py",
+                          "hooks/step_after.py", "hooks/widths.json"])
+        before = snapshot(self.root)
+        for name in ph.build_inputs(self.root):
+            self.assertIsNotNone(before.get(name), name)
+        (self.root / "hooks/widths.json").write_text('{"table": 2}')
+        self.assertNotEqual(before, snapshot(self.root))
+        (self.root / "hooks/widths.json").unlink()
+        with self.assertRaisesRegex(ValueError, "widths.json"):
+            ph.build_inputs(self.root)
+
+    def test_word_paths_are_checked(self):
+        for bad in ('lua_filters = ["hooks/mark.py"]', 'after_pagination = ["x.lua"]',
+                    'before_pagination = ["/abs/x.py"]', 'unknown = []'):
+            with self.subTest(bad=bad):
+                self.write(f"[word]\n{bad}\n")
+                with self.assertRaises(ValueError):
+                    ph.load(self.root)
+
+
 class Wiring(unittest.TestCase):
     """The justfile calls the hooks at each gate; a refactor that drops one
     would leave a project's stage silently unrun."""
@@ -195,7 +298,7 @@ class ProjectJust(Tmp):
 
 def run_cases() -> bool:
     suite = unittest.TestSuite()
-    for case in (Stages, Sources, Wiring, ProjectJust):
+    for case in (Stages, Sources, Word, Wiring, ProjectJust):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(case))
     return unittest.TextTestRunner(verbosity=1).run(suite).wasSuccessful()
 

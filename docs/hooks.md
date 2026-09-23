@@ -9,7 +9,7 @@ replaces:
 
 | File | Holds |
 |---|---|
-| `project.toml` | The declarations: extra gate stages and the bibliography-audit setting |
+| `project.toml` | The declarations: gate stages, the bibliography audit, Word steps, extra Typst sources |
 | `project.just` | Extra `just` recipes, imported by the scaffold's `justfile` |
 | `hooks/` | Scripts the declarations name (suggested location) |
 
@@ -77,6 +77,51 @@ match:
 bib_audit_require_complete = false
 ```
 
+## Word post-processing
+
+A paper that needs its tables sized, a title style changed, or a footer
+added to `paper.docx` declares the step instead of editing
+`tools/export_docx.py`:
+
+```toml
+[word]
+lua_filters = ["hooks/word.lua"]
+before_pagination = ["hooks/polish_tables.py"]
+after_pagination = ["hooks/size_tables.py"]
+inputs = ["hooks/docx_common.py", "hooks/table-widths.json"]
+```
+
+The export runs them in this order:
+
+1. The Lua filters are passed to pandoc (`--lua-filter`, in list order) on
+   the final conversion to `.docx`. Citations are already set by then.
+2. Each `before_pagination` script runs as `python <script> <docx>` and
+   edits the file in place.
+3. The scaffold's pagination pass runs. It keeps captions with their floats,
+   stops table rows from splitting and keeps run-in labels with what follows.
+4. Each `after_pagination` script runs the same way. Then every property
+   block in `document.xml` and `styles.xml` is put back in schema order. Word
+   rejects a file with properties out of order ("unreadable content"), so a
+   step may append properties without sorting them.
+
+A step runs with the toolchain's Python, with `tools/` on its path (so
+`from word_xml import W, order_properties` works), from the manuscript
+root, and with `$PAPER_ROOT` set. A non-zero exit fails the export. Use only
+the standard library and the toolchain's packages: the root `pyproject.toml`
+is scaffold-owned.
+
+The Word steps are build inputs. `project.toml` and every file `[word]`
+names are hashed into the staleness record of `paper.pdf` and `paper.docx`,
+like the `justfile` and `word/paper-reference.docx`. They are also captured
+with the manuscript, so `just main-docx` and `si-docx` convert the upload set
+the way the build did. List any other file a step reads under `inputs`, such
+as a helper module or a table of widths. A file not listed is neither
+tracked nor captured, and a captured build will not find it.
+
+The steps apply to every single-paper Word export: `just docx`, `just paper`
+and the upload set's Word halves. Multi-document projects
+(`manuscript.toml`) have their own Word adapter and do not run them.
+
 ## Extra Typst sources
 
 The `justfile`'s `typst_sources` lists the scaffold's hand-written files.
@@ -106,7 +151,9 @@ and "Reviewer 2" are not results to trace.
 They are also not staleness inputs of `paper.pdf` or `paper.docx`. A file
 the manuscript `#include`s or `#import`s is one already: the build records
 every file the compiler reads. A reviewer response is not, so editing it
-does not mark the paper stale.
+does not mark the paper stale. `project.toml` itself is a build input (see
+[Word post-processing](#word-post-processing)), so adding a file to the
+list does.
 
 ## Project recipes
 

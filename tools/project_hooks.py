@@ -24,10 +24,12 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
+try:
+    import tomllib
+except ModuleNotFoundError:            # Python 3.10
+    import tomli as tomllib            # type: ignore
 
-from document_project import keys, tomllib  # noqa: E402
+ROOT = Path(__file__).resolve().parent.parent
 
 FILE = "project.toml"
 # Where each gate's project stages run:
@@ -46,12 +48,43 @@ class Stage:
 
 
 @dataclass(frozen=True)
+class Word:
+    """[word]: the paper's steps in the Word export (tools/export_docx.py).
+
+    lua_filters        pandoc Lua filters on the final conversion to .docx
+    before_pagination  Python scripts run on the written .docx, before the
+                       scaffold's pagination pass (keep-with-next, repeated
+                       table headers)
+    after_pagination   Python scripts run after it; property order is
+                       restored afterwards, so a script may append freely
+    inputs             other files those steps read (a helper module, a
+                       table of widths), so they are hashed and captured too
+    """
+    lua_filters: tuple[str, ...] = ()
+    before_pagination: tuple[str, ...] = ()
+    after_pagination: tuple[str, ...] = ()
+    inputs: tuple[str, ...] = ()
+
+    def files(self) -> tuple[str, ...]:
+        return (self.lua_filters + self.before_pagination
+                + self.after_pagination + self.inputs)
+
+
+@dataclass(frozen=True)
 class Project:
     stages: dict[str, tuple[Stage, ...]] = field(
         default_factory=lambda: {g: () for g in GATES})
     bib_audit_require_complete: bool = True
     typst_sources: tuple[str, ...] = ()
+    word: Word = field(default_factory=lambda: Word())
     declared: bool = False
+
+
+def keys(data, allowed: set[str], where: str) -> None:
+    # Standalone on purpose: a captured build carries this file among its
+    # tools (tools/build_state.py BUILD_TOOLS), and nothing it imports.
+    if not isinstance(data, dict) or set(data) - allowed:
+        raise ValueError(f"{where}: expected only {', '.join(sorted(allowed))}")
 
 
 def _stages(value, where: str) -> tuple[Stage, ...]:
@@ -86,7 +119,7 @@ def load(root: Path = ROOT) -> Project:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as exc:
         raise ValueError(f"{FILE}: {exc}") from None
-    keys(data, {"schema_version", "stages", "preflight", "sources"}, FILE)
+    keys(data, {"schema_version", "stages", "preflight", "sources", "word"}, FILE)
     if type(data.get("schema_version")) is not int or data["schema_version"] != 1:
         raise ValueError(f"{FILE}: schema_version must be 1")
 
@@ -106,21 +139,34 @@ def load(root: Path = ROOT) -> Project:
     keys(sources, {"typst"}, f"{FILE} [sources]")
     typst = _paths(sources.get("typst", []), f"{FILE} sources.typst", (".typ",))
 
+    table = data.get("word", {})
+    keys(table, {"lua_filters", "before_pagination", "after_pagination", "inputs"},
+         f"{FILE} [word]")
+    word = Word(
+        lua_filters=_paths(table.get("lua_filters", []), f"{FILE} word.lua_filters", (".lua",)),
+        before_pagination=_paths(table.get("before_pagination", []),
+                                 f"{FILE} word.before_pagination", (".py",)),
+        after_pagination=_paths(table.get("after_pagination", []),
+                                f"{FILE} word.after_pagination", (".py",)),
+        inputs=_paths(table.get("inputs", []), f"{FILE} word.inputs", None))
+
     return Project(stages=stages, bib_audit_require_complete=complete,
-                   typst_sources=typst, declared=True)
+                   typst_sources=typst, word=word, declared=True)
 
 
-def _paths(value, where: str, suffixes: tuple[str, ...]) -> tuple[str, ...]:
-    """Project-relative file paths with one of `suffixes`, in order, once each."""
+def _paths(value, where: str, suffixes: tuple[str, ...] | None) -> tuple[str, ...]:
+    """Project-relative file paths with one of `suffixes` (any when None),
+    in order, once each."""
     if not isinstance(value, list):
         raise ValueError(f"{where}: expected a list of project-relative paths")
     out: list[str] = []
     for item in value:
         path = Path(item) if isinstance(item, str) and item else None
         if (path is None or path.is_absolute() or ".." in path.parts
-                or path.suffix not in suffixes):
+                or (suffixes is not None and path.suffix not in suffixes)):
+            kind = f"{' or '.join(suffixes)} " if suffixes else ""
             raise ValueError(f"{where}: expected a project-relative "
-                             f"{' or '.join(suffixes)} path, got {item!r}")
+                             f"{kind}path, got {item!r}")
         if path.as_posix() not in out:
             out.append(path.as_posix())
     return tuple(out)
@@ -142,6 +188,42 @@ def typst_sources(root: Path = ROOT, defaults: tuple[str, ...] = (),
                          + ", ".join(missing))
     out = [d for d in defaults if (root / d).is_file()]
     return out + [p for p in project.typst_sources if p not in out]
+
+
+def build_inputs(root: Path = ROOT) -> list[str]:
+    """What the paper adds to the PDF and Word builds' inputs.
+
+    project.toml itself (it steers the Word export, as the justfile steers
+    the build) and every file its [word] table names. tools/build_state.py
+    hashes these into the staleness record and captures them with the
+    manuscript, so a changed Word step marks paper.docx stale and a captured
+    build converts the way it was built. A missing one is an error here, not
+    at the end of a long build.
+    """
+    if not (root / FILE).is_file():
+        return []
+    project = load(root)
+    missing = [p for p in project.word.files() if not (root / p).is_file()]
+    if missing:
+        raise ValueError(f"{FILE} [word] names missing file(s): " + ", ".join(missing))
+    return [FILE, *project.word.files()]
+
+
+def run_word_steps(steps: tuple[str, ...], docx: Path, root: Path, tools: Path) -> None:
+    """Run each [word] script as `python <script> <docx>`, editing it in place.
+
+    The interpreter is the one running the export, so a step has the
+    toolchain's packages; `tools/` is on its path, so it may import
+    word_xml. It runs from the manuscript root (the captured copy during a
+    build), with $PAPER_ROOT set to it. A failing step fails the export.
+    """
+    env = {**os.environ, "PAPER_ROOT": str(root),
+           "PYTHONPATH": os.pathsep.join(filter(None, [str(tools), os.environ.get("PYTHONPATH")]))}
+    for step in steps:
+        done = subprocess.run([sys.executable, str(root / step), str(docx)],
+                              cwd=root, env=env)
+        if done.returncode:
+            raise ValueError(f"{FILE} Word step {step} failed (exit {done.returncode})")
 
 
 def run_stages(gate: str, root: Path = ROOT, project: Project | None = None) -> int:
@@ -172,6 +254,9 @@ def describe(project: Project) -> list[str]:
             lines.append(f"stage      {gate:<10} {stage.name}: {stage.run}")
     for path in project.typst_sources:
         lines.append(f"source     typst      {path} (fmt, prose-check)")
+    for kind in ("lua_filters", "before_pagination", "after_pagination", "inputs"):
+        for path in getattr(project.word, kind):
+            lines.append(f"word       {kind:<17} {path}")
     if not project.bib_audit_require_complete:
         lines.append("preflight  bib-audit runs without --require-complete")
     return lines or [f"{FILE} declares no hooks"]
