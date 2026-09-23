@@ -291,6 +291,45 @@ def bibliography_cases() -> bool:
     if "no longer excuse anything" not in out or "curie2020:volume" not in out:
         print("  bib-audit allow: an allowance matching nothing was not reported")
         ok = False
+
+    # An entry with no DOI is identified only by its URL, and a URL is the
+    # cheapest citation to invent. The audit resolves it: a dead one fails,
+    # a live one prints what the page says about itself for a person to
+    # compare, and an unreachable one is a network fact, not a defect. The
+    # URL parser is pure so its two API routes stay pinned. (koth manuscript)
+    if (ba._url_target("https://github.com/curie/tool.git")
+            != ("github", "curie/tool")
+            or ba._url_target("https://www.crates.io/crates/tool/")
+            != ("crates", "tool")
+            or ba._url_target("https://example.org/tool")[0] != "web"):
+        print("  bib-audit url: a GitHub or crates.io URL was not routed to "
+              "its API")
+        ok = False
+    url_entry = {"_key": "tool2024", "_type": "misc", "title": "{A} Tool",
+                 "author": "Curie, Marie", "url": "https://github.com/curie/tool"}
+    page = {"name": "curie/tool", "about": "A tool", "owner": "curie"}
+    outcomes = {}
+    for state, payload in (("ok", page), ("moved", page),
+                           ("missing", "HTTP 404"), ("error", "timed out")):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            outcomes[state] = (ba.audit(
+                entries=[url_entry], allowed=set(), pause=False,
+                fetch=lambda doi, timeout: ("ok", {}),
+                fetch_url=lambda url, timeout: (state, payload)),
+                buf.getvalue())
+    if outcomes["missing"][0] != 1:
+        print("  bib-audit url: a dead URL did not fail the audit")
+        ok = False
+    if any(outcomes[s][0] != 0 for s in ("ok", "moved", "error")):
+        print("  bib-audit url: a live, moved, or unreachable URL failed the "
+              "audit")
+        ok = False
+    if ("A Tool" not in outcomes["ok"][1]
+            or "owner curie" not in outcomes["ok"][1]):
+        print("  bib-audit url: a live URL did not print the page beside the "
+              "bibliography entry")
+        ok = False
     return ok
 
 # A minimal manuscript whose SI sets its own reference list, as the scaffold

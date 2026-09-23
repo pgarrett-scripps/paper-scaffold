@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """Check every DOI in the bibliography against its registered metadata.
 
+An entry with no DOI -- software, a dataset, a repository -- is identified only
+by its URL, so that URL is fetched instead and what the page says about itself
+(the repository's owner and description, the crate's owners) is printed beside
+the bibliography's own title and authors for a person to compare.
+
 WHY THIS IS SEPARATE FROM prose_check.py. It needs the network. A check that can
 fail because an API was slow does not belong in a gate people are supposed to
 trust, so this is its own recipe, run deliberately before submission rather than
 on every save. `just verify` never calls it.
 
 WHAT IT CATCHES. A DOI can resolve while the title or authors beside it are
-invented, copied from another paper, or merely mistyped. Compare the fields a
+invented, copied from another paper, or merely mistyped. A URL is cheaper still
+to invent: `github.com/<plausible-owner>/<tool>` reads fine and fetches
+nothing, and a real repository can be credited to the wrong maintainer. Compare the fields a
 reader uses to identify the work with the metadata its publisher registered,
 in addition to checking for retractions and dead DOI links. A paper can also be
 retracted years after you cite it, so the answer has a shelf life and the check
@@ -55,6 +62,16 @@ DATACITE = "https://api.datacite.org/dois/"
 # them. config.typ has one; fall back to the project URL rather than inventing an
 # address that does not exist.
 UA = "paper-scaffold bib-audit (https://github.com/pgarrett-scripps/paper-scaffold)"
+
+# Entries without a DOI are checked by URL. Two hosts carry nearly every
+# software citation and expose an API that names the owner, which a rendered
+# page does not: GitHub's answers 404 for a repository that never existed and
+# follows a rename, and crates.io's lists the crate's owners. crates.io in
+# particular serves its HTML only to a browser-like Accept header, so a plain
+# GET reports a live crate as 404 -- which is how the API route was found.
+# (Found downstream, in the koth manuscript.)
+GITHUB_API = "https://api.github.com/repos/"
+CRATES_API = "https://crates.io/api/v1/crates/"
 
 # Crossref relates a paper and the notices about it in BOTH directions, and the
 # direction matters. `update-to` lives on the NOTICE and points at what it
@@ -405,6 +422,86 @@ def _fetch(doi: str, timeout: float):
         return "error", str(e)[:60]
 
 
+def _url_target(url: str) -> tuple[str, str]:
+    """Classify a URL: ('github', 'owner/name') | ('crates', name) | ('web', url).
+
+    Pure, so the offline suite can pin the parsing; the network lives in
+    _fetch_url.
+    """
+    parsed = urllib.parse.urlparse(url.strip())
+    host = parsed.netloc.lower().removeprefix("www.")
+    parts = [p for p in parsed.path.split("/") if p]
+    if host == "github.com" and len(parts) >= 2:
+        owner, name = parts[0], parts[1].removesuffix(".git")
+        return "github", f"{owner}/{name}"
+    if host == "crates.io" and len(parts) >= 2 and parts[0] == "crates":
+        return "crates", parts[1]
+    return "web", url.strip()
+
+
+def _get_json(url: str, timeout: float) -> dict:
+    req = urllib.request.Request(url, headers={"User-Agent": UA,
+                                               "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as fh:
+        return json.load(fh)
+
+
+def _same_place(a: str, b: str) -> bool:
+    pa, pb = urllib.parse.urlparse(a), urllib.parse.urlparse(b)
+    return (pa.netloc.lower().removeprefix("www.")
+            == pb.netloc.lower().removeprefix("www.")
+            and pa.path.rstrip("/") == pb.path.rstrip("/"))
+
+
+def _fetch_url(url: str, timeout: float):
+    """What a DOI-less entry's URL says about itself.
+
+    Returns ('ok', page) | ('moved', page) | ('missing', detail) |
+    ('error', detail), where page is {"name", "about", "owner"}. 'moved' is a
+    repository that now lives under another name: it resolves, but the citation
+    names something that was renamed or transferred, which is worth a look.
+    """
+    kind, target = _url_target(url)
+    try:
+        if kind == "github":
+            data = _get_json(GITHUB_API + target, timeout)
+            page = {"name": data.get("full_name") or "",
+                    "about": data.get("description") or "",
+                    "owner": (data.get("owner") or {}).get("login") or ""}
+            moved = page["name"].lower() != target.lower()
+            return ("moved" if moved else "ok"), page
+        if kind == "crates":
+            crate = _get_json(CRATES_API + target, timeout).get("crate") or {}
+            owners = (_get_json(CRATES_API + target + "/owners", timeout)
+                      .get("users") or [])
+            return "ok", {"name": crate.get("name") or target,
+                          "about": crate.get("description") or "",
+                          "owner": ", ".join(o.get("login") or o.get("name")
+                                             or "" for o in owners)}
+        req = urllib.request.Request(
+            url, headers={"User-Agent": UA, "Accept": "text/html,*/*"})
+        with urllib.request.urlopen(req, timeout=timeout) as fh:
+            final = fh.geturl()
+            body = fh.read(200_000).decode("utf-8", "replace")
+        m = re.search(r"<title[^>]*>(.*?)</title>", body, re.S | re.I)
+        page = {"name": final,
+                "about": " ".join(html.unescape(m.group(1)).split()) if m else "",
+                "owner": ""}
+        return ("ok" if _same_place(final, url) else "moved"), page
+    except urllib.error.HTTPError as e:
+        if e.code in (404, 410):
+            return "missing", f"HTTP {e.code}"
+        return "error", f"HTTP {e.code}"
+    except Exception as e:                      # timeout, DNS, TLS, offline
+        return "error", str(e)[:60]
+
+
+def _plain(value: object) -> str:
+    """A BibTeX field as a person wrote it, minus the protective braces."""
+    return " ".join(str(value or "").translate(str.maketrans("", "", "{}"))
+                    .split())
+
+
 def _allowed() -> set[str]:
     """prose-check.toml's [allow].doi-metadata: entry keys, or key:field.
 
@@ -427,17 +524,20 @@ def _checked_keys(entries: list[dict], errors: list, missing: list) -> set[str]:
 
 
 def audit(timeout: float = 15.0, *, entries: list[dict] | None = None,
-          fetch=None, pause: bool = True, require_complete: bool = False,
+          fetch=None, fetch_url=None, pause: bool = True,
+          require_complete: bool = False,
           allowed: set[str] | None = None) -> int:
     """Audit the bibliography; injectable inputs keep regression tests offline."""
     entries = _entries() if entries is None else entries
     if not entries:
         return 0
     fetch = fetch or _fetch
+    fetch_url = fetch_url or _fetch_url
     allowed = _allowed() if allowed is None else allowed
 
     withdrawn, concerns, missing, errors = [], [], [], []
     metadata_errors, metadata_warnings, metadata_allowed = [], [], []
+    url_pages, url_moved, url_missing, url_errors = [], [], [], []
     used: set[str] = set()
     checked = datacite = 0
 
@@ -454,7 +554,17 @@ def audit(timeout: float = 15.0, *, entries: list[dict] | None = None,
     for e in entries:
         doi = (e.get("doi") or "").strip()
         if not doi:
-            continue                            # prose_check reports these offline
+            # No DOI: the URL is the entry's only identity. An entry with
+            # neither is prose_check's to report, offline.
+            url = (e.get("url") or "").strip()
+            if url:
+                state, msg = fetch_url(url, timeout)
+                bucket = {"missing": url_missing, "error": url_errors,
+                          "moved": url_moved}.get(state, url_pages)
+                bucket.append((e, url, msg))
+                if pause:
+                    time.sleep(0.05)
+            continue
         sys.path.insert(0, str(ROOT))
         import prose_check
         doi = prose_check._normalize_doi(doi)
@@ -483,7 +593,10 @@ def audit(timeout: float = 15.0, *, entries: list[dict] | None = None,
 
     via = (f" ({datacite} via DataCite: software/data DOIs, "
            f"no retraction data to consult)" if datacite else "")
-    print(f"checked {checked} DOI(s) against Crossref{via}\n")
+    n_urls = len(url_pages) + len(url_moved) + len(url_missing) + len(url_errors)
+    urls = (f" and {n_urls} URL-only entr{'y' if n_urls == 1 else 'ies'}"
+            if n_urls else "")
+    print(f"checked {checked} DOI(s) against Crossref{via}{urls}\n")
     rc = 0
     if withdrawn:
         rc = 1
@@ -528,17 +641,49 @@ def audit(timeout: float = 15.0, *, entries: list[dict] | None = None,
               "(delete them from prose-check.toml):")
         for a in stale:
             print(f"  {a}")
-    if errors:
+    if url_missing:
+        rc = 1
+        print("\nURL DOES NOT RESOLVE -- a typo, or a repository that never "
+              "existed:")
+        for e, url, msg in url_missing:
+            print(f"  {e['_key']}  {url}  ({msg})")
+    if url_moved:
+        print("\nURL now resolves somewhere else (renamed or transferred; "
+              "cite the current home):")
+        for e, url, page in url_moved:
+            print(f"  {e['_key']}  {url}  ->  {page['name']}")
+    if url_pages:
+        # Nothing registers a title or author list for a URL, so this cannot
+        # be judged mechanically. Put what the page says beside what the
+        # bibliography says and let a person read the two lines.
+        print("\nURL-only entries resolve. What each page says about itself, "
+              "under what the bibliography says:")
+        for e, url, page in url_pages:
+            local = _display(_plain(e.get("title")) or "<no title>", 90)
+            who = _display(_plain(e.get("author")), 60)
+            about = page["about"] or "<no description>"
+            owner = f"  owner {page['owner']}" if page.get("owner") else ""
+            print(f"  {e['_key']}  {url}")
+            print(f"      bibliography: {local}  ({who})")
+            print(f"      page:         {page['name']}{owner}: "
+                  f"{_display(about, 90)}")
+    if errors or url_errors:
         # NOT a failure. Being offline is not a bibliography defect, and treating
-        # it as one is how a network check starts getting skipped.
+        # it as one is how a network check starts getting skipped. An
+        # unreachable URL does not block --require-complete either: plenty of
+        # sites refuse a script outright, and that is not the citation's fault.
         print("\ncould not be checked (network, not a defect):")
         for key, doi, msg in errors:
             print(f"  {key}  {doi}  {msg}")
+        for e, url, msg in url_errors:
+            print(f"  {e['_key']}  {url}  {msg}")
 
     if not (withdrawn or concerns or missing or errors or metadata_errors
-            or metadata_warnings or metadata_allowed):
+            or metadata_warnings or metadata_allowed or url_missing
+            or url_moved or url_errors):
+        tail = " and every URL-only entry resolves" if url_pages else ""
         print("every DOI resolves, matches its bibliography entry, and none "
-              "is retracted")
+              f"is retracted{tail}")
     return rc or (2 if errors and require_complete else 0)
 
 
