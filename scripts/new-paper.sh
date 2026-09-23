@@ -39,6 +39,8 @@
 #   --bib-style NAME      Typst CSL style name (default american-chemical-society)
 #   --journal NAME        Journal profile from journals/ (e.g. jpr-article), or ""
 #                         to hold the paper to none; default keeps the scaffold's
+#   --pin SPEC            The paper-scaffold requirement to pin (default: this
+#                         release's git tag); e.g. "paper-scaffold @ file:///path"
 #   -y, --yes             Never prompt; take defaults for anything not passed
 #   --no-build            Skip the first `just paper`
 #   --no-git              Do not run git init / the first commit
@@ -47,7 +49,7 @@ set -euo pipefail
 
 SCAFFOLD="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-usage() { sed -n '2,44p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -56,7 +58,7 @@ die() { echo "error: $*" >&2; exit 1; }
 # ---------------------------------------------------------------------------
 DEST=""
 TITLE=""; WORDMARK=""; SUBTITLE=""; AUTHOR=""; EMAIL=""; AFFILIATION=""
-INSTITUTION=""; KEYWORDS=""; PDATE=""; BIBSTYLE=""; JOURNAL="__keep__"
+INSTITUTION=""; KEYWORDS=""; PDATE=""; BIBSTYLE=""; JOURNAL="__keep__"; PIN=""
 ASSUME_YES=0; DO_BUILD=1; DO_GIT=1
 
 while [ $# -gt 0 ]; do
@@ -72,6 +74,7 @@ while [ $# -gt 0 ]; do
     --date)        PDATE="${2:?}"; shift 2 ;;
     --bib-style)   BIBSTYLE="${2:?}"; shift 2 ;;
     --journal)     JOURNAL="${2?--journal needs a value (\"\" for none)}"; shift 2 ;;
+    --pin)         PIN="${2:?--pin needs a value}"; shift 2 ;;
     -y|--yes)      ASSUME_YES=1; shift ;;
     --no-build)    DO_BUILD=0; shift ;;
     --no-git)      DO_GIT=0; shift ;;
@@ -129,17 +132,19 @@ esac
 #
 # What is left out: the scaffold's git history (the whole point), both
 # virtualenvs and every cache (rebuilt by `just setup`), this scripts/ directory
-# (it makes new papers, and a paper does not make papers), docs/migrating.md (a
-# new paper is not migrating; the guide describes moving onto the scaffold, not
-# living on it), docs/history-archive.md (release notes before 3.20.0; a new
-# paper starts past all of them, and `just upgrade-plan` reads them from the
-# scaffold clone, not the paper), local state (.build-stamp, .hash-cache.json,
-# viz/, the rendered stats) and the built artifacts, which describe the
-# scaffold's demo paper and not yours. figures/, si/, assets.json and stats.json DO come along,
-# so the copy compiles and `just check` is clean before the analysis has ever
-# run. The rest of docs/ DOES come along: CLAUDE.md links into it for the
-# reasons behind its rules, and a paper's agent should not need the scaffold
-# checkout to read them.
+# (it makes new papers, and a paper does not make papers), local state
+# (.build-stamp, .hash-cache.json, viz/, the rendered stats) and the built
+# artifacts, which describe the scaffold's demo paper and not yours.
+#
+# The toolchain is left out too (4.0.0, docs/package.md): tools/, tests/,
+# docs/, journals/, word/, HISTORY.md and the package source come from the
+# pinned paper-scaffold package, and the files a paper must hold on disk (the
+# justfile, the Typst modules, the analysis helpers, the audio scripts, the
+# slide theme) are written below by `paper sync`, with its lock. docs/ is
+# readable in the paper as .paper/docs/, the mirror sync writes.
+#
+# figures/, si/, assets.json and stats.json DO come along, so the copy compiles
+# and `just check` is clean before the analysis has ever run.
 # ---------------------------------------------------------------------------
 echo ""
 echo "copying scaffold -> $DEST"
@@ -182,26 +187,49 @@ tar -C "$SCAFFOLD" -cf - \
     --exclude='./audio/*.opus' \
     --exclude='./audio/paper_prose.txt' \
     --exclude='./audio/cover_*.png' \
-    --exclude='./docs/migrating.md' \
-    --exclude='./docs/history-archive.md' \
+    --exclude='./tools' \
+    --exclude='./tests' \
+    --exclude='./docs' \
+    --exclude='./src' \
+    --exclude='./journals' \
+    --exclude='./word' \
+    --exclude='./.paper' \
+    --exclude='./.ruff_cache' \
+    --exclude='./.pytest_cache' \
+    --exclude='./HISTORY.md' \
+    --exclude='./DOCUMENTATION.md' \
+    --exclude='./LICENSE' \
+    --exclude='./pyproject.toml' \
+    --exclude='./uv.lock' \
+    --exclude='./justfile' \
+    --exclude='./stats.typ' \
+    --exclude='./assets.typ' \
+    --exclude='./code.typ' \
+    --exclude='./wordcount.typ' \
+    --exclude='./wordcount-sections.typ' \
+    --exclude='./analysis/scripts/_stats.py' \
+    --exclude='./analysis/scripts/_assets.py' \
+    --exclude='./analysis/scripts/_provenance.py' \
+    --exclude='./audio/extract_prose.py' \
+    --exclude='./audio/make_audiobook.py' \
+    --exclude='./audio/make_cover.py' \
+    --exclude='./slides/theme.typ' \
     --exclude='./CITATION.cff' \
     --exclude='./.zenodo.json' \
     . | tar -C "$DEST" -xf -
 
-# The scaffold's MIT terms cover the TOOLING, which the new directory is now
-# carrying a full copy of, so the notice travels with it. Renamed, because a
-# plain LICENSE at the root of a manuscript reads as the licence of the paper,
-# which is a different question and the author's to answer.
-[ -f "$DEST/LICENSE" ] && mv "$DEST/LICENSE" "$DEST/LICENSE.scaffold"
+# The scaffold's MIT terms cover the tooling, which now travels as the
+# installed package and carries its own licence; the paper's licence is the
+# author's question, so no LICENSE is copied.
 
 # The review action ledger starts empty. Review skills append their findings to
 # it and editing skills close them, so the next review knows what was already
 # raised and fixed. Seeded from the template rather than shipped as
 # reviews/ACTIONS.md in the scaffold, because the filled-in ledger is the
 # paper's and `just upgrade-plan` must not class it as a customized scaffold file.
-if [ -f "$DEST/tools/actions-template.md" ]; then
+if [ -f "$SCAFFOLD/tools/actions-template.md" ]; then
   mkdir -p "$DEST/reviews"
-  cp "$DEST/tools/actions-template.md" "$DEST/reviews/ACTIONS.md"
+  cp "$SCAFFOLD/tools/actions-template.md" "$DEST/reviews/ACTIONS.md"
 fi
 
 # Skills are NOT copied. They are the `paper` plugin, served from this scaffold
@@ -326,8 +354,8 @@ PY
 # checked against journals/ so a typo does not become a manuscript held to
 # nothing without anyone noticing.
 if [ "$JOURNAL" != "__keep__" ]; then
-  if [ -n "$JOURNAL" ] && [ ! -f "$DEST/journals/$JOURNAL.toml" ]; then
-    echo "error: no journal profile '$JOURNAL' under journals/ (have: $(ls "$DEST/journals" | sed 's/\.toml$//' | tr '\n' ' '))" >&2
+  if [ -n "$JOURNAL" ] && [ ! -f "$SCAFFOLD/journals/$JOURNAL.toml" ]; then
+    echo "error: no journal profile '$JOURNAL' under journals/ (have: $(ls "$SCAFFOLD/journals" | sed 's/\.toml$//' | tr '\n' ' '))" >&2
     exit 1
   fi
   echo "selecting journal profile: ${JOURNAL:-none}"
@@ -342,18 +370,24 @@ p.write_text(new)
 PY2
 fi
 
-# pyproject's `name` is cosmetic here (package = false, nothing is built), but it
-# shows up in uv's output, so a directory-shaped slug beats "paper" everywhere.
-# `version` is deliberately left alone: it records which scaffold release this
-# manuscript came from, which is what `just version` exists to answer.
+# The paper's pyproject.toml pins the toolchain (docs/package.md); the same
+# template `paper migrate` writes. `name` is cosmetic (package = false, nothing
+# is built), but it shows up in uv's output, so a directory-shaped slug beats
+# "paper" everywhere. The release is the pin, and `just version` reads it.
+RELEASE="$(grep -m1 '^version = ' "$SCAFFOLD/pyproject.toml" | cut -d'"' -f2)"
 slug="$(basename "$DEST" | tr '[:upper:] _' '[:lower:]--' | tr -cd 'a-z0-9-')"
-[ -n "$slug" ] && python3 - "$DEST/pyproject.toml" "$slug" <<'PY'
-import re, sys
+echo "writing pyproject.toml and the generated files (paper sync)"
+PIN="$PIN" uv run --project "$SCAFFOLD" --quiet python - "$DEST" "${slug:-paper}" <<'PY'
+import os, sys
 from pathlib import Path
-p = Path(sys.argv[1])
-p.write_text(re.sub(r'^name = ".*"$', f'name = "{sys.argv[2]}"',
-                    p.read_text(), count=1, flags=re.M))
+from paper_scaffold.migrate import DEFAULT_PIN, pyproject_for, _toml
+from paper_scaffold import data_dir, version
+dest, name = Path(sys.argv[1]), sys.argv[2]
+groups = _toml().loads((data_dir() / "pyproject.toml").read_text()).get("dependency-groups", {})
+pin = os.environ.get("PIN") or DEFAULT_PIN.format(v=version())
+(dest / "pyproject.toml").write_text(pyproject_for(name, pin, [], groups))
 PY
+uv run --project "$SCAFFOLD" --quiet paper sync --root "$DEST" >/dev/null
 
 # ---------------------------------------------------------------------------
 # Build before the first commit. Neither output is tracked any more, so the order
@@ -385,7 +419,7 @@ fi
 # CLAUDE.md carries one short paragraph about the scaffold, the same in every
 # derived manuscript; the placeholder becomes the release this copy came from.
 if [ -f "$DEST/CLAUDE.md" ]; then
-  sed -i "s/SCAFFOLD_VERSION/$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)/" "$DEST/CLAUDE.md"
+  sed -i "s/SCAFFOLD_VERSION/$RELEASE/" "$DEST/CLAUDE.md"
 fi
 
 if [ "$DO_GIT" = 1 ]; then
@@ -403,8 +437,7 @@ if [ "$DO_GIT" = 1 ]; then
     (cd "$DEST"
      git init -q
      git add -A
-     git "${ident[@]}" commit -q -m "New manuscript from paper-scaffold $(
-       grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)")
+     git "${ident[@]}" commit -q -m "New manuscript from paper-scaffold $RELEASE")
     echo "initialized a git repository and made the first commit"
   else
     echo "note: git not found, skipped git init"

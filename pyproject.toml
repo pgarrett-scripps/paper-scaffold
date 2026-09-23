@@ -71,6 +71,10 @@ exclude = ["__pycache__", "*.pyc"]
 "analysis/scripts/_stats.py" = "paper_scaffold/data/analysis/scripts/_stats.py"
 "analysis/scripts/_assets.py" = "paper_scaffold/data/analysis/scripts/_assets.py"
 "analysis/scripts/_provenance.py" = "paper_scaffold/data/analysis/scripts/_provenance.py"
+# The fixture check (`paper test`) runs the package's audio/ extractor, whose
+# config.py reads the title and authors from ../config.typ: the scaffold's
+# placeholder one, never a paper's.
+"config.typ" = "paper_scaffold/data/config.typ"
 "audio/config.py" = "paper_scaffold/data/audio/config.py"
 "audio/extract_prose.py" = "paper_scaffold/data/audio/extract_prose.py"
 "audio/make_audiobook.py" = "paper_scaffold/data/audio/make_audiobook.py"
