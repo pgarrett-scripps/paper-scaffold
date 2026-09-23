@@ -13,7 +13,8 @@ replaces:
 | `project.just` | Extra `just` recipes, imported by the scaffold's `justfile` |
 | `hooks/` | Scripts the declarations name (suggested location) |
 
-`just upgrade-plan` treats them as project-owned, like `paper.typ`.
+`paper sync` never writes them and `paper migrate` keeps them: they are
+project-owned, like `paper.typ`.
 Every hook is opt-in: with no `project.toml` and no `project.just`, every
 recipe behaves exactly as it did before hooks existed. `just hooks` lists
 what this paper declares.

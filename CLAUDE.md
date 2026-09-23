@@ -1,25 +1,32 @@
 # Working in this directory
 
 Rules for an agent editing this manuscript, each stated once. The reasons and
-full recipe descriptions are in [docs/](docs/README.md); prose conventions are
-in [STYLE.md](STYLE.md). To move an existing manuscript onto the scaffold,
+full recipe descriptions are in [docs/](docs/README.md) (in a paper, read
+them under `.paper/docs/`, the copy `paper sync` writes); prose conventions
+are in [STYLE.md](STYLE.md). To move an existing manuscript onto the scaffold,
 follow the scaffold's `docs/migrating.md` instead of improvising the order.
 
 ## Paper scaffold
 
 Built on [paper-scaffold](https://github.com/pgarrett-scripps/paper-scaffold)
-SCAFFOLD_VERSION (`just version`; upstream is your local clone of that
-repository). The scaffold owns the toolchain: `justfile`, `tools/`, `tests/`,
-`journals/`, `word/`, `docs/` and the staleness records in `.build-state/`.
-This project owns the manuscript: `paper.typ`, `config.typ`, `si-body.typ`,
-`analysis/`, and the declarations in `stats.json` and `assets.json`. A
-paper-specific gate stage, recipe, Word step or extra source goes in
-`project.toml`, `project.just` or `hooks/` (see
-[docs/hooks.md](docs/hooks.md)), never in an edit to a scaffold file. To move
-to a newer scaffold, run `just upgrade-plan`: it lists the "Upgrade:" line of
-each HISTORY.md entry above this version and classes each scaffold file as
-pristine (replace with `--apply-pristine`) or customized (merge by hand,
-keeping this project's customizations). There is no automatic merge.
+SCAFFOLD_VERSION, installed as the `paper-scaffold` package that
+`pyproject.toml` pins (`just version`). The package owns the toolchain:
+`tools/`, `tests/`, `journals/`, `word/` and `docs/` are read from it, and
+`paper sync` writes the few files a paper must hold on disk (`justfile`,
+`stats.typ`, `assets.typ`, `code.typ`, the wordcount modules, the
+`analysis/scripts/_*.py` helpers, the audio scripts, `slides/theme.typ`),
+each headed GENERATED, recorded in `.paper/scaffold.lock.json`. Never edit a
+generated file: `just verify` runs `paper sync --check`, which fails on the
+edit. This project owns the manuscript: `paper.typ`, `config.typ`,
+`si-body.typ`, `analysis/`, and the declarations in `stats.json` and
+`assets.json`. A paper-specific gate stage, recipe, Word step or extra source
+goes in `project.toml`, `project.just` or `hooks/` (see
+[docs/hooks.md](docs/hooks.md)). A local `word/*.docx` or `journals/*.toml`
+overrides the package's copy and is the project's. To move to a newer
+scaffold, change the pin (`uv add "paper-scaffold @ git+...@vX.Y.Z"`), then
+`uv run paper sync`: it prints the "Upgrade:" lines to act on
+(`just upgrade-notes` reprints them). See
+[docs/package.md](docs/package.md).
 
 ## Read the text first
 
@@ -170,16 +177,24 @@ What each does: [docs/working-with-ai.md](docs/working-with-ai.md).
 
 ## Toolchain
 
-- **Python goes through uv.** Root `pyproject.toml` is the toolchain,
-  `analysis/pyproject.toml` the analysis. Use `uv run`, never a bare
-  `python3`, never `uv run --with X`: add the dependency to the right
+- **Python goes through uv.** Root `pyproject.toml` pins the toolchain
+  package, `analysis/pyproject.toml` is the analysis. Use `uv run`, never a
+  bare `python3`, never `uv run --with X`: add the dependency to the right
   pyproject.
-- **Every tool lives in `tools/`**, with a `just` recipe, and resolves paths
-  with `ROOT = Path(__file__).resolve().parent.parent`.
-- **Tests:** a new extractor construct gets a case in `tests/fixture.typ`,
-  then `just test-update` (read the diff). Anything else goes in the per-subject
+- **The toolchain is the pinned package, not files in the paper.** Recipes
+  run tools as `uv run paper tool NAME`; a hook does the same, never
+  `python tools/NAME.py`. A toolchain change is made in the scaffold
+  repository and released; a paper gets it by moving its pin and running
+  `uv run paper sync`. `paper path NAME` shows which file (the package's or a
+  local override) a name resolves to.
+- **Toolchain development (the scaffold repository only).** Every tool lives
+  in `tools/` with a `just` recipe and finds the manuscript through
+  `tools/paths.py` (`ROOT`, `locate()`), never `Path(__file__).parent.parent`.
+  A new extractor construct gets a case in `tests/fixture.typ`, then
+  `just test-update` (read the diff); anything else goes in the per-subject
   case module listed in `tests/run.py`'s `CASE_MODULES`. Never add coverage
-  through `paper.typ`: that prose is placeholder.
+  through `paper.typ`: that prose is placeholder. In a paper, `just test` is
+  the fixture check alone.
 - **Draft metrics:** read `viz/report.json` from `just viz` rather than
   re-deriving section metrics, long sentences or float citations.
   `just density` and `just doctor` are useful, outside the gate.

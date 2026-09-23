@@ -79,7 +79,7 @@ just preflight  # before submitting: fresh builds, deep checks, DOI audit, submi
 | Move an existing manuscript in | [Migration guide](docs/migrating.md) |
 | Write a dissertation or book | [Multi-document guide](docs/multi-document.md) |
 | Build talk slides from the same numbers | [Slides and audio](docs/slides-and-audio.md) |
-| Upgrade a paper to a newer scaffold | [Upgrading](docs/upgrading.md) (`just upgrade-plan`) |
+| Upgrade a paper to a newer scaffold | [Upgrading](docs/upgrading.md) (move the pin, `uv run paper sync`) |
 | See what changed | [Version history](HISTORY.md) |
 
 ## Citing

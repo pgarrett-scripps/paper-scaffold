@@ -50,7 +50,8 @@ Every `just` recipe a manuscript uses, in one table.
 | `just density` | Numerals, parentheticals, acronyms, passives per 1,000 words, and section outliers |
 | `just setup` | Build the Python environment (uv, locked) |
 | `just version` | Which scaffold version this manuscript is built on |
-| `just upgrade-plan [vX.Y.Z]` | Upgrade: lines since this version, and each scaffold file classed pristine or customized; read-only unless `--apply-pristine` |
+| `just upgrade-notes` | HISTORY Upgrade: lines between the lock's release and the installed package (alias `upgrade-plan`) |
+| `just sync` | `paper sync`: rewrite the generated files and the lock after moving the pin ([package](package.md)); `just sync --check` checks only |
 | `just hooks` | The extension hooks this paper declares in `project.toml` ([hooks](hooks.md)) |
 | `just audio-setup` | One-time: install the audio deps and download the voice model |
 | `just audiobook` | Chaptered `.m4b` of the main text |

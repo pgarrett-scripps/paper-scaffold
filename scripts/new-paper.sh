@@ -226,7 +226,7 @@ tar -C "$SCAFFOLD" -cf - \
 # it and editing skills close them, so the next review knows what was already
 # raised and fixed. Seeded from the template rather than shipped as
 # reviews/ACTIONS.md in the scaffold, because the filled-in ledger is the
-# paper's and `just upgrade-plan` must not class it as a customized scaffold file.
+# paper's, not a scaffold file.
 if [ -f "$SCAFFOLD/tools/actions-template.md" ]; then
   mkdir -p "$DEST/reviews"
   cp "$SCAFFOLD/tools/actions-template.md" "$DEST/reviews/ACTIONS.md"
