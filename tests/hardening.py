@@ -307,6 +307,22 @@ class Hardening(unittest.TestCase):
     def test_edit_guard_preserves_negative_single_digit(self):
         self.assertEqual(prose_edit_guard._nums("-3 and +2"), ["-3", "2"])
 
+    @unittest.skipUnless(shutil.which("just") and shutil.which("typstyle"),
+                         "just or typstyle not installed")
+    def test_fmt_check_skips_an_absent_optional_source(self):
+        # typst_sources lists cover-letter.typ; a project without one must not
+        # fail fmt-check on the missing path (exclusionms, koth-lfq deleted the
+        # entry locally), while a present file is still checked.
+        shutil.copy(ROOT / "justfile", self.root / "justfile")
+        for name in ("config.typ", "paper.typ", "si-body.typ", "code.typ"):
+            self.put(name, "Text.\n")
+        run = lambda: subprocess.run(["just", "fmt-check"], cwd=self.root,  # noqa: E731
+                                     capture_output=True, text=True)
+        proc = run()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.put("paper.typ", "#let   x=1\n")
+        self.assertNotEqual(run().returncode, 0)
+
 
 def run_cases() -> bool:
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Hardening)

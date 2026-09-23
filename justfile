@@ -16,6 +16,8 @@ set positional-arguments
 # The hand-written Typst sources, for `just fmt`. Add files here as the
 # manuscript grows (a reviewer-response letter, a cover letter, a shared macro
 # file). Deliberately does NOT include si/*.typ -- see the `fmt` recipe.
+# A listed file that does not exist is skipped (the cover letter is optional),
+# so a project that deletes one need not edit this line.
 typst_sources := "config.typ paper.typ si-body.typ code.typ cover-letter.typ"
 
 # Line width for typstyle. Must stay in step with `tinymist.formatterPrintWidth`
@@ -780,12 +782,12 @@ test-update:
 # asked for. Recipe-body `#` comments are echoed too, hence this sits out here.
 # Reflow the hand-written Typst sources to fmt_width columns
 fmt:
-  typstyle --inplace --line-width {{fmt_width}} --wrap-text {{typst_sources}}
+  typstyle --inplace --line-width {{fmt_width}} --wrap-text $(for f in {{typst_sources}}; do [ -f "$f" ] && echo "$f"; done)
   @echo 'formatted. Rebuild with "just paper" and confirm nothing moved.'
 
 # Exit non-zero if the hand-written sources need reformatting (gate for CI or a hook)
 fmt-check:
-  typstyle --check --line-width {{fmt_width}} --wrap-text {{typst_sources}}
+  typstyle --check --line-width {{fmt_width}} --wrap-text $(for f in {{typst_sources}}; do [ -f "$f" ] && echo "$f"; done)
 
 # Route: resolve -> pandoc's native Typst reader. The resolver replaces every
 # project helper with plain Typst, then pandoc (from uv, pypandoc-binary; no
