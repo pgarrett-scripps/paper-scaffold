@@ -9,7 +9,7 @@ replaces:
 
 | File | Holds |
 |---|---|
-| `project.toml` | The declarations: gate stages, the bibliography audit, one reference list, Word steps, extra Typst sources |
+| `project.toml` | The declarations: gate stages, the bibliography audit, one reference list, Word styles and steps, extra Typst sources |
 | `project.just` | Extra `just` recipes, imported by the scaffold's `justfile` |
 | `hooks/` | Scripts the declarations name (suggested location) |
 
@@ -101,9 +101,11 @@ flag existed still builds and checks as before.
 
 ## Word post-processing
 
-A paper that needs its tables sized, a title style changed, or a footer
-added to `paper.docx` declares the step instead of editing
-`tools/export_docx.py`:
+A paper that needs its tables sized or a footer added to `paper.docx`
+declares the step instead of editing `tools/export_docx.py`. Fonts, sizes,
+spacing, margins and title or heading colours need no step: they are
+settings in `[word.style]`, or a hand-made reference document in
+`[word] reference` (docs/word-export.md).
 
 ```toml
 [word]
@@ -133,8 +135,8 @@ the standard library and the toolchain's packages: the root `pyproject.toml`
 is scaffold-owned.
 
 The Word steps are build inputs. `project.toml` and every file `[word]`
-names are hashed into the staleness record of `paper.pdf` and `paper.docx`,
-like the `justfile` and `word/paper-reference.docx`. They are also captured
+names (the `reference` document too) are hashed into the staleness record
+of `paper.pdf` and `paper.docx`, like the `justfile`. They are also captured
 with the manuscript, so `just main-docx` and `si-docx` convert the upload set
 the way the build did. List any other file a step reads under `inputs`, such
 as a helper module or a table of widths. A file not listed is neither

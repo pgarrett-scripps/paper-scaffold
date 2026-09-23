@@ -59,15 +59,74 @@ class Word:
                        restored afterwards, so a script may append freely
     inputs             other files those steps read (a helper module, a
                        table of widths), so they are hashed and captured too
+    style              [word.style]: the generated reference document's
+                       settings (tools/paper_word_reference.py)
+    reference          a hand-made reference .docx used instead; exclusive
+                       with `style`
     """
     lua_filters: tuple[str, ...] = ()
     before_pagination: tuple[str, ...] = ()
     after_pagination: tuple[str, ...] = ()
     inputs: tuple[str, ...] = ()
+    style: dict = field(default_factory=dict)
+    reference: str | None = None
 
     def files(self) -> tuple[str, ...]:
         return (self.lua_filters + self.before_pagination
-                + self.after_pagination + self.inputs)
+                + self.after_pagination + self.inputs
+                + ((self.reference,) if self.reference else ()))
+
+
+# [word.style]: each key, its check, and what it means. Every key is
+# optional; one left out keeps the stock reference document's value
+# (tools/paper_word_reference.py applies them). docs/word-export.md.
+HEX = re.compile(r"[0-9A-Fa-f]{6}")
+LENGTH = re.compile(r"(\d+(?:\.\d+)?)\s*(in|cm|mm|pt)")
+TWIPS_PER = {"in": 1440, "cm": 1440 / 2.54, "mm": 144 / 2.54, "pt": 20}
+
+
+def length_twips(value: str) -> int:
+    """'1in', '2.5cm', '25mm' or '72pt' in twentieths of a point."""
+    m = LENGTH.fullmatch(value.strip())
+    if not m:
+        raise ValueError(value)
+    return round(float(m.group(1)) * TWIPS_PER[m.group(2)])
+
+
+def _number(low: float, high: float, step: float):
+    def check(v):
+        return (type(v) in (int, float) and low <= v <= high
+                and abs(v / step - round(v / step)) < 1e-9)
+    return check, f"a number from {low:g} to {high:g} in steps of {step:g}"
+
+
+STYLE_KEYS = {
+    "font": (lambda v: isinstance(v, str) and 0 < len(v.strip()) <= 64,
+             "a font family name"),
+    "font_size": _number(6, 36, 0.5),
+    "line_spacing": _number(1, 3, 0.05),
+    "margins": (lambda v: isinstance(v, str) and LENGTH.fullmatch(v.strip()) is not None
+                and 0 < length_twips(v) <= 3 * 1440,
+                'a length up to 3in, such as "1in", "2.5cm", "25mm" or "72pt"'),
+    "title_size": _number(8, 72, 0.5),
+    "title_align": (lambda v: v in ("left", "center"), '"left" or "center"'),
+    "title_color": (lambda v: isinstance(v, str) and HEX.fullmatch(v) is not None,
+                    'six hex digits, such as "000000"'),
+    "heading_color": (lambda v: isinstance(v, str) and HEX.fullmatch(v) is not None,
+                      'six hex digits, such as "000000"'),
+}
+
+
+def _style(value, where: str) -> dict:
+    keys(value, set(STYLE_KEYS), where)
+    out = {}
+    for key, v in value.items():
+        check, expected = STYLE_KEYS[key]
+        if isinstance(v, bool) or not check(v):
+            raise ValueError(f"{where}: {key} must be {expected}, got {v!r}")
+        out[key] = v.strip().upper() if key.endswith("_color") else (
+            v.strip() if isinstance(v, str) else v)
+    return out
 
 
 @dataclass(frozen=True)
@@ -142,15 +201,23 @@ def load(root: Path = ROOT) -> Project:
     typst = _paths(sources.get("typst", []), f"{FILE} sources.typst", (".typ",))
 
     table = data.get("word", {})
-    keys(table, {"lua_filters", "before_pagination", "after_pagination", "inputs"},
-         f"{FILE} [word]")
+    keys(table, {"lua_filters", "before_pagination", "after_pagination", "inputs",
+                 "style", "reference"}, f"{FILE} [word]")
+    style = _style(table.get("style", {}), f"{FILE} [word.style]")
+    reference = None
+    if "reference" in table:
+        if "style" in table:
+            raise ValueError(f"{FILE} [word]: reference and [word.style] are "
+                             "exclusive; a hand-made reference carries its own styles")
+        reference = _paths([table["reference"]], f"{FILE} word.reference", (".docx",))[0]
     word = Word(
         lua_filters=_paths(table.get("lua_filters", []), f"{FILE} word.lua_filters", (".lua",)),
         before_pagination=_paths(table.get("before_pagination", []),
                                  f"{FILE} word.before_pagination", (".py",)),
         after_pagination=_paths(table.get("after_pagination", []),
                                 f"{FILE} word.after_pagination", (".py",)),
-        inputs=_paths(table.get("inputs", []), f"{FILE} word.inputs", None))
+        inputs=_paths(table.get("inputs", []), f"{FILE} word.inputs", None),
+        style=style, reference=reference)
 
     table = data.get("bibliography", {})
     keys(table, {"single"}, f"{FILE} [bibliography]")
@@ -208,10 +275,21 @@ def build_inputs(root: Path = ROOT) -> list[str]:
     manuscript, so a changed Word step marks paper.docx stale and a captured
     build converts the way it was built. A missing one is an error here, not
     at the end of a long build.
+
+    So is a word/paper-reference.docx nothing declares: before 3.27.0 the
+    export read that file, and one left behind would otherwise stop styling
+    the Word file without a word.
     """
+    project = load(root)
+    legacy = "word/paper-reference.docx"
+    if (root / legacy).is_file() and project.word.reference != legacy:
+        raise ValueError(
+            f"{legacy} is no longer read (scaffold 3.27.0): delete it if it is "
+            "the stock file, else move its settings to [word.style] "
+            "(uv run python tools/paper_word_reference.py --translate "
+            f"{legacy}) or declare [word] reference = \"{legacy}\"")
     if not (root / FILE).is_file():
         return []
-    project = load(root)
     missing = [p for p in project.word.files() if not (root / p).is_file()]
     if missing:
         raise ValueError(f"{FILE} [word] names missing file(s): " + ", ".join(missing))
@@ -266,6 +344,10 @@ def describe(project: Project) -> list[str]:
     for kind in ("lua_filters", "before_pagination", "after_pagination", "inputs"):
         for path in getattr(project.word, kind):
             lines.append(f"word       {kind:<17} {path}")
+    for key, value in project.word.style.items():
+        lines.append(f"word       style.{key:<11} {value!r}")
+    if project.word.reference:
+        lines.append(f"word       reference         {project.word.reference}")
     if project.single_bibliography:
         lines.append("bibliography one reference list; the SI cites @key (no @si- list)")
     if not project.bib_audit_require_complete:

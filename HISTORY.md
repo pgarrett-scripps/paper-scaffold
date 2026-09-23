@@ -64,6 +64,39 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 3.27.0
+
+Word styling is declared, not a binary to edit. The Word export never
+compiles the Typst preamble, so the paper's look reaches Word only through
+the reference document, and each paper kept a hand-edited
+`word/paper-reference.docx` that every upgrade had to diff by eye.
+
+- **`[word.style]` in `project.toml`**: `font`, `font_size`,
+  `line_spacing`, `margins`, `title_size`, `title_align`, `title_color`,
+  `heading_color`, each optional and validated strictly.
+  `tools/paper_word_reference.py` generates the reference document from
+  them into `.build-state/word-reference/`, cached by a hash of the settings
+  and the tool. A settings change makes `paper.docx` stale. docs/word-export.md.
+- **The stock headings are black.** Title, Subtitle and Heading 1-9 were
+  pandoc's blue, which three of the papers recoloured locally.
+- **`[word] reference = "word/custom.docx"`** keeps a hand-made reference
+  document, used as it is. It cannot be combined with `[word.style]`.
+- **`word/paper-reference.docx` is no longer shipped or read.** A paper
+  that still has one and does not declare it gets a build error that names
+  the fix. `--translate` prints the `[word.style]` block that reproduces an
+  old template, and `just upgrade-plan` states which case each paper is in.
+
+Upgrade: copy `tools/`, `tests/` and `docs/` (`--apply-pristine`). Then handle
+`word/paper-reference.docx` as `just upgrade-plan` classes it. The stock
+file, or one only recoloured black: `git rm` it. One with other edits: put
+the `[word.style]` block the plan prints into `project.toml` and `git rm`
+the file. One with edits no setting expresses: keep it and declare
+`[word] reference = "word/paper-reference.docx"`. For a paper whose own copy
+of `upgrade_plan.py` predates this, run
+`uv run python tools/paper_word_reference.py --translate word/paper-reference.docx`
+after copying `tools/`. Rebuild with `just docx`: headings turn black unless
+`heading_color` says otherwise.
+
 ## 3.26.1
 
 - **The voice check wants both files.** `audio-setup` and `_audio-check` now

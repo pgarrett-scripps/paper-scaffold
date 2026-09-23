@@ -311,6 +311,37 @@ def merge_check(base: bytes, ours: bytes, theirs: bytes) -> int | None:
     return r.returncode
 
 
+# 3.27.0 generates the Word reference document from project.toml's
+# [word.style] instead of shipping this binary. Its bytes always differ (the
+# creation time), so it is compared as Word renders it.
+LEGACY_WORD_TEMPLATE = "word/paper-reference.docx"
+
+
+def legacy_template_note(project_copy: bytes, release_copy: bytes | None) -> str:
+    """Delete, translate to [word.style], or declare [word] reference."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from paper_word_reference import differences, effective, toml_block, translate
+        if release_copy is not None and not differences(
+                effective(project_copy), effective(release_copy)):
+            return ("the stock template: `git rm` it (the generated one has "
+                    "black headings)")
+        style, left = translate(project_copy, release_copy)
+    except Exception as exc:  # a damaged file, or no pandoc: say so, do not stop
+        return f"customized locally: compare by hand ({exc})"
+    if not style and not left:
+        return "equal to the generated stock: `git rm` it"
+    if not left:
+        return ("customized: add to project.toml, then `git rm` it: "
+                + toml_block(style).replace("\n", "; "))
+    return (f"customized beyond [word.style] ({len(left)} difference(s); "
+            "`uv run python tools/paper_word_reference.py --translate "
+            f"{LEGACY_WORD_TEMPLATE} --baseline OLD` lists them): keep it and declare "
+            f'[word] reference = "{LEGACY_WORD_TEMPLATE}" in project.toml, '
+            "or accept the closest settings: "
+            + toml_block(style).replace("\n", "; "))
+
+
 @dataclass
 class FileRow:
     path: str                     # path in the project
@@ -354,6 +385,8 @@ def classify(project: Path, blobs: Blobs, cur: dict[str, Entry],
             row.cls = "removed-upstream"
             if pdata is None:
                 row.note = "already gone"
+            elif up == LEGACY_WORD_TEMPLATE:
+                row.note = legacy_template_note(pdata, cdata)
             elif np_ == nc:
                 row.note = "pristine: `git rm` it"
             else:

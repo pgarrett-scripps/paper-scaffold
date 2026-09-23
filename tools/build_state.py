@@ -53,7 +53,6 @@ def snapshot(root: Path, dependencies=()) -> dict[str, str | None]:
     # project.toml and the Word steps it names (docs/hooks.md), captured with
     # the manuscript so a build of it converts the way it was built.
     paths.update(root / name for name in build_inputs(root))
-    paths.add(root / "word/paper-reference.docx")
     paths.update(root.glob("*.bib"))
     paths.update(root.glob("*.csl"))
     for folder in ("figures", "si", "csl"):

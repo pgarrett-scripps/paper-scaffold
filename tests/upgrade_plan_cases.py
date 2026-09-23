@@ -283,6 +283,27 @@ def run_cases() -> bool:
         check("a heading in both files is read once, from HISTORY.md",
               "stale duplicate." not in texts, texts)
 
+    # word/paper-reference.docx left the scaffold in 3.27.0. The paper's copy
+    # is compared as Word renders it (its bytes carry a creation time), and
+    # only the paper's own edits need a [word.style].
+    from paper_word_reference import generate
+    with tempfile.TemporaryDirectory() as tmp:
+        old = generate(Path(tmp) / "old.docx", {"heading_color": "0F4761"}).read_bytes()
+        same = generate(Path(tmp) / "same.docx", {"heading_color": "0F4761"}).read_bytes()
+        titled = generate(Path(tmp) / "titled.docx", {"heading_color": "0F4761",
+                                                      "title_size": 20}).read_bytes()
+        stock = generate(Path(tmp) / "stock.docx", {}).read_bytes()
+        note = up.legacy_template_note(same, old)
+        check("an untouched old template is deleted", "`git rm`" in note, note)
+        note = up.legacy_template_note(stock, old)
+        check("a recoloured one equal to the new stock is deleted",
+              note.startswith("equal to the generated stock"), note)
+        note = up.legacy_template_note(titled, old)
+        check("an edited one translates to [word.style], not the old blue",
+              "title_size = 20" in note and "heading_color" not in note, note)
+        broken = up.legacy_template_note(b"not a docx", old)
+        check("a damaged one is left to the author", "by hand" in broken, broken)
+
     if ok:
         print("  upgrade-plan: classification, Upgrade: lines, apply guard ok")
     return ok

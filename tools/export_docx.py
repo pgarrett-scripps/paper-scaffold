@@ -543,18 +543,24 @@ def main() -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    args = ["--fail-if-warnings", "--resource-path", str(ROOT)]
-    reference = ROOT / "word/paper-reference.docx"
-    if reference.is_file():
-        args += ["--reference-doc", str(reference)]
+    # The reference document carries every Word style: generated from
+    # [word.style] (tools/paper_word_reference.py), or the paper's own file.
+    if word.reference:
+        reference = ROOT / word.reference
+        if not reference.is_file():
+            print(f"error: [word] reference {word.reference} is missing", file=sys.stderr)
+            return 1
+    else:
+        from paper_word_reference import reference_for
+        reference = reference_for(ROOT, word.style)
+    args = ["--fail-if-warnings", "--resource-path", str(ROOT),
+            "--reference-doc", str(reference)]
     for lua in word.lua_filters:
         args += ["--lua-filter", str(ROOT / lua)]
     adapt_tree(tree, text_width(reference))
     import pypandoc
     pypandoc.convert_text(json.dumps(tree), "docx", format="json",
                           outputfile=str(OUT), extra_args=args)
-    if not reference.is_file():
-        style_code(OUT)
     tools = Path(__file__).resolve().parent
     try:
         run_word_steps(word.before_pagination, OUT, ROOT, tools)
