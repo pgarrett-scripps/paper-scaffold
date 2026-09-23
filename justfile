@@ -67,9 +67,13 @@ version:
   v=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
   echo "paper-scaffold $v"
   if git rev-parse --git-dir >/dev/null 2>&1; then
-    dirty=$(git status --porcelain | wc -l)
+    # Scoped to this directory: a manuscript can live in a subdirectory of a
+    # code repository, and an unrelated code change there should not report
+    # the paper's tree dirty. At the repository root "." is the whole tree.
+    dirty=$(git status --porcelain . | wc -l)
+    where=$(git rev-parse --show-prefix)
     echo "  commit  $(git log -1 --format='%h %ad %s' --date=short)"
-    [ "$dirty" -gt 0 ] && echo "  tree    $dirty uncommitted change(s)" || echo "  tree    clean"
+    [ "$dirty" -gt 0 ] && echo "  tree    $dirty uncommitted change(s)${where:+ under $where}" || echo "  tree    clean${where:+ under $where}"
   fi
 
 # Run from a derived manuscript: HISTORY.md's Upgrade: lines since this version,

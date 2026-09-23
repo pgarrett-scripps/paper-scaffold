@@ -387,6 +387,29 @@ class Hardening(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("NARRATED", proc.stdout)
 
+    @unittest.skipUnless(shutil.which("just") and shutil.which("git"),
+                         "just or git not installed")
+    def test_version_tree_state_is_scoped_to_the_manuscript(self):
+        # A manuscript inside a code repository: a change to the code must not
+        # report the paper's tree dirty, and a change to the paper must.
+        paper = self.root / "paper"
+        paper.mkdir()
+        shutil.copy(ROOT / "justfile", paper / "justfile")
+        self.put("paper/pyproject.toml", 'version = "0"\n')
+        self.put("src/code.py", "x = 1\n")
+        git = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+        for args in (["init", "-q"], ["add", "."], ["commit", "-qm", "init"]):
+            subprocess.run(git + args, cwd=self.root, check=True,
+                           capture_output=True)
+        self.put("src/code.py", "x = 2\n")
+        def tree():
+            out = subprocess.run(["just", "version"], cwd=paper, check=True,
+                                 capture_output=True, text=True).stdout
+            return next(line for line in out.splitlines() if "tree" in line)
+        self.assertIn("clean under paper/", tree())
+        self.put("paper/pyproject.toml", 'version = "1"\n')
+        self.assertIn("1 uncommitted change(s) under paper/", tree())
+
 
 def run_cases() -> bool:
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Hardening)
