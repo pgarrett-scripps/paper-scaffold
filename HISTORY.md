@@ -64,6 +64,58 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 3.24.0
+
+A ledger that carries review findings from one agent to the next, and the
+fixes the 3.23.0 roll-out to ten papers turned up.
+
+### Review action ledger
+
+An agent picking up after a review could not tell which findings were already
+fixed. `reviews/ACTIONS.md` is now one markdown table of every review finding:
+id, severity, status, source, summary, fix, closed. The rules sit in the
+file's own header.
+
+- Review skills read it first, skip findings already recorded, reopen one
+  that has come back, and append the rest. `review-all` merges into it once,
+  at the end, instead of writing a separate ranked list, and keeps its ship
+  verdict. `story-review` adds only the items the author accepts.
+- Editing skills (`copy-edit`, `fix-verify`, `declare-number`, `new-figure`)
+  list the open rows for their task and close the ones they fix with the
+  commit hash.
+- `just check-actions`, now in `verify`, fails only on a malformed ledger and
+  warns while a blocker is open. `--open` lists open rows; `--init` creates
+  the file from `tools/actions-template.md`. New papers get one.
+
+Upgrade: copy `tools/check_actions.py`, `tools/actions-template.md` and
+`tests/actions_cases.py`; merge the `check-actions` recipe and its `verify`
+stage into the justfile and `actions_cases` into `tests/run.py`'s
+`CASE_MODULES`; run `just check-actions --init` and seed it from the findings
+files already in `reviews/`; run `paper-plugin-update`.
+
+### Fixes
+
+- `fmt` and `fmt-check` skip a `typst_sources` file that does not exist, so a
+  project without `cover-letter.typ` no longer fails the format check.
+- A scaffold version bump no longer marks declared inputs stale: recorded
+  hashes of `pyproject.toml` and `uv.lock` ignore the scaffold's own version
+  line.
+- `just submission` handles three SI layouts: appended (unchanged); a
+  separate `manuscript.toml` target, which becomes the SI PDF with no SI Word
+  file; and no SI, which ships the main files only.
+- An SI that cites the main reference list, with no bibliography of its own,
+  now gets its own local list, numbered 1 to n in SI order, in both split
+  files, and a bare "Figure 3" pointing into the main text reads "Figure 3 of
+  the main text". The combined `paper.docx` still shows such SI citations as
+  raw keys.
+
+Upgrade: copy `tools/submission.py`, `tools/export_docx.py`,
+`tools/hashcache.py`, `tools/check_stats.py`, `tools/check_assets.py` and
+`analysis/scripts/_provenance.py`, and take the justfile's `fmt` recipes
+(papers that dropped `cover-letter.typ` from `typst_sources` can restore it).
+`_provenance.py` is imported by the generators, so run `just assets` once
+after copying it; values do not change. Drop a local SI splitter.
+
 ## 3.23.0
 
 Three things the paper projects kept building for themselves are now upstream.
