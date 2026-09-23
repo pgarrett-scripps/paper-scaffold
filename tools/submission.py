@@ -427,9 +427,11 @@ _NOUN = r"(?:Figures?|Tables?|Sections?)"
 _NUM = r"\d+(?:\.\d+)*[a-z]?"
 # "Figure 3", "Figures 2 and 3", "Section 2.3 and Section 2.4": main-text
 # numbers, never S-numbered ones, never a caption label ("Figure 3:"), and
-# never one already qualified. Atomic, so "Figure 12" cannot match as "1".
+# never one already qualified. Atomic, so "Figure 12" cannot match as "1";
+# written as lookahead plus backreference because `(?>...)` needs Python 3.11.
 MAIN_REF = re.compile(
-    rf"(?>\b{_NOUN} {_NUM}(?:(?:,? and |, |–|-)(?:{_NOUN} )?{_NUM})*)"
+    rf"(?=(?P<ref>\b{_NOUN} {_NUM}(?:(?:,? and |, |–|-)(?:{_NOUN} )?{_NUM})*))"
+    r"(?P=ref)"
     r"(?![\w:])(?!\.\d)(?! (?:of|in) the main text)")
 
 

@@ -64,6 +64,13 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 3.24.1
+
+`tools/submission.py` used an atomic regex group, `(?>...)`, which Python
+added in 3.11; on 3.10, the supported floor, importing it failed. It is now a
+lookahead plus backreference with the same matches. Upgrade: copy
+`tools/submission.py`.
+
 ## 3.24.0
 
 A ledger that carries review findings from one agent to the next, and the
