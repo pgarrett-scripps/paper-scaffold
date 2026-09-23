@@ -790,6 +790,16 @@ def _normalize_doi(doi: str) -> str:
     return d.strip()
 
 
+def single_bibliography(root: Path) -> bool:
+    """project.toml's [bibliography] single; False when it cannot be read
+    (project_sources reports the config error)."""
+    from project_hooks import load
+    try:
+        return load(root).single_bibliography
+    except (OSError, ValueError):
+        return False
+
+
 def check_si_bibliography(root: Path | None = None,
                           cfg: Config | None = None) -> list[Finding]:
     """The Supporting Information's own reference list, checked for routing.
@@ -813,6 +823,20 @@ def check_si_bibliography(root: Path | None = None,
     """
     r = root or ROOT
     si = si_bibliography(r)
+    if single_bibliography(r):
+        # project.toml says the SI has no list of its own: its @key citations
+        # are meant for the one list, and the submission split gives the SI
+        # file a local list of the works it cites (docs/submission.md). A
+        # left-over Alexandria setup contradicts that declaration.
+        if si is None:
+            return []
+        return [Finding(
+            "si-bibliography-mode", "error",
+            "project.toml declares one reference list ([bibliography] "
+            "single = true), but the sources still set up the SI's own: "
+            "remove the `#show: alexandria(...)` line from paper.typ and the "
+            "#bibliographyx call from si-body.typ, or drop the declaration",
+            where="project.toml")]
     if si is None:
         return []
     out: list[Finding] = []

@@ -90,7 +90,9 @@ Details: [docs/numbers.md](docs/numbers.md), [docs/assets.md](docs/assets.md).
 ## Manuscript rules
 
 - **Cite in `si-body.typ` as `@si-key`, never `@key`.** A bare key in the SI
-  silently joins the main reference list (`misrouted-citation`).
+  silently joins the main reference list (`misrouted-citation`). Exception:
+  `project.toml` sets `[bibliography] single = true` (one list; the SI cites
+  `@key`). See docs/hooks.md.
 - **Never delete the `// >>> BODY START` / `// <<< BODY END` markers** in
   `paper.typ`; moving them changes what the word count means.
 - **Notes to self are `#todo("...")`, never a comment.** `just paper` refuses

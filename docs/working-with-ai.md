@@ -223,7 +223,9 @@ superscript, and quietly joins the MAIN list instead. `just prose-check` reports
 that as `misrouted-citation`, and reports the prefix in paper.typ's
 `#show: alexandria(...)` drifting from the one in si-body.typ's
 `#bibliographyx(...)`. Both lists read `references.bib`; there is one
-bibliography file. `just docx` sets both.
+bibliography file. `just docx` sets both. A paper whose `project.toml` sets
+`[bibliography] single = true` has removed the SI's list on purpose, and its
+SI cites `@key` ([hooks.md](hooks.md#one-reference-list)).
 
 **Never delete the `// >>> BODY START` / `// <<< BODY END` markers** in
 `paper.typ`. The word counter, the readability report, and the narrator all slice

@@ -77,6 +77,7 @@ class Project:
     bib_audit_require_complete: bool = True
     typst_sources: tuple[str, ...] = ()
     word: Word = field(default_factory=lambda: Word())
+    single_bibliography: bool = False
     declared: bool = False
 
 
@@ -119,7 +120,8 @@ def load(root: Path = ROOT) -> Project:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as exc:
         raise ValueError(f"{FILE}: {exc}") from None
-    keys(data, {"schema_version", "stages", "preflight", "sources", "word"}, FILE)
+    keys(data, {"schema_version", "stages", "preflight", "sources", "word",
+                "bibliography"}, FILE)
     if type(data.get("schema_version")) is not int or data["schema_version"] != 1:
         raise ValueError(f"{FILE}: schema_version must be 1")
 
@@ -150,8 +152,15 @@ def load(root: Path = ROOT) -> Project:
                                 f"{FILE} word.after_pagination", (".py",)),
         inputs=_paths(table.get("inputs", []), f"{FILE} word.inputs", None))
 
+    table = data.get("bibliography", {})
+    keys(table, {"single"}, f"{FILE} [bibliography]")
+    single = table.get("single", False)
+    if not isinstance(single, bool):
+        raise ValueError(f"{FILE} [bibliography]: single must be true or false")
+
     return Project(stages=stages, bib_audit_require_complete=complete,
-                   typst_sources=typst, word=word, declared=True)
+                   typst_sources=typst, word=word, single_bibliography=single,
+                   declared=True)
 
 
 def _paths(value, where: str, suffixes: tuple[str, ...] | None) -> tuple[str, ...]:
@@ -257,6 +266,8 @@ def describe(project: Project) -> list[str]:
     for kind in ("lua_filters", "before_pagination", "after_pagination", "inputs"):
         for path in getattr(project.word, kind):
             lines.append(f"word       {kind:<17} {path}")
+    if project.single_bibliography:
+        lines.append("bibliography one reference list; the SI cites @key (no @si- list)")
     if not project.bib_audit_require_complete:
         lines.append("preflight  bib-audit runs without --require-complete")
     return lines or [f"{FILE} declares no hooks"]

@@ -210,6 +210,9 @@ reader of the SI alone cannot follow it; `just prose-check` reports one.
 Cite the work, not the list: both lists read the same `references.bib`, so a
 work cited in both halves is one entry with two numbers, not two entries.
 
+A paper whose `project.toml` sets `[bibliography] single = true` has one list,
+and its SI cites `@key` ([docs/hooks.md](docs/hooks.md#one-reference-list)).
+
 ## Slides
 
 Slide text is held to four rules only: no em dashes, American spellings, no

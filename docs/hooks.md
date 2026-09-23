@@ -9,7 +9,7 @@ replaces:
 
 | File | Holds |
 |---|---|
-| `project.toml` | The declarations: gate stages, the bibliography audit, Word steps, extra Typst sources |
+| `project.toml` | The declarations: gate stages, the bibliography audit, one reference list, Word steps, extra Typst sources |
 | `project.just` | Extra `just` recipes, imported by the scaffold's `justfile` |
 | `hooks/` | Scripts the declarations name (suggested location) |
 
@@ -76,6 +76,28 @@ match:
 [preflight]
 bib_audit_require_complete = false
 ```
+
+## One reference list
+
+The scaffold gives the SI its own reference list, and `@si-key` routes a
+citation there ([manuscript.md](manuscript.md)). A journal that wants one
+list for the whole paper gets it by removing the Alexandria setup: the
+`#show: alexandria(...)` line in `paper.typ` and the `#bibliographyx` call
+in `si-body.typ`. The SI then cites `@key`, and `just submission` gives the
+separately uploaded SI file a local list of only the works it cites
+([submission.md](submission.md)). Then declare the choice:
+
+```toml
+[bibliography]
+single = true
+```
+
+The declaration tells a reader, human or agent, that a bare `@key` in the SI
+is intended, so the `@si-key` rule in `CLAUDE.md` and `STYLE.md` does not
+apply. `just prose-check` holds the sources to it: a declaration with the
+Alexandria setup still present is an error (`si-bibliography-mode`). Without
+the declaration nothing changes. A paper that removed Alexandria before this
+flag existed still builds and checks as before.
 
 ## Word post-processing
 

@@ -246,6 +246,47 @@ class Word(Tmp):
                     ph.load(self.root)
 
 
+class Bibliography(Tmp):
+    """[bibliography] single: the SI cites the main list's keys on purpose."""
+
+    ALEXANDRIA = '#show: alexandria(prefix: "si-", read: p => read(p))\n= Intro\n'
+    SI_LIST = '= SI\nAs shown @smith2020.\n#bibliographyx("references.bib", prefix: "si-")\n'
+
+    def setUp(self):
+        super().setUp()
+        (self.root / "references.bib").write_text(
+            "@article{smith2020, title={T}, author={Smith, A}, year={2020}}\n")
+
+    def findings(self):
+        import prose_check
+        return [f.rule for f in prose_check.check_si_bibliography(self.root)]
+
+    def test_default_keeps_the_si_routing_check(self):
+        (self.root / "paper.typ").write_text(self.ALEXANDRIA)
+        (self.root / "si-body.typ").write_text(self.SI_LIST)
+        self.assertEqual(self.findings(), ["misrouted-citation"])
+
+    def test_single_list_accepts_bare_keys_in_the_si(self):
+        (self.root / "paper.typ").write_text("= Intro\n#bibliography(\"references.bib\")\n")
+        (self.root / "si-body.typ").write_text("= SI\nAs shown @smith2020.\n")
+        self.write("[bibliography]\nsingle = true\n")
+        self.assertEqual(self.findings(), [])
+        self.assertIn("one reference list", "\n".join(ph.describe(ph.load(self.root))))
+
+    def test_single_list_with_a_left_over_si_list_is_an_error(self):
+        (self.root / "paper.typ").write_text(self.ALEXANDRIA)
+        (self.root / "si-body.typ").write_text(self.SI_LIST)
+        self.write("[bibliography]\nsingle = true\n")
+        self.assertEqual(self.findings(), ["si-bibliography-mode"])
+
+    def test_single_must_be_a_boolean(self):
+        for bad in ('single = "yes"', "one = true"):
+            with self.subTest(bad=bad):
+                self.write(f"[bibliography]\n{bad}\n")
+                with self.assertRaises(ValueError):
+                    ph.load(self.root)
+
+
 class Wiring(unittest.TestCase):
     """The justfile calls the hooks at each gate; a refactor that drops one
     would leave a project's stage silently unrun."""
@@ -298,7 +339,7 @@ class ProjectJust(Tmp):
 
 def run_cases() -> bool:
     suite = unittest.TestSuite()
-    for case in (Stages, Sources, Word, Wiring, ProjectJust):
+    for case in (Stages, Sources, Word, Bibliography, Wiring, ProjectJust):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(case))
     return unittest.TextTestRunner(verbosity=1).run(suite).wasSuccessful()
 

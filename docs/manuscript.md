@@ -67,6 +67,10 @@ it. Nothing on the page says so. `just prose-check` reports it as
 `si-bibliography-prefix` (Typst refuses that too, but from inside the
 Alexandria package, pointing at neither line).
 
+A journal that wants one list for the whole paper: remove the Alexandria
+setup and declare `[bibliography] single = true` in `project.toml`
+([hooks.md](hooks.md#one-reference-list)).
+
 The SI's list is excluded from the SI word count (the `<si-references>` label,
 in `wordcount.typ`), dropped by the readability report and the narrator, and
 omitted from the plain-text review copy, exactly as the main list is. `just
