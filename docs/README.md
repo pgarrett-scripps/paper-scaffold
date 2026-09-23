@@ -23,6 +23,7 @@ the reasons behind them.
 | Select a journal, sections and word limits | [Journals and word limits](journals.md) |
 | Check the writing | [Prose checks, formatting and tests](prose-checks.md) |
 | Make a talk or listen to a draft | [Slides and audio](slides-and-audio.md) |
+| Add a paper-specific stage, recipe or Word fix without editing the scaffold | [Extension hooks](hooks.md) |
 | Upgrade to a newer scaffold | [Versioning and upgrading](upgrading.md), [HISTORY.md](../HISTORY.md) |
 | Troubleshoot | [Requirements](getting-started.md#requirements), [common pitfalls](getting-started.md#things-that-will-bite-you) |
 

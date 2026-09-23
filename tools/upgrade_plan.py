@@ -60,6 +60,9 @@ PROJECT_OWNED = (
     "references.bib", "journal.toml", "word-limits.toml", "word-watchlist.toml",
     "prose-check.toml", "*.csl", "figures/*", "si/*", "slides/config.typ",
     "slides/talk.typ", "analysis/*",
+    # The extension hooks (docs/hooks.md): the paper's config, recipes and
+    # scripts, read by the scaffold and never shipped by it.
+    "project.toml", "project.just", "hooks/*",
     # Regenerated from pyproject.toml by `uv lock`; carries the project's name.
     "uv.lock",
     # Replaced by new-paper.sh with a symlink into the scaffold checkout.

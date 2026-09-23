@@ -100,6 +100,7 @@ CASE_MODULES = (
     "submission_cases",       # the journal upload set in submission/
     "actions_cases",          # the review action ledger, reviews/ACTIONS.md
     "narration_cases",        # audio/: what the audiobook voice is handed
+    "hooks_cases",            # project.toml: the paper's extension hooks
 )
 
 

@@ -1,5 +1,11 @@
 set positional-arguments
 
+# The paper's own recipes, in a file the scaffold never ships or replaces (see
+# docs/hooks.md). Optional: no project.just, nothing imported. A recipe there
+# with a name used here is an error rather than an override, deliberately, so
+# a paper cannot quietly replace a gate; change a gate through project.toml.
+import? "project.just"
+
 # Manuscript build (Typst). See README.md for the tour.
 #
 # CONVENTION: `just --list` shows the LAST comment line before each recipe as
@@ -13,9 +19,10 @@ set positional-arguments
 # The only thing this justfile knows about it is that `just assets` regenerates
 # everything the manuscript includes. See analysis/justfile for that contract.
 #
-# The hand-written Typst sources, for `just fmt`. Add files here as the
-# manuscript grows (a reviewer-response letter, a cover letter, a shared macro
-# file). Deliberately does NOT include si/*.typ -- see the `fmt` recipe.
+# The hand-written Typst sources, for `just fmt`. A paper adds its own (a
+# reviewer-response letter, a shared macro file) in project.toml's [sources]
+# typst, not here, so this line stays the scaffold's (docs/hooks.md).
+# Deliberately does NOT include si/*.typ -- see the `fmt` recipe.
 # A listed file that does not exist is skipped (the cover letter is optional),
 # so a project that deletes one need not edit this line.
 typst_sources := "config.typ paper.typ si-body.typ code.typ cover-letter.typ"
@@ -83,6 +90,13 @@ version:
 # Plan an upgrade to a newer scaffold release (default: the latest tag)
 upgrade-plan *args:
   @uv run --quiet python tools/upgrade_plan.py "$@"
+
+# project.toml is where a paper extends the scaffold without editing it: extra
+# gate stages, Word post-processing, extra Typst sources, one shared reference
+# list. See docs/hooks.md. No project.toml means no hooks.
+# List the extension hooks this paper declares in project.toml
+hooks:
+  @uv run --quiet python tools/project_hooks.py show
 
 # One-time (and after any pyproject change): build the Python environment. uv
 # resolves and locks it, so every machine gets the same versions. The analysis has
@@ -204,6 +218,9 @@ all: paper
   just _narrate-if-voice
   # The upload set, from the capture `paper` just made (no second build).
   uv run --quiet python tools/submission.py all
+  # The paper's own build steps after the upload set ([stages] submission in
+  # project.toml, docs/hooks.md); nothing when none are declared.
+  uv run --quiet python tools/project_hooks.py stages submission
   just check
 
 # Narrate when audio/ and its voice model exist, else say why not. A recipe of
@@ -285,6 +302,9 @@ verify:
   stage "declarations (stats + assets)"  "" just check-declared
   stage "staleness (just check)"         "" just check
   stage "review actions (just check-actions)" "" just check-actions
+  # The paper's own stages ([stages] verify in project.toml, docs/hooks.md).
+  # Each prints its own header; nothing prints when none are declared.
+  uv run --quiet python tools/project_hooks.py stages verify || rc=1
 
   echo ""
   if [ $rc -eq 0 ]; then
@@ -325,7 +345,13 @@ preflight: submission
   just check-stats-deep || rc=1
   echo ""
   echo "=== bibliography (just bib-audit) ==="
-  just bib-audit --require-complete || rc=1
+  # --require-complete unless project.toml relaxes it; a project.toml that
+  # does not parse keeps the strict flag and fails the gate.
+  bib_args=$(uv run --quiet python tools/project_hooks.py bib-audit-args) \
+    || { rc=1; bib_args="--require-complete"; }
+  just bib-audit $bib_args || rc=1
+  # The paper's own stages ([stages] preflight in project.toml, docs/hooks.md).
+  uv run --quiet python tools/project_hooks.py stages preflight || rc=1
   echo ""
   if [ $rc -eq 0 ]; then
     echo "PREFLIGHT OK -- fresh builds, the full gate, re-derived numbers and the"
@@ -361,6 +387,8 @@ check:
   just check-build || rc=1
   # The submission set is a note, never a failure: see the submission recipes.
   uv run --quiet python tools/submission.py check --note
+  # The paper's own staleness checks ([stages] check in project.toml).
+  uv run --quiet python tools/project_hooks.py stages check || rc=1
 
   [ $rc -eq 0 ] && echo "everything is current with the source"
   exit $rc
@@ -818,12 +846,19 @@ test-update:
 # asked for. Recipe-body `#` comments are echoed too, hence this sits out here.
 # Reflow the hand-written Typst sources to fmt_width columns
 fmt:
-  typstyle --inplace --line-width {{fmt_width}} --wrap-text $(for f in {{typst_sources}}; do [ -f "$f" ] && echo "$f"; done)
-  @echo 'formatted. Rebuild with "just paper" and confirm nothing moved.'
+  #!/usr/bin/env bash
+  set -euo pipefail
+  # typst_sources plus project.toml's [sources] typst (docs/hooks.md).
+  files=$(uv run --quiet python tools/project_hooks.py typst-sources {{typst_sources}})
+  typstyle --inplace --line-width {{fmt_width}} --wrap-text $files
+  echo 'formatted. Rebuild with "just paper" and confirm nothing moved.'
 
 # Exit non-zero if the hand-written sources need reformatting (gate for CI or a hook)
 fmt-check:
-  typstyle --check --line-width {{fmt_width}} --wrap-text $(for f in {{typst_sources}}; do [ -f "$f" ] && echo "$f"; done)
+  #!/usr/bin/env bash
+  set -euo pipefail
+  files=$(uv run --quiet python tools/project_hooks.py typst-sources {{typst_sources}})
+  typstyle --check --line-width {{fmt_width}} --wrap-text $files
 
 # Route: resolve -> pandoc's native Typst reader. The resolver replaces every
 # project helper with plain Typst, then pandoc (from uv, pypandoc-binary; no
@@ -899,7 +934,10 @@ cover-letter:
 
 # Build the whole upload set into submission/, after a fresh PDF and Word build
 submission: paper
-  @uv run --quiet python tools/submission.py all
+  #!/usr/bin/env bash
+  set -euo pipefail
+  uv run --quiet python tools/submission.py all
+  uv run --quiet python tools/project_hooks.py stages submission
 
 # Fail if any file in submission/ no longer matches the source it was built from
 check-submission:

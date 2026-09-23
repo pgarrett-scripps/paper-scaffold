@@ -21,6 +21,7 @@ import shutil
 from atomic_io import write_text
 from manuscript_sources import source_files
 from manifest_validation import load
+from project_hooks import build_inputs
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD_TOOLS = ("render_stats.py", "typst_prose.py", "journal.py",
@@ -29,7 +30,7 @@ BUILD_TOOLS = ("render_stats.py", "typst_prose.py", "journal.py",
                "refs_div.lua", "manuscript_sources.py", "manifest_validation.py",
                "atomic_io.py", "build_state.py", "bibliography.py",
                "manuscript_snapshot.py", "review.py", "paper_report.py",
-               "wordcount.sh", "wordcount.py", "report.py")
+               "wordcount.sh", "wordcount.py", "report.py", "project_hooks.py")
 INTERMEDIATES = {"stats-rendered.json", "paper.resolved.typ"}
 
 
@@ -49,6 +50,9 @@ def snapshot(root: Path, dependencies=()) -> dict[str, str | None]:
     # so a placement change is a source change to both outputs.
     paths.update(root.glob("journals/*.toml"))
     paths.update(root / "tools" / name for name in BUILD_TOOLS)
+    # project.toml and the Word steps it names (docs/hooks.md), captured with
+    # the manuscript so a build of it converts the way it was built.
+    paths.update(root / name for name in build_inputs(root))
     paths.add(root / "word/paper-reference.docx")
     paths.update(root.glob("*.bib"))
     paths.update(root.glob("*.csl"))

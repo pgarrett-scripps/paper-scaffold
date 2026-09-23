@@ -373,6 +373,10 @@ class Hardening(unittest.TestCase):
         # fail fmt-check on the missing path (exclusionms, koth-lfq deleted the
         # entry locally), while a present file is still checked.
         shutil.copy(ROOT / "justfile", self.root / "justfile")
+        # The file list comes from tools/project_hooks.py (project.toml's
+        # [sources] typst is appended; none here).
+        shutil.copytree(ROOT / "tools", self.root / "tools",
+                        ignore=shutil.ignore_patterns("__pycache__"))
         for name in ("config.typ", "paper.typ", "si-body.typ", "code.typ"):
             self.put(name, "Text.\n")
         def run():

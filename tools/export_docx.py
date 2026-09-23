@@ -310,6 +310,30 @@ def postprocess(path: Path) -> None:
             archive.writestr(info, rendered if info.filename == "word/document.xml" else data)
 
 
+def reorder(path: Path) -> None:
+    """Put every property block back in schema order after a project step.
+
+    Word refuses a file whose properties are out of the order the schema
+    fixes ("unreadable content"), and a step that appends a <w:jc> after a
+    <w:rPr> is the easiest way to write one. Run only after project steps,
+    so a paper without them converts to the same bytes as before.
+    """
+    with zipfile.ZipFile(path) as archive:
+        parts = [(info, archive.read(info)) for info in archive.infolist()]
+    out = []
+    for info, data in parts:
+        if info.filename in ("word/document.xml", "word/styles.xml"):
+            for _, (prefix, uri) in ET.iterparse(io.BytesIO(data), events=("start-ns",)):
+                ET.register_namespace(prefix, uri)
+            root = ET.fromstring(data)
+            order_properties(root)
+            data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+        out.append((info, data))
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        for info, data in out:
+            archive.writestr(info, data)
+
+
 def main_only(src: str) -> str:
     """The projection up to the Supporting Information, for journals that
     take the SI as a separate upload (koth-paper and d_noise-paper each
@@ -509,17 +533,38 @@ def main() -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
+    # The paper's own Word steps, from project.toml's [word] (docs/hooks.md).
+    # ROOT is the captured manuscript during a build, which carries
+    # project.toml and every file it names; with no project.toml, none.
+    from project_hooks import load as load_project, run_word_steps
+    try:
+        word = load_project(ROOT).word
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
     args = ["--fail-if-warnings", "--resource-path", str(ROOT)]
     reference = ROOT / "word/paper-reference.docx"
     if reference.is_file():
         args += ["--reference-doc", str(reference)]
+    for lua in word.lua_filters:
+        args += ["--lua-filter", str(ROOT / lua)]
     adapt_tree(tree, text_width(reference))
     import pypandoc
     pypandoc.convert_text(json.dumps(tree), "docx", format="json",
                           outputfile=str(OUT), extra_args=args)
     if not reference.is_file():
         style_code(OUT)
-    postprocess(OUT)
+    tools = Path(__file__).resolve().parent
+    try:
+        run_word_steps(word.before_pagination, OUT, ROOT, tools)
+        postprocess(OUT)
+        if word.after_pagination:
+            run_word_steps(word.after_pagination, OUT, ROOT, tools)
+            reorder(OUT)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
     # Trust, then verify: count what actually landed in the file.
     with zipfile.ZipFile(OUT) as z:
