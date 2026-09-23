@@ -1,6 +1,6 @@
 {
   "name": "paper",
-  "version": "4.0.1",
+  "version": "4.1.0",
   "description": "Manuscript skills for paper-scaffold repositories: reviews, copy-edit, figures, numbers. Each skill drives the repo's just recipes.",
   "author": { "name": "Patrick Garrett" }
 }

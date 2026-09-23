@@ -64,6 +64,46 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 4.1.0
+
+Multi-document projects on the stock recipes, a paper-owned slide theme, and
+`paper migrate` on mixed-release trees. Found migrating the dissertation,
+which carried a `-dissertation` or `chapter-` variant of seven stock recipes.
+
+- **The stock recipes read `manuscript.toml`.** `pdf`, `watch`, `clean`,
+  `prose-check`, `bib-audit`, `check-build` and so `check` and `verify`
+  dispatch on it: every document's PDF, a watch of the default document,
+  each part prose-checked once with its own bibliography, the parts'
+  bibliographies audited with their citation prefixes, every document's
+  staleness plus the dissertation Word export. `verify` skips word limits
+  and the journal profile with a note, and `fmt-check` passes with a note
+  when there are no hand-written sources (typstyle given no file reads
+  stdin). Without `manuscript.toml` nothing changes (docs/multi-document.md).
+- **`[slides] theme` in `project.toml`** names the paper's own deck theme,
+  the escape hatch 3.27.0 gave the Word template: `paper sync` then writes
+  no `slides/theme.typ` (removing a pristine one), never touches the
+  declared file, and locks it as an override; `just slides` does not build
+  it as a deck (docs/hooks.md).
+- **`paper migrate` classes a file against every tagged release**, not only
+  the paper's base: a file identical to any release is pristine, and the
+  report names the release under "stock in another release". A tree
+  upgraded by hand file by file no longer refuses on files it never edited.
+- **`paper migrate`'s `tools/` scan matches uses, not words.** 4.0.1 flagged
+  any `"tools"` string: koth-paper's analysis got eleven false refusals (a
+  dict key, an argparse name, `benchmark/tools/x.jar`). A literal now counts
+  only when it resolves into the paper's `tools/` (a `.`/`..` or
+  paper-directory prefix, then a `.py` file or a name that directory holds);
+  a bare `"tools"` only when joined onto a directory.
+
+Upgrade: `uv add` the v4.1.0 pin, `uv run paper sync`. A multi-document
+project then drops its variant recipes from `project.just`
+(`verify-dissertation`, `watch-dissertation`, `clean-dissertation`,
+`chapter-bib-audit` if it only audited, and the like) and the `just
+document-verify all` stage from `project.toml`'s `[stages] verify` (stock
+`verify` now covers it); keep house checks with no stock counterpart as
+stages. A paper with its own deck theme declares it as `[slides] theme`
+and points its decks at it. `just verify`.
+
 ## 4.0.1
 
 Three 4.0.0 roll-out bugs in `paper migrate` and `paper path`.

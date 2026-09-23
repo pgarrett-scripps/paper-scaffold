@@ -175,6 +175,50 @@ def sync_cases(check) -> None:
         check("a dropped feature's generated files are removed",
               sorted(removed) == sorted(sm.AUDIO), removed)
 
+        # Slides: the stock theme, then the paper's own ([slides] theme).
+        write(root, {"slides/talk.typ": '#import "theme.typ": *\n'})
+        sm.sync(root)
+        check("slides/ gets the stock theme",
+              "GENERATED" in (root / "slides/theme.typ").read_text())
+        write(root, {"slides/_theme.typ": "// the lab's theme\n",
+                     "project.toml": 'schema_version = 1\n\n[slides]\n'
+                                     'theme = "slides/_theme.typ"\n'})
+        result = sm.sync(root)
+        lock = json.loads((root / sm.LOCK).read_text())
+        check("declaring [slides] theme removes the pristine stock theme",
+              result.removed == ["slides/theme.typ"]
+              and not (root / "slides/theme.typ").exists(), result.removed)
+        check("the declared theme is an override in the lock, not a generated file",
+              "slides/_theme.typ" in lock["overrides"]
+              and "slides/theme.typ" not in lock["files"], lock)
+        check("a declared theme passes --check", sm.check(root) == [], sm.check(root))
+        (root / "project.toml").write_text(
+            'schema_version = 1\n\n[slides]\ntheme = "slides/theme.typ"\n')
+        (root / "slides/theme.typ").write_text("// edited in place\n")
+        sm.sync(root)
+        check("a theme declared at slides/theme.typ is never overwritten",
+              (root / "slides/theme.typ").read_text() == "// edited in place\n"
+              and sm.check(root) == [], sm.check(root))
+        (root / "project.toml").write_text(
+            'schema_version = 1\n\n[slides]\ntheme = "slides/none.typ"\n')
+        try:
+            sm.sync(root)
+            check("a declared theme that is missing is refused", False)
+        except sm.SyncError as e:
+            check("a declared theme that is missing is refused", "missing" in str(e), e)
+        (root / "project.toml").write_text(
+            'schema_version = 1\n\n[slides]\ntheme = "lib/theme.typ"\n')
+        try:
+            sm.sync(root)
+            check("a theme outside slides/ is refused", False)
+        except sm.SyncError as e:
+            check("a theme outside slides/ is refused", "under slides/" in str(e), e)
+        for f in ("project.toml", "slides/_theme.typ", "slides/theme.typ",
+                  "slides/talk.typ"):
+            (root / f).unlink()
+        (root / "slides").rmdir()
+        sm.sync(root, force=True)
+
     with tempfile.TemporaryDirectory() as tmp:
         root = paper(Path(tmp))
         write(root, {"justfile": "local:\n  echo mine\n"})
@@ -290,6 +334,18 @@ def migrate_cases(check) -> None:
                 "# see tools/check_stats.py\n"
                 "print('the two tools disagree')\n"
                 "x = PAPER / 'tools'  # paper-migrate: ignore\n",
+            # koth-paper's eleven 4.0.1 false positives, one of each shape.
+            "analysis/scripts/koth_like.py":
+                'ap.add_argument("tools", nargs="+")\n'
+                'row = {"tools": tools, "threads": 4}\n'
+                'for tool in common["tools"]:\n'
+                'SAGE = HOME / "Data/BB/tools/sage-v0.15"\n'
+                'JAR = "tools/Dinosaur-1.2.0.free.jar"\n'
+                'JAR2 = str(PAPER / "benchmark/tools/Dinosaur.jar")\n'
+                'JAR3 = os.environ.get("J", "../benchmark/tools/Dinosaur.jar")\n',
+            "analysis/scripts/real_uses.py":
+                'A = "../../tools/x.py"\n'
+                'B = os.path.join(ROOT, "tools")\n',
             "provenance/src/tools/a.py": "a = 1\n",
             "provenance/src/tests/run.py": "p = ROOT / 'tools'\n"})
         found = mg.tools_references(project)
@@ -299,6 +355,10 @@ def migrate_cases(check) -> None:
               has(found, "hooks/fix.py:1"), found)
         check("comments, prose and ignored lines are not flagged",
               not has(found, "ok.py"), found)
+        check("dict keys, argument names and other directories' tools/ are not "
+              "flagged (koth-paper)", not has(found, "koth_like.py"), found)
+        check("a relative path to a tools/ file and a join onto tools are flagged",
+              has(found, "real_uses.py:1") and has(found, "real_uses.py:2"), found)
         check("a vendored snapshot with its own tools/ is not flagged",
               not has(found, "provenance/"), found)
         check("the references are refusals",
@@ -422,6 +482,35 @@ def migrate_cases(check) -> None:
         check("a customized HISTORY.md is refused",
               any(r.startswith("HISTORY.md") and "PROJECT-HISTORY" in r
                   for r in plan.refused), plan.refused)
+
+    # A tree mixing releases (4.1.0): a paper on 1.0.0 holding 1.1.0's copy
+    # of a tool and a tool only 1.1.0 shipped. Both are stock, so both go;
+    # an edit that matches no release is still refused.
+    with tempfile.TemporaryDirectory() as tmp:
+        scaffold, project = migrate_fixture(Path(tmp), {
+            "tools/x.py": "x = 2\n", "tools/new.py": "n = 1\n",
+            "journals/j.toml": "[journal]\nv = 2\n"})
+        write(scaffold, {"tools/x.py": "x = 2\n", "tools/new.py": "n = 1\n",
+                         "journals/j.toml": "[journal]\nv = 2\n"})
+        sh(scaffold, "add", "-A")
+        sh(scaffold, "commit", "-q", "-m", "v1.1")
+        sh(scaffold, "tag", "-a", "v1.1.0", "-m", "v1.1")
+        plan = mg.classify(project, scaffold, "1.0.0", PIN)
+        check("a mixed-release tree has no refusals", plan.refused == [], plan.refused)
+        check("a tool stock in another release is removed",
+              {"tools/x.py", "tools/new.py"} <= set(plan.remove), plan.remove)
+        check("a journal profile stock in another release is removed, not kept",
+              "journals/j.toml" in plan.remove and not plan.overrides,
+              (plan.remove, plan.overrides))
+        check("the report names the release each matched",
+              any(m.startswith("tools/x.py (as in v1.1.0") for m in plan.mixed)
+              and any(m.startswith("tools/new.py (as in v1.1.0; not in v1.0.0")
+                      for m in plan.mixed), plan.mixed)
+        (project / "tools/x.py").write_text("x = 'mine'\n")
+        plan = mg.classify(project, scaffold, "1.0.0", PIN)
+        check("an edit matching no release is still refused",
+              any(r.startswith("tools/x.py: customized") for r in plan.refused),
+              plan.refused)
 
     # Adding [word] reference into an existing [word] table.
     text = mg.word_table("schema_version = 1\n[word]\nlua_filters = []\n", None)

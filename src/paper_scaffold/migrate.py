@@ -2,8 +2,12 @@
 
 Every file the scaffold owned at the paper's release is classed against that
 release's git tag with tools/upgrade_plan.py: pristine (identical, after the
-identity fields new-paper.sh fills in) or customized. The policy, per
-docs/package.md "Migration from 3.26.x":
+identity fields new-paper.sh fills in) or customized. A file that differs from
+that release but is identical to the same file in ANY other tagged release is
+pristine too (4.1.0): a tree assembled from several releases (a 3.25.0 tool
+beside a 3.24.1 justfile) holds nothing of the paper's in that file. So is a
+file the base release did not have that another release shipped unchanged.
+The policy, per docs/package.md "Migration from 3.26.x":
 
 - toolchain files (tools/, tests/, docs/, DOCUMENTATION.md, LICENSE.scaffold):
   pristine are removed, customized are refused;
@@ -38,7 +42,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import sync as sync_mod
-from . import use_tools, version
+from . import data_dir, use_tools, version
 
 REMOVE_OR_REFUSE = ("tools/", "tests/", "docs/")
 REMOVE_OR_REFUSE_FILES = ("DOCUMENTATION.md", "LICENSE.scaffold")
@@ -75,6 +79,8 @@ class Plan:
     # ([word.style] or [word] reference), and one line saying why.
     project_toml: str | None = None
     word_note: str = ""
+    # Files stock in a release other than the base (a mixed-release tree).
+    mixed: list[str] = field(default_factory=list)
 
 
 def _toml():
@@ -142,6 +148,66 @@ def rewrite_pyproject(project: Path, scaffold_py: bytes | None, pin: str,
     return pyproject_for(name, pin, extra, groups), extra
 
 
+class OtherReleases:
+    """Every other tagged release, read on first use: does a file the base
+    release calls customized match the stock copy of some other release?"""
+
+    def __init__(self, clone: Path, blobs, tags: list[str]):
+        self.clone, self.blobs, self.tags = clone, blobs, tags
+        self._trees: list[tuple[str, dict]] | None = None
+
+    def trees(self) -> list[tuple[str, dict]]:
+        if self._trees is None:
+            import upgrade_plan as up
+            self._trees = []
+            for tag in reversed(self.tags):  # newest first: name the latest match
+                excludes = up.excludes_from_new_paper(
+                    (self.blobs.show(tag, "scripts/new-paper.sh") or b"").decode())
+                full = up.tree(self.clone, tag)
+                self._trees.append((tag, (full, up.owned(full, excludes))))
+        return self._trees
+
+    def match(self, upstream: str, local: bytes, owned_only: bool = False) -> str | None:
+        import upgrade_plan as up
+        want = up.normalize(upstream, local)
+        seen: set[str] = set()
+        for tag, (full, owned) in self.trees():
+            entry = (owned if owned_only else full).get(upstream)
+            if entry is None or entry.sha in seen:
+                continue
+            seen.add(entry.sha)
+            if up.normalize(upstream, self.blobs.get(entry.sha)) == want:
+                return tag
+        return None
+
+
+def _place(plan: Plan, rel: str, pristine: bool, local: bytes,
+           release_copy: bytes | None) -> None:
+    """Where one scaffold-owned file goes (the policy in the module docstring)."""
+    if rel == "pyproject.toml":
+        return
+    if rel.startswith(REMOVE_OR_REFUSE) or rel in REMOVE_OR_REFUSE_FILES:
+        (plan.remove if pristine else plan.refused).append(
+            rel if pristine else f"{rel}: customized toolchain file "
+            "(move the change to project.toml / project.just / hooks/, "
+            "restore the stock file, rerun)")
+    elif rel in GENERATED:
+        (plan.replace if pristine else plan.refused).append(
+            rel if pristine else f"{rel}: customized, and paper sync now "
+            "writes it (move the change to project.just / project.toml / hooks/)")
+    elif rel == LEGACY_WORD and not pristine:
+        legacy_word(plan, local, release_copy)
+    elif rel.startswith(OVERRIDABLE):
+        (plan.remove if pristine else plan.overrides).append(rel)
+    elif rel == "HISTORY.md":
+        (plan.remove if pristine else plan.refused).append(
+            rel if pristine else f"{rel}: customized; from 4.0.0 it is the "
+            "package's release history. Move this paper's own notes to "
+            "notes/PROJECT-HISTORY.md, restore the stock file, rerun")
+    else:
+        plan.kept.append(rel)
+
+
 def classify(project: Path, scaffold: Path | None, base: str | None,
              pin: str | None) -> Plan:
     use_tools()
@@ -167,6 +233,7 @@ def classify(project: Path, scaffold: Path | None, base: str | None,
     except up.PlanError as e:
         raise MigrateError(str(e)) from None
     plan = Plan(project, release, pin or DEFAULT_PIN.format(v=version()))
+    others = OtherReleases(clone, blobs, [t for t in up.release_tags(clone) if t != ref])
     for upstream, entry in sorted(files.items()):
         rel = up.RENAMED.get(upstream, upstream)
         listing.discard(rel)
@@ -175,28 +242,25 @@ def classify(project: Path, scaffold: Path | None, base: str | None,
             continue
         pristine = up.normalize(upstream, local) == up.normalize(
             upstream, blobs.get(entry.sha))
-        if rel == "pyproject.toml":
-            continue
-        if rel.startswith(REMOVE_OR_REFUSE) or rel in REMOVE_OR_REFUSE_FILES:
-            (plan.remove if pristine else plan.refused).append(
-                rel if pristine else f"{rel}: customized toolchain file "
-                "(move the change to project.toml / project.just / hooks/, "
-                "restore the stock file, rerun)")
-        elif rel in GENERATED:
-            (plan.replace if pristine else plan.refused).append(
-                rel if pristine else f"{rel}: customized, and paper sync now "
-                "writes it (move the change to project.just / project.toml / hooks/)")
-        elif rel == LEGACY_WORD and not pristine:
-            legacy_word(plan, local, blobs.get(entry.sha))
-        elif rel.startswith(OVERRIDABLE):
-            (plan.remove if pristine else plan.overrides).append(rel)
-        elif rel == "HISTORY.md":
-            (plan.remove if pristine else plan.refused).append(
-                rel if pristine else f"{rel}: customized; from 4.0.0 it is the "
-                "package's release history. Move this paper's own notes to "
-                "notes/PROJECT-HISTORY.md, restore the stock file, rerun")
-        else:
-            plan.kept.append(rel)
+        if not pristine and rel != "pyproject.toml":
+            # A tree assembled from several releases (a tool copied in from
+            # 3.25.0 beside a 3.24.1 justfile): stock is stock, whichever
+            # release it came from.
+            tag = others.match(upstream, local)
+            if tag:
+                pristine = True
+                plan.mixed.append(f"{rel} (as in {tag})")
+        _place(plan, rel, pristine, local, blobs.get(entry.sha))
+    # Files the base release did not have but another release did, unchanged
+    # from that release: the same policy as a pristine file of the base.
+    for rel in sorted(listing):
+        upstream = {v: k for k, v in up.RENAMED.items()}.get(rel, rel)
+        local = up.read_project(project, rel)
+        tag = others.match(upstream, local, owned_only=True) if local is not None else None
+        if tag and rel not in ("pyproject.toml", LEGACY_WORD):
+            listing.discard(rel)
+            plan.mixed.append(f"{rel} (as in {tag}; not in {ref})")
+            _place(plan, rel, True, local, None)
     own_docs: list[str] = []
     for rel in sorted(listing):
         if rel.startswith(("tools/", "tests/")):
@@ -237,11 +301,15 @@ def classify(project: Path, scaffold: Path | None, base: str | None,
     return plan
 
 
-# A path into the paper's tools/: `ROOT / "tools"`, "tools/x.py",
-# "../tools", os.path.join(root, "tools"), or `import tools` / `from tools.x`.
-TOOLS_PATH = re.compile(r"""/\s*["']tools["']"""
-                        r"""|["'](?:[^"'\s]*/)?tools(?:/[^"'\s]*)?["']""")
+# A path into the paper's tools/: `ROOT / "tools"`, "tools/x.py", "../tools",
+# "paper/tools", os.path.join(root, "tools"), or `import tools` / `from tools.x`.
+# Each string literal ending in a `tools` component is judged by uses_tools():
+# 4.0.1 flagged every "tools" string, and koth-paper's analysis got eleven
+# false refusals (a dict key, an argparse name, "benchmark/tools/x.jar").
+TOOLS_LITERAL = re.compile(r"""["']((?:[^"'\s]*/)?)tools(/[^"'\s]*)?["']""")
 TOOLS_IMPORT = re.compile(r"^\s*(?:from\s+tools[.\s]|import\s+tools\b)")
+# What makes a bare "tools" a path: joined onto a directory.
+TOOLS_JOIN = re.compile(r"""(?:/\s*|join\(.*,\s*)$""")
 SCAN_SKIP = {".git", ".venv", "venv", "node_modules", "__pycache__",
              ".build-state", ".paper", "site-packages"}
 IGNORE_MARK = "paper-migrate: ignore"
@@ -259,6 +327,33 @@ def _py_files(base: Path, git_root: Path | None) -> list[Path]:
         files = list(base.rglob("*.py"))
     return sorted(f for f in files if f.is_file()
                   and not SCAN_SKIP.intersection(f.relative_to(base).parts))
+
+
+def uses_tools(line: str, paper: str, names: set[str]) -> bool:
+    """Whether a line of Python reaches the paper's tools/ directory.
+
+    An import of the `tools` package does. A string literal does when it
+    resolves there: its leading components are only `.`/`..` or end in the
+    paper directory's name ("../tools", "paper/tools/x.py"), and anything after
+    tools/ is a .py file or a name the paper's tools/ holds (`names`), so
+    "benchmark/tools/Dinosaur.jar" and "tools/Dinosaur.jar" do not. A bare
+    "tools" counts only when joined onto a directory (`ROOT / "tools"`,
+    os.path.join(root, "tools")), not as a dict key or argument name.
+    """
+    if TOOLS_IMPORT.match(line):
+        return True
+    for m in TOOLS_LITERAL.finditer(line):
+        lead = [c for c in m[1].split("/") if c]
+        rest = [c for c in (m[2] or "").split("/") if c]
+        if lead and not (all(c in (".", "..") for c in lead)
+                         or lead[-1].lower() == paper.lower()):
+            continue  # another directory's tools/
+        if not lead and not rest and not TOOLS_JOIN.search(line[:m.start()]):
+            continue  # a bare word: a dict key, an argument name
+        if rest and not (rest[0].endswith(".py") or rest[0] in names):
+            continue  # not something the paper's tools/ holds
+        return True
+    return False
 
 
 def tools_references(project: Path) -> list[str]:
@@ -279,6 +374,8 @@ def tools_references(project: Path) -> list[str]:
                          capture_output=True, text=True, check=False)
     git_root = Path(top.stdout.strip()).resolve() if top.returncode == 0 else None
     generated = set(GENERATED) | set(sync_mod.ANALYSIS_HELPERS)
+    names = {p.name for d in (project / "tools", data_dir() / "tools")
+             if d.is_dir() for p in d.iterdir()}
     found = []
 
     def scan(path: Path, inside: bool) -> None:
@@ -299,7 +396,7 @@ def tools_references(project: Path) -> list[str]:
             code = line.strip()
             if not code or code.startswith("#") or IGNORE_MARK in line:
                 continue
-            if not (TOOLS_IMPORT.match(line) or TOOLS_PATH.search(line)):
+            if not uses_tools(line, project.name, names):
                 continue
             if not inside and project.name.lower() not in line.lower():
                 continue
@@ -388,6 +485,7 @@ def report(plan: Plan) -> str:
         if len(items) > limit:
             lines.append(f"    ... and {len(items) - limit} more")
     block("REFUSED", plan.refused, 100)
+    block("stock in another release (a mixed-release tree)", plan.mixed, 20)
     block("remove (pristine toolchain copies)", plan.remove)
     block("replace via paper sync (pristine)", plan.replace, 20)
     block("keep as a local override", plan.overrides, 20)

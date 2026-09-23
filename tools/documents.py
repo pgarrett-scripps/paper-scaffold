@@ -26,7 +26,8 @@ def print_metrics(data: dict):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("list", "build", "check", "metrics", "prose", "verify"))
+    parser.add_argument("command", choices=("list", "build", "check", "metrics", "prose",
+                                            "verify", "watch", "outputs"))
     parser.add_argument("document", nargs="?")
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--json", action="store_true", help="structured list, metrics or staleness")
@@ -36,7 +37,22 @@ def main() -> int:
         project = load_project(args.root)
         if args.json and args.command not in ("list", "check", "metrics"):
             raise ValueError("--json supports list, check and metrics")
-        selected = project.select("all" if args.command == "list" else args.document)
+        selected = project.select("all" if args.command in ("list", "outputs")
+                                  else args.document)
+        if args.command == "watch":
+            # `just watch` on a multi-document project: the default document
+            # (or the one named), compiled as `documents build` compiles it.
+            doc = selected[0]
+            print(f"watching {doc.entrypoint} -> {doc.output}", flush=True)
+            (project.root / doc.output).parent.mkdir(parents=True, exist_ok=True)
+            return subprocess.call(["typst", "watch", "--root", str(project.root),
+                                    doc.entrypoint, doc.output], cwd=project.root)
+        if args.command == "outputs":
+            # What `just clean` removes: each PDF and its Word sibling.
+            for doc in selected:
+                print(doc.output)
+                print(str(Path(doc.output).with_suffix(".docx")))
+            return 0
         rows, rc = [], 0
         if args.command == "verify":
             # Declarations are project-wide: changing a shared result can affect

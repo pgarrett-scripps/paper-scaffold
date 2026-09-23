@@ -33,6 +33,8 @@ has no root `config.typ` at all.
 section furniture, handout mode and the references slide. A deck imports that
 one file, and `slides/theme.typ` and `slides/config.typ` are the two files under
 `slides/` that are not decks — `just slides` never tries to build either.
+A paper with its own theme declares it as `[slides] theme` in `project.toml`,
+and `paper sync` then leaves the stock one out ([hooks.md](hooks.md)).
 
 **Decks are outside the gate, deliberately.** A stale deck does not fail
 `just verify` or `just check`, and an unformatted one does not either (hence

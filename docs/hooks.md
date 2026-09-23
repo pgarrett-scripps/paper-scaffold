@@ -100,6 +100,23 @@ Alexandria setup still present is an error (`si-bibliography-mode`). Without
 the declaration nothing changes. A paper that removed Alexandria before this
 flag existed still builds and checks as before.
 
+## The paper's own slide theme
+
+`paper sync` writes the stock `slides/theme.typ` when `slides/` exists. A
+paper with its own deck theme (a lab or university template) declares it,
+the same escape hatch as `[word] reference`:
+
+```toml
+[slides]
+theme = "slides/_theme.typ"
+```
+
+The file must exist under `slides/`. Sync then writes no `slides/theme.typ`
+(a pristine one it wrote before is removed), never overwrites the declared
+file, and lists it under the lock's `overrides`. Declaring
+`theme = "slides/theme.typ"` keeps the stock name with the paper's content.
+Decks import the declared file.
+
 ## Word post-processing
 
 A paper that needs its tables sized or a footer added to `paper.docx`

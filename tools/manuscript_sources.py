@@ -286,9 +286,16 @@ def slide_targets(root: Path = ROOT) -> tuple[str, ...]:
     folder = root / SLIDES
     if not folder.is_dir():
         return ()
+    # A theme project.toml declares ([slides] theme) is shared, not a deck.
+    try:
+        from project_hooks import load
+        own = load(root).slides_theme
+    except (OSError, ValueError):
+        own = None
     return tuple(sorted(p.stem for p in folder.glob("*.typ")
                         if p.name not in SLIDE_SHARED
-                        and not p.name.startswith("_")))
+                        and not p.name.startswith("_")
+                        and f"{SLIDES}/{p.name}" != own))
 
 
 def slide_files(root: Path = ROOT, *, strict: bool = True) -> dict[str, str]:

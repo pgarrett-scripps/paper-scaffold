@@ -137,6 +137,9 @@ class Project:
     typst_sources: tuple[str, ...] = ()
     word: Word = field(default_factory=lambda: Word())
     single_bibliography: bool = False
+    # [slides] theme: the paper's own deck theme. `paper sync` then never
+    # writes slides/theme.typ and lists this file under the lock's overrides.
+    slides_theme: str | None = None
     declared: bool = False
 
 
@@ -180,7 +183,7 @@ def load(root: Path = ROOT) -> Project:
     except tomllib.TOMLDecodeError as exc:
         raise ValueError(f"{FILE}: {exc}") from None
     keys(data, {"schema_version", "stages", "preflight", "sources", "word",
-                "bibliography"}, FILE)
+                "bibliography", "slides"}, FILE)
     if type(data.get("schema_version")) is not int or data["schema_version"] != 1:
         raise ValueError(f"{FILE}: schema_version must be 1")
 
@@ -225,9 +228,18 @@ def load(root: Path = ROOT) -> Project:
     if not isinstance(single, bool):
         raise ValueError(f"{FILE} [bibliography]: single must be true or false")
 
+    table = data.get("slides", {})
+    keys(table, {"theme"}, f"{FILE} [slides]")
+    theme = None
+    if "theme" in table:
+        theme = _paths([table["theme"]], f"{FILE} slides.theme", (".typ",))[0]
+        if not theme.startswith("slides/"):
+            raise ValueError(f"{FILE} [slides]: theme must be a file under "
+                             f"slides/, got {theme!r}")
+
     return Project(stages=stages, bib_audit_require_complete=complete,
                    typst_sources=typst, word=word, single_bibliography=single,
-                   declared=True)
+                   slides_theme=theme, declared=True)
 
 
 def _paths(value, where: str, suffixes: tuple[str, ...] | None) -> tuple[str, ...]:
@@ -350,6 +362,9 @@ def describe(project: Project) -> list[str]:
         lines.append(f"word       reference         {project.word.reference}")
     if project.single_bibliography:
         lines.append("bibliography one reference list; the SI cites @key (no @si- list)")
+    if project.slides_theme:
+        lines.append(f"slides     theme             {project.slides_theme} "
+                     "(the paper's own; paper sync writes no slides/theme.typ)")
     if not project.bib_audit_require_complete:
         lines.append("preflight  bib-audit runs without --require-complete")
     return lines or [f"{FILE} declares no hooks"]

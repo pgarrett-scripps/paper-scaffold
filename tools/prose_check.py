@@ -1423,9 +1423,36 @@ def project_sources(root: Path | None = None) -> tuple[dict[str, str], list[Find
     return {name: (r / name).read_text() for name in names}, []
 
 
+def main_documents() -> int:
+    """A manuscript.toml project (docs/multi-document.md): every declared part.
+
+    Each part is checked once, inside the fewest documents that hold them all
+    (document_check.covering), plus project.toml's [sources] typst files.
+    """
+    from document_check import covering, findings as document_findings
+    from document_project import load_project
+
+    cfg = load_config(ROOT)
+    readability.add_abbreviations(sorted(cfg.vocabulary("abbreviations", set())))
+    project = load_project(ROOT)
+    extra, findings = project_sources()
+    for label, src in extra.items():
+        findings += check(label, readability.clean(src),
+                          readability.clean(no_code(src)),
+                          readability.clean(src, gap=GAP), cfg)
+    findings += check_todos(extra)
+    for doc in covering(project):
+        findings += document_findings(project, doc, cfg)
+    return report(list(dict.fromkeys(findings)), cfg,
+                  show_suppressed="--show-suppressed" in sys.argv,
+                  strict="--strict" in sys.argv)
+
+
 def main() -> int:
     if "--list-rules" in sys.argv:
         return list_rules()
+    if (ROOT / "manuscript.toml").is_file():
+        return main_documents()
 
     cfg = load_config(ROOT)
     # Before any text is split into sentences: the splitter compiles the

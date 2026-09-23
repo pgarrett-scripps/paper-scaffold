@@ -109,6 +109,22 @@ argument. `document-check` and `document-verify` default to all targets. Checks
 never rebuild. Metrics come from a successful, current build; stale metrics
 fail and name the rebuild command.
 
+The stock recipes dispatch on `manuscript.toml` (4.1.0), so a multi-document
+project needs no `-dissertation` or `chapter-` variants of them:
+
+| Recipe | With `manuscript.toml` |
+|---|---|
+| `just pdf` | `documents build all`: every document's PDF |
+| `just watch [target]` | `typst watch` on the default document (or the one named), writing its `output` |
+| `just prose-check` | every declared part once, inside the fewest documents that hold them all, with each part's bibliography and `[sources] typst` |
+| `just bib-audit` | every part's bibliography, keys reported with their `citation_prefix` |
+| `just check-build` | `documents check all`, plus the default document's Word export when `lib/template.typ` exists |
+| `just clean` | each document's PDF and its `.docx` sibling, as well as the stock outputs |
+| `just verify` | the stock stages over the above; word limits and the journal profile are skipped with a note |
+
+Project checks with no stock counterpart (house prose rules, float lists)
+stay `[stages] verify` entries in `project.toml` (docs/hooks.md).
+
 ## Manifest
 
 ```toml
@@ -189,8 +205,9 @@ chapter-prefixed IDs; source tracing follows every declared document's literal
 includes/imports. `document-verify` runs the existing project-wide declaration
 checks when manifests are present. It also checks prose, chapter bibliography
 metadata, and selected PDF freshness. It does not claim formatting, online DOI
-auditing, or deep reanalysis. Keep project-specific checks in your `verify`
-recipe, and run the scaffold test suite when updating the tooling.
+auditing, or deep reanalysis. The stock `just verify` covers all of that for
+every part (table above); keep project-specific checks in `project.toml`'s
+`[stages] verify`, and run the scaffold test suite when updating the tooling.
 
 Copied numbers and figures do not automatically gain analysis provenance.
 Migrating rendered paper text retains that limitation until declarations are

@@ -13,9 +13,31 @@ import typst_prose
 
 
 def check(project: Project, document: Document, *, strict=False) -> int:
-    sources = project.sources(document)
     cfg = load_config(project.root)
     readability.add_abbreviations(sorted(cfg.vocabulary("abbreviations", set())))
+    return report(findings(project, document, cfg), cfg, show_suppressed=False,
+                  strict=strict)
+
+
+def covering(project: Project) -> list[Document]:
+    """The fewest documents, default first, that between them hold every part.
+
+    `just prose-check` on a multi-document project checks each part once, in
+    the context of a document that really contains it, so a part shared by
+    the whole thesis and its chapter PDF is not reported twice.
+    """
+    order = sorted(project.documents.values(), key=lambda d: d.id != project.default)
+    chosen, seen = [], set()
+    for doc in order:
+        if set(doc.parts) - seen:
+            chosen.append(doc)
+            seen |= set(doc.parts)
+    return chosen
+
+
+def findings(project: Project, document: Document, cfg) -> list[Finding]:
+    """Every prose and chapter-bibliography finding for one document."""
+    sources = project.sources(document)
     targets = {project.parts[p].source: project.prose(project.parts[p]) for p in document.parts}
     saved = typst_prose.STATS_JSON
     typst_prose.STATS_JSON = project.root / "stats.json"
@@ -51,4 +73,4 @@ def check(project: Project, document: Document, *, strict=False) -> int:
             findings += [replace(row, where=part.bibliography) for row in rows]
     finally:
         typst_prose.STATS_JSON = saved
-    return report(findings, cfg, show_suppressed=False, strict=strict)
+    return findings

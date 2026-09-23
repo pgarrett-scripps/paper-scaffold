@@ -309,8 +309,16 @@ verify:
   stage "toolchain (paper sync --check)" "" uv run --quiet paper sync --check
   stage "extractors (just test)"         "" just test
   stage "prose rules (just prose-check)" "" just prose-check
-  stage "word limits (just check-words)" "" just check-words
-  stage "journal (just check-journal)"   "" just check-journal
+  if [[ -f manuscript.toml ]]; then
+    # A multi-document project (docs/multi-document.md) has no journal profile
+    # or paper.pdf word limits; its documents' staleness is under `just check`.
+    echo ""
+    echo "=== word limits and journal ==="
+    echo "note:    skipped: a multi-document project (manuscript.toml) has no journal profile"
+  else
+    stage "word limits (just check-words)" "" just check-words
+    stage "journal (just check-journal)"   "" just check-journal
+  fi
   # One stage, because both answer the same question -- are the declarations
   # still consistent with what produced them -- and splitting them made verify
   # six blocks of output for a manuscript with one figure and five numbers.
@@ -554,10 +562,17 @@ paper:
     just review-text
   fi
 
-# Build only the PDF, with word counts and readability
+# Build only the PDF, with word counts and readability (every document's PDF
+# on a multi-document project)
 pdf:
-  @uv run --quiet paper tool build_state paper
-  @uv run --quiet paper tool paper_report
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if [[ -f manuscript.toml ]]; then
+    uv run --quiet paper tool documents build all
+  else
+    uv run --quiet paper tool build_state paper
+    uv run --quiet paper tool paper_report
+  fi
 
 # See wordcount.typ for exactly what is excluded (refs, figures/tables, captions,
 # math, code) vs. included (headings, inline code).
@@ -686,9 +701,16 @@ text-diff:
 # render-stats runs once here, not per recompile: typst watch owns the loop and
 # cannot call out to it. Editing stats.json (or re-running the analysis) during a
 # watch means restarting it.
-# Live preview, recompiling on save (restart it after editing stats.json)
-watch: render-stats
-  typst watch paper.typ
+# Live preview, recompiling on save (restart it after editing stats.json).
+# A multi-document project watches its default document, or the one named.
+watch target="": render-stats
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if [[ -f manuscript.toml ]]; then
+    exec uv run --quiet paper tool documents watch {{quote(target)}}
+  fi
+  echo "typst watch paper.typ" >&2
+  exec typst watch paper.typ
 
 # ---------------------------------------------------------------------------
 # Formatting (typstyle). This is the same engine the tinymist editor extension
@@ -864,6 +886,7 @@ fmt:
   set -euo pipefail
   # typst_sources plus project.toml's [sources] typst (docs/hooks.md).
   files=$(uv run --quiet paper tool project_hooks typst-sources {{typst_sources}})
+  if [[ -z "$files" ]]; then echo "no hand-written sources to format"; exit 0; fi
   typstyle --inplace --line-width {{fmt_width}} --wrap-text $files
   echo 'formatted. Rebuild with "just paper" and confirm nothing moved.'
 
@@ -872,6 +895,9 @@ fmt-check:
   #!/usr/bin/env bash
   set -euo pipefail
   files=$(uv run --quiet paper tool project_hooks typst-sources {{typst_sources}})
+  # None exist on a multi-document project that declares no [sources] typst;
+  # typstyle given no file would read stdin.
+  if [[ -z "$files" ]]; then echo "no hand-written sources to check"; exit 0; fi
   typstyle --check --line-width {{fmt_width}} --wrap-text $files
 
 # Route: resolve -> pandoc's native Typst reader. The resolver replaces every
@@ -1080,7 +1106,19 @@ audio-clean:
 # Fail if paper.pdf or paper.docx no longer matches the source it was built from
 [private]
 check-build:
-  @uv run --quiet paper tool build_state check
+  #!/usr/bin/env bash
+  set -uo pipefail
+  if [[ ! -f manuscript.toml ]]; then
+    exec uv run --quiet paper tool build_state check
+  fi
+  # A multi-document project: every document's PDF, and the default
+  # document's Word export when the template contract makes one.
+  rc=0
+  uv run --quiet paper tool documents check all || rc=1
+  if [[ -f lib/template.typ ]]; then
+    uv run --quiet paper tool document_docx --check || rc=1
+  fi
+  exit $rc
 
 # Source fingerprint for diagnosis; builds also record compiler dependencies.
 _stamp-manuscript:
@@ -1089,5 +1127,6 @@ _stamp-manuscript:
 # Remove the built PDF, Word export, submission set and slide decks
 clean:
   rm -f paper.pdf paper-draft.pdf paper.docx
+  @if [ -f manuscript.toml ]; then uv run --quiet paper tool documents outputs | xargs -r rm -f; fi
   rm -rf submission
   rm -f slides/*.pdf slides/*.pdfpc

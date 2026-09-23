@@ -230,6 +230,48 @@ Excluded block code
         self.assertEqual(status(self.project, doc), "current")
 
 
+    def test_covering_checks_each_part_once(self):
+        from document_check import covering
+        self.assertEqual([d.id for d in covering(self.project)], ["thesis"])
+        self.write("manuscript.toml", MANIFEST.replace('parts = ["one", "two"]',
+                                                       'parts = ["one"]'))
+        project = load_project(self.root)
+        self.assertEqual([d.id for d in covering(project)], ["thesis", "two"])
+
+    def stock(self, tool, *args):
+        env = {**__import__("os").environ, "PAPER_ROOT": str(self.root)}
+        return subprocess.run([sys.executable, str(ROOT / "tools" / tool), *args],
+                              cwd=self.root, env=env, capture_output=True, text=True)
+
+    def test_stock_prose_check_reads_the_parts(self):
+        # 4.1.0: `just prose-check` on a manuscript.toml project checks the
+        # declared parts; it used to open paper.typ and crash.
+        self.write("chapters/two.typ", "// >>> BODY START\n#todo(\"finish\")\n"
+                                       "// <<< BODY END\n")
+        run = self.stock("prose_check.py")
+        self.assertNotIn("FileNotFoundError", run.stderr)
+        self.assertIn("chapters/two.typ: #todo('finish')", run.stdout)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+
+    def test_stock_bib_audit_reads_part_bibliographies(self):
+        self.write("manuscript.toml", MANIFEST.replace(
+            'source = "chapters/one.typ"',
+            'source = "chapters/one.typ"\nbibliography = "chapters/one.bib"\n'
+            'citation_prefix = "one-"'))
+        self.write("chapters/one.bib", "@article{smith20, title={T}, year={2020}}\n")
+        import bib_audit
+        with patch.object(bib_audit, "ROOT", self.root):
+            keys = [e["_key"] for e in bib_audit._entries()]
+        self.assertEqual(keys, ["one-smith20"])
+
+    def test_documents_outputs_for_clean(self):
+        run = self.stock("documents.py", "outputs")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(run.stdout.split(), ["build/thesis.pdf", "build/thesis.docx",
+                                              "build/one.pdf", "build/one.docx",
+                                              "build/two.pdf", "build/two.docx"])
+
+
 def run_cases():
     result = unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.loadTestsFromTestCase(Documents))
     return result.wasSuccessful()

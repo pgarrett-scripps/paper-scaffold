@@ -18,11 +18,12 @@ puts its own behaviour. The package never ships or replaces those files.
 | `stats.json`, `assets.json`, `references.bib`, `*.csl` | `wordcount.typ`, `wordcount-sections.typ` | `journals/*.toml` |
 | `journal.toml`, `project.toml`, `project.just`, `hooks/` | `analysis/scripts/_stats.py`, `_assets.py`, `_provenance.py` and `_toolchain/` (when `analysis/scripts/` exists) | `word/reference.docx` (the multi-document reference) |
 | `prose-check.toml`, `word-limits.toml`, `word-watchlist.toml` | `audio/extract_prose.py`, `make_audiobook.py`, `make_cover.py` (when `audio/config.py` exists) | `docs/`, `HISTORY.md` |
-| `pyproject.toml` (the pin), `uv.lock` | `slides/theme.typ` (when `slides/` exists) | |
+| `pyproject.toml` (the pin), `uv.lock` | `slides/theme.typ` (when `slides/` exists and `project.toml` declares no `[slides] theme`) | |
 | `CLAUDE.md`, `AGENTS.md`, `STYLE.md`, `README.md`, `.gitignore`, `.claude/`, `.vscode/` | `.paper/scaffold.lock.json` | |
 | `audio/config.py`, `slides/config.typ`, `slides/*.typ` decks | `.paper/docs/` (a gitignored mirror, not locked) | |
 | A local `word/*.docx` or `journals/*.toml` (an override, below) | | |
 | The `[word] reference` document, if the paper declares one | | |
+| The `[slides] theme` file, if the paper declares one (docs/hooks.md) | | |
 
 Why each generated file has to exist on disk:
 
@@ -225,7 +226,12 @@ uv run paper migrate --project ~/Repos/koth-lfq-paper
 `paper migrate` classes every file the scaffold owned at the paper's current
 release (the `version` line in its `pyproject.toml`, or `--from`), using the
 same comparison as `just upgrade-plan`: pristine (identical to that release,
-after the identity fields new-paper.sh fills in) or customized.
+after the identity fields new-paper.sh fills in) or customized. A file that
+differs from that release but is identical to another tagged release (a
+tree upgraded by hand, file by file) is pristine too (4.1.0): the report
+lists it under "stock in another release" with the release it matches, and
+a toolchain file the base release never had but another release shipped is
+removed rather than refused.
 
 | File | Pristine | Customized |
 |---|---|---|

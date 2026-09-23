@@ -376,9 +376,34 @@ def _metadata_issues(entry: dict, state: str,
     return out
 
 
+def _document_bibs() -> list[tuple[Path, str]]:
+    """A manuscript.toml project's part bibliographies, with citation prefixes.
+
+    Chapters keep independent .bib files (docs/multi-document.md); a key is
+    reported as the prose cites it, prefix included, so two chapters' `smith20`
+    stay apart.
+    """
+    from document_project import load_project
+    project = load_project(ROOT)
+    seen, out = set(), []
+    for part in project.parts.values():
+        if part.bibliography and (part.bibliography, part.citation_prefix) not in seen:
+            seen.add((part.bibliography, part.citation_prefix))
+            out.append((ROOT / part.bibliography, part.citation_prefix))
+    return out
+
+
 def _entries():
     sys.path.insert(0, str(ROOT))
     import prose_check
+    if (ROOT / "manuscript.toml").is_file():
+        out = []
+        for bib, prefix in _document_bibs():
+            out += [dict(e, _key=prefix + e.get("_key", ""))
+                    for e in prose_check._bib_entries(bib)]
+        if not out:
+            print("no part declares a bibliography, nothing to audit")
+        return out
     bibs = sorted(ROOT.glob("*.bib"))
     if not bibs:
         print("no .bib file here, nothing to audit")
