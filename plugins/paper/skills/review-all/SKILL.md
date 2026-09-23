@@ -1,6 +1,6 @@
 ---
 name: review-all
-description: Run every review skill (claim-audit, methods-vs-code, figure-review, prose-review, peer-review) in parallel as a final sanity check and merge their findings into one ranked list with a ship verdict. Use before submission or before handing a draft to a coauthor. Read-only.
+description: Run every review skill (claim-audit, methods-vs-code, figure-review, prose-review, peer-review) in parallel as a final sanity check, merge their new findings into the action ledger reviews/ACTIONS.md, and give a ship verdict. Use before submission or before handing a draft to a coauthor. Read-only.
 context: fork
 agent: general-purpose
 model: opus
@@ -9,9 +9,11 @@ model: opus
 # Run every review at once
 
 Work from the manuscript root and follow AGENTS.md/CLAUDE.md. This skill is
-read-only. It launches the five review skills as independent agents, waits
-for all of them, and writes one merged report. It does not re-do any review
-itself and does not edit the manuscript.
+read-only for the manuscript. It launches the five review skills as
+independent agents, waits for all of them, merges their findings into the
+action ledger `reviews/ACTIONS.md`, and writes one short report with the ship
+verdict. It does not re-do any review itself and does not edit the
+manuscript.
 
 ## Parameters
 
@@ -40,11 +42,17 @@ at the top of the report.
    uncommitted changes to the manuscript sources in the report; the reviews
    see the working tree, not HEAD.
 2. `just verify` once, and record its verdict. Do not fix anything it
-   reports; a failing gate is itself a finding for the merged list, and the
+   reports; a failing gate is itself a finding for the ledger, and the
    reviews should still run.
 3. Note the date and the commit (`git rev-parse --short HEAD`) so the
    report says what was reviewed.
-4. `just review-text` once, so `paper.review.txt` is current. This is the
+4. Read `reviews/ACTIONS.md` and follow the rules in its header; if it is
+   missing, create it with `just check-actions --init` (on a scaffold older
+   than 3.24.0, write the header row
+   `| id | severity | status | source | summary | fix | closed |` and its
+   `|---|---|---|---|---|---|---|` separator by hand). Run
+   `just check-actions` and record the open counts before this run.
+5. `just review-text` once, so `paper.review.txt` is current. This is the
    shared reviewers' copy: prose with numbers resolved, captions numbered,
    citation keys bracketed, no images or table bodies. Generating it here
    means no agent re-runs it and the prose-facing reviews never open the
@@ -58,7 +66,9 @@ pass-through words, write its findings file under `reviews/`, and reply
 with only the verdict paragraph and the file path. Every prompt also says:
 "`paper.review.txt` is current as of this launch; read it for the prose,
 numbers and captions, do not regenerate it, and do not read paper.typ,
-si-body.typ or the PDF unless your skill's job is to check the source."
+si-body.typ or the PDF unless your skill's job is to check the source.
+You were launched by /paper:review-all: read reviews/ACTIONS.md to skip
+findings it already holds, but do not write it; review-all merges."
 That last clause applies to `claim-audit` and `methods-vs-code`, whose
 findings are about source and code; `peer-review`, `prose-review` and the
 caption half of `figure-review` work from the copy alone. The agents share
@@ -69,26 +79,39 @@ findings.
 
 ## Merge
 
-Read the five findings files (not the agents' replies) and build one list:
+Read the findings files (not the agents' replies) and merge them into the
+action ledger. The ledger replaces the old separate ranked list: there is one
+list of work, and it outlives this run.
 
-1. Deduplicate: the same sentence flagged by two reviews is one item that
-   cites both. A `prose-review` wording finding on a sentence `claim-audit`
-   calls overstated is one item owned by `claim-audit`.
-2. Rank: blockers first (a claim the evidence contradicts, methods drift
-   that changes a result, a figure that shows the opposite of the text, a
-   failing `just verify`), then majors, then minors. Within a rank, order by
-   how much of the manuscript the fix touches.
-3. Route: every item keeps the owner its review assigned (`/paper:copy-edit`,
-   `/paper:declare-number`, `/paper:fix-verify`, `/paper:new-figure`, "analysis change",
-   "author decision"). Group the "author decision" items at the end as
-   questions.
-4. Verdict: one of "ready", "ready after the listed minors", or "not ready",
-   with the items that decide it.
+1. Deduplicate across the reviews: the same sentence flagged by two reviews
+   is one action whose `source` cites both files. A `prose-review` wording
+   finding on a sentence `claim-audit` calls overstated is one action owned
+   by `claim-audit`.
+2. Deduplicate against the ledger: a finding that matches an `open` or
+   `wontfix` row adds nothing. One that matches a `done` row whose problem is
+   back reopens that row in place: `status` to `open`, `closed` to
+   `reopened <YYYY-MM-DD>: <what came back>`.
+3. Append the rest, in the next ids, blockers first (a claim the evidence
+   contradicts, methods drift that changes a result, a figure that shows the
+   opposite of the text, a failing `just verify`), then majors, then minors.
+   Each row keeps the owner its review assigned as `fix` (`/paper:copy-edit`,
+   `/paper:declare-number`, `/paper:fix-verify`, `/paper:new-figure`,
+   "analysis change", "author decision"), `status` `open`, and an empty
+   `closed`. A failing `just verify` is one blocker routed to
+   `/paper:fix-verify`, sourced to this run's report.
+4. Run `just check-actions` and repair any format error in the rows you
+   wrote.
+5. Verdict: one of "ready", "ready after the listed minors", or "not ready",
+   decided by every `open` row in the ledger after the merge, including ones
+   earlier reviews left open, with the ids that decide it.
 
 ## Report
 
 Write `reviews/<YYYY-MM-DD>-review-all.md`: the parameter interpretation,
-what was reviewed (commit, tree state, `just verify` verdict), the verdict,
-the ranked merged list, the author questions, and the paths of the five
-underlying files. Print the verdict, the blockers, and the file path.
-Nothing was edited, so do not run `just paper`.
+what was reviewed (commit, tree state, `just verify` verdict), the verdict
+with the ids that decide it, the ids added and reopened by this run, the
+open `author decision` rows as questions, the `just check-actions` counts
+before and after, and the paths of the underlying files. Do not copy the
+ledger's rows into the report; cite ids. Print the verdict, the open
+blockers, and the file path. The manuscript was not edited, so do not run
+`just paper`.

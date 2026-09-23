@@ -82,6 +82,45 @@ the edited prose for scientific meaning. Instructions alone do not force an
 agent to run a check. A check that could not finish must be reported as
 incomplete, not passed.
 
+## The review action ledger
+
+Each review writes a dated findings file, and a findings file is a snapshot:
+it cannot say which of its findings were fixed since. Without a record of
+that, the next review raises the same points again and an editing agent has
+no list of what is outstanding. `reviews/ACTIONS.md` is that record, one
+markdown table for the life of the paper:
+
+```markdown
+| id | severity | status | source | summary | fix | closed |
+|---|---|---|---|---|---|---|
+| A-0001 | major | done | 2026-09-22-claim-audit.md#row 4 | "Increased" for a tie within the interval | /paper:copy-edit | 3f2a91c |
+| A-0002 | minor | open | 2026-09-22-prose-review.md#row 11 | "Robust" with no measurement behind it | /paper:copy-edit | |
+```
+
+- `id` is `A-` plus four digits, never reused. `severity` is `blocker`,
+  `major` or `minor`; `status` is `open`, `done` or `wontfix`. `source`
+  names the findings file and the finding in it; `fix` is the owner the
+  review routed it to; `closed` is the commit hash that fixed it, or
+  `uncommitted: <note>` until there is one, or the reason for `wontfix`.
+- **Review skills** read the ledger before reviewing and do not raise a
+  finding that matches an `open`, `done` or `wontfix` row. A `done` row
+  whose problem is back is reopened in place (`closed` becomes
+  `reopened <date>: <why>`). New findings are appended with the next ids.
+  They still never edit the manuscript. `review-all` has its parallel
+  reviews read the ledger but not write it, and merges all of them into it
+  once at the end, in place of a separate ranked list; its ship verdict is
+  decided by every open row. `story-review` writes nothing to the ledger:
+  its plan becomes rows only for the items the author accepts.
+- **Editing skills** start with `just check-actions --open` and name the open
+  rows that bear on the task, and close each row they fix.
+- The ledger is plain markdown so an author can edit it by hand (write a
+  literal pipe as `\|`). `just check-actions`, in `verify`, fails only when
+  the table no longer parses or a row breaks the rules above; open blockers
+  print a WARNING line. A paper with no ledger passes silently.
+  `just check-actions --init` creates it from `tools/actions-template.md`,
+  whose header repeats these rules for the agent reading the file;
+  `new-paper.sh` seeds it for a new paper.
+
 ## Project scope
 
 The scaffold supports writing and checking a manuscript, linking claims to

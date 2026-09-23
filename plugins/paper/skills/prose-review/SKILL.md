@@ -18,6 +18,20 @@ Scope defaults to the abstract (config.typ) and everything between the BODY
 markers in paper.typ, including captions. The user may narrow it to a
 section or extend it to si-body.typ.
 
+## Read the action ledger first
+
+`reviews/ACTIONS.md` records every finding earlier reviews raised and whether
+it was fixed; its header states the rules. Read it before reviewing. If it is
+missing, create it with `just check-actions --init` (a paper on a scaffold
+older than 3.24.0 has no such recipe: write a file whose table header is
+`| id | severity | status | source | summary | fix | closed |` with a
+`|---|---|---|---|---|---|---|` separator under it). A problem that matches an
+`open`, `done` or `wontfix` row is not a new finding: cite the existing id in
+the findings file instead of raising it again. A `done` row whose problem is
+back in the current text is reopened, not duplicated. Appending to the ledger
+is the only write this skill makes outside its findings file; it still never
+edits the manuscript.
+
 ## Take the mechanical layer as given
 
 Run `just prose-check` and `just word-audit` first and copy their findings
@@ -100,3 +114,24 @@ Write `reviews/<YYYY-MM-DD>-prose-review.md` (create the directory). Shape:
 
 Print the verdict paragraph and the file path. Nothing was edited, so do
 not run `just paper` or `just verify`.
+
+## Update the action ledger
+
+After writing the findings file, and before the final print:
+
+1. Every row of the findings table becomes one action (a
+   recurring phrase already grouped into one finding stays one action). The
+   mechanical layer's output is not added: `just verify` already tracks it.
+2. Skip a finding that matches an `open` or `wontfix` row. Reopen a matching
+   `done` row whose problem is back: `status` to `open`, `closed` to
+   `reopened <YYYY-MM-DD>: <what came back>`.
+3. Append each remaining finding as a row: the next id (`just check-actions`
+   prints it), its severity, `open`, source
+   `<YYYY-MM-DD>-prose-review.md#<ref>` naming the finding, a one-line summary,
+   the routed fix as `fix`, and an empty `closed`.
+4. Run `just check-actions` and repair any format error in the rows you
+   wrote. Print the ids you added or reopened with the verdict.
+
+When `/paper:review-all` launched this review (its prompt says so), skip
+this section: review-all merges every review into the ledger once, after all
+of them finish, so parallel reviews never write the file at the same time.

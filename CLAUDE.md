@@ -157,6 +157,9 @@ Prefer a skill over improvising its steps.
   `/paper:peer-review`. `/paper:review-all` runs them and merges the findings
   (literature check only on request, story review never). A review skill
   never edits the manuscript.
+- `reviews/ACTIONS.md` is the action ledger: reviews read it first and append
+  new findings, editing skills close the rows they fix with the commit hash;
+  `just check-actions --open` lists what is open.
 
 What each does: [docs/working-with-ai.md](docs/working-with-ai.md).
 

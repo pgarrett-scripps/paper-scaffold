@@ -194,6 +194,16 @@ tar -C "$SCAFFOLD" -cf - \
 # which is a different question and the author's to answer.
 [ -f "$DEST/LICENSE" ] && mv "$DEST/LICENSE" "$DEST/LICENSE.scaffold"
 
+# The review action ledger starts empty. Review skills append their findings to
+# it and editing skills close them, so the next review knows what was already
+# raised and fixed. Seeded from the template rather than shipped as
+# reviews/ACTIONS.md in the scaffold, because the filled-in ledger is the
+# paper's and `just upgrade-plan` must not class it as a customized scaffold file.
+if [ -f "$DEST/tools/actions-template.md" ]; then
+  mkdir -p "$DEST/reviews"
+  cp "$DEST/tools/actions-template.md" "$DEST/reviews/ACTIONS.md"
+fi
+
 # Skills are NOT copied. They are the `paper` plugin, served from this scaffold
 # through the `paper-scaffold` marketplace and switched on by .claude/settings.json,
 # which did travel. One skill fix then reaches every paper on the next session.

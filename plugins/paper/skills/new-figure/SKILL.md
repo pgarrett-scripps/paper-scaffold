@@ -12,6 +12,15 @@ requested content; do not invent results or substitute sample data when real
 inputs are missing. Complete independent work and report what is needed if
 an asset cannot yet be generated.
 
+## Open review actions
+
+Before editing, run `just check-actions --open` (silent when there is no
+`reviews/ACTIONS.md`; a paper on a scaffold older than 3.24.0 has no recipe,
+so read the file directly). Tell the user which open rows bear on this task:
+rows whose `fix` is `/paper:new-figure`, and rows about the figures, tables
+and captions in scope. Work on the rows the user asks for; do not widen the
+task to clear the list.
+
 ## Generate and declare
 
 Copy a relevant project generator, or gen_example_figure.py /
@@ -77,3 +86,15 @@ Review the generated diff. Stage the intended figures, tables, and manifest
 updates as AGENTS.md directs, including the new generator when staging the
 change; preserve unrelated staged work and do not commit unless requested.
 Missing analysis is not a reason to adopt a new output as if it were generated.
+
+## Close the review actions this fixed
+
+For each ledger row this edit actually fixed, and that the checks above
+confirm, edit its row in `reviews/ACTIONS.md`: `status` to `done`, `closed`
+to the short hash of the commit that contains the fix. This skill does not
+commit unless asked, so until then write `uncommitted: <what changed>`; the
+commit that lands it, or the next session, replaces that with the hash. The
+ledger edit rides in the following commit, since a commit cannot name its
+own hash. Leave a row open when the fix is partial, and say which part
+remains in the report. Run `just check-actions` after editing the ledger
+and report the ids closed.

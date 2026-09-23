@@ -98,6 +98,7 @@ CASE_MODULES = (
     "journal_cases",          # journal profiles and the graphical abstract
     "upgrade_plan_cases",     # tools/upgrade_plan.py against a throwaway scaffold
     "submission_cases",       # the journal upload set in submission/
+    "actions_cases",          # the review action ledger, reviews/ACTIONS.md
 )
 
 

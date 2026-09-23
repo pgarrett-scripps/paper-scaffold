@@ -34,6 +34,19 @@ paper this data could support. Apply that to every suggestion:
 - A paper that is done is better than a paper that is perfect. If the
   draft is already defensible, say that first and keep the list short.
 
+## Read the action ledger, do not write it
+
+Read `reviews/ACTIONS.md` if it exists (`just check-actions --open` lists
+what is open). Do not re-propose a change already there as `open` or
+`done`; cite its id, and count an open one's cost in the plan if the plan
+depends on it. This skill never writes the ledger: its output is a plan to
+discuss, and a proposal becomes work only when the author accepts it. When
+the author accepts items in the conversation that follows, the session that
+holds that conversation appends only the accepted ones, following the
+ledger's header, with source `<YYYY-MM-DD>-story-review.md#<item number>`
+and severity `blocker` for a **To publish** item or `minor` for a **Would
+make it better** item unless the author says otherwise.
+
 ## Read the whole thing
 
 Read config.typ (title, abstract, keywords), paper.typ between the BODY
@@ -94,4 +107,5 @@ Shape:
 
 Print the verdict paragraph and the file path. Nothing was edited, so do
 not run `just paper` or `just verify`. This skill is not part of
-`/paper:review-all`; its output is a plan to discuss, not a fix list.
+`/paper:review-all`; its output is a plan to discuss, not a fix list, so it
+adds nothing to `reviews/ACTIONS.md` until the author accepts items.

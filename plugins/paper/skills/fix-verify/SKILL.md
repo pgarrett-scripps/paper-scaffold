@@ -10,6 +10,15 @@ reported failure or run `just verify`. Inspect existing changes before editing.
 Use `just trace <id> --json` for findings about a statistic or asset. Read its
 findings and status, including incomplete, before choosing a fix.
 
+## Open review actions
+
+Before editing, run `just check-actions --open` (silent when there is no
+`reviews/ACTIONS.md`; a paper on a scaffold older than 3.24.0 has no recipe,
+so read the file directly). Tell the user which open rows bear on this task:
+rows whose `fix` is `/paper:fix-verify`, and rows about the checks and files
+in scope. Work on the rows the user asks for; do not widen the task to clear
+the list.
+
 ## Choose the fix from the evidence
 
 - **Missing, unknown, stale, or replaced PDF/Word output:** rebuild with the
@@ -41,6 +50,10 @@ findings and status, including incomplete, before choosing a fix.
   empty one. Use the four tiers for genuinely hand-entered numbers.
 - **Bypassed asset:** use its declared fig()/tbl() ID, preserving its content.
 - **Unresolved todo:** address the note before removing its marker.
+- **Malformed action ledger** (`just check-actions`): repair the named row
+  in `reviews/ACTIONS.md` as its header describes. Never delete a row or
+  renumber ids to pass; a `done` row with no `closed` gets the fixing commit
+  or `uncommitted: <note>`. An open blocker is a warning, not a failure.
 - **Formatting:** `just fmt`, followed by the extractor tests in verify.
 - **Extractor failure:** fix the extractor, add the construct to
   tests/fixture.typ, then `just test-update`; inspect the golden diff.
@@ -65,3 +78,15 @@ Rebuild any stale Word output with its named recipe. Finish with `just paper`
 then `just verify`; quote its verdict and exact word count/readability. Rerun
 an originally failing deep or online check when it is part of the task. Use
 `just preflight` for an actual submission, not every local repair.
+
+## Close the review actions this fixed
+
+For each ledger row this edit actually fixed, and that the checks above
+confirm, edit its row in `reviews/ACTIONS.md`: `status` to `done`, `closed`
+to the short hash of the commit that contains the fix. This skill does not
+commit unless asked, so until then write `uncommitted: <what changed>`; the
+commit that lands it, or the next session, replaces that with the hash. The
+ledger edit rides in the following commit, since a commit cannot name its
+own hash. Leave a row open when the fix is partial, and say which part
+remains in the report. Run `just check-actions` after editing the ledger
+and report the ids closed.

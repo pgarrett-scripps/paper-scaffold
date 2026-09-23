@@ -13,6 +13,15 @@ Use source text and current resolved Typst for review, following the reading
 workflow in AGENTS.md/CLAUDE.md. Do not invoke PDF or image-viewing skills for
 ordinary copy-editing.
 
+## Open review actions
+
+Before editing, run `just check-actions --open` (silent when there is no
+`reviews/ACTIONS.md`; a paper on a scaffold older than 3.24.0 has no recipe,
+so read the file directly). Tell the user which open rows bear on this task:
+rows whose `fix` is `/paper:copy-edit`, and rows about the sentences and
+sections in scope. Work on the rows the user asks for; do not widen the task
+to clear the list.
+
 ## Before editing
 
 Inspect existing changes so you can preserve work already in progress. Run
@@ -71,3 +80,15 @@ require a new edit or a specific failure to resolve.
 
 Report the edit-check verdict, exact before/after word counts and readability,
 and a representative sentence change. Do not estimate missing baseline metrics.
+
+## Close the review actions this fixed
+
+For each ledger row this edit actually fixed, and that the checks above
+confirm, edit its row in `reviews/ACTIONS.md`: `status` to `done`, `closed`
+to the short hash of the commit that contains the fix. This skill does not
+commit unless asked, so until then write `uncommitted: <what changed>`; the
+commit that lands it, or the next session, replaces that with the hash. The
+ledger edit rides in the following commit, since a commit cannot name its
+own hash. Leave a row open when the fix is partial, and say which part
+remains in the report. Run `just check-actions` after editing the ledger
+and report the ids closed.

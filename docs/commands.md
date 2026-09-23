@@ -35,6 +35,7 @@ Every `just` recipe a manuscript uses, in one table.
 | `just assets` | Regenerate every generated figure, table and prose number (delegates to `analysis/`) |
 | `just check` | Report every artifact that has fallen behind its source |
 | `just trace <id> --json` | Inspect a statistic or asset, its uses, provenance, and checks as structured data |
+| `just check-actions [--open\|--init]` | Validate `reviews/ACTIONS.md` and count open review actions; `--open` lists them, `--init` creates it. In `verify` |
 | `just pin` | Record hashes for the files listed under `pinned` in `stats.json` |
 | `just text-baseline` / `text-diff` | Snapshot the PDF's words; word-level diff after a structural refactor |
 | `just review-baseline <name>` | Save a resolved manuscript version, including its figures and bibliography |

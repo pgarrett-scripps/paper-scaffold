@@ -256,6 +256,7 @@ verify:
   # six blocks of output for a manuscript with one figure and five numbers.
   stage "declarations (stats + assets)"  "" just check-declared
   stage "staleness (just check)"         "" just check
+  stage "review actions (just check-actions)" "" just check-actions
 
   echo ""
   if [ $rc -eq 0 ]; then
@@ -393,6 +394,15 @@ trace +args:
 # Record hashes for the files listed under `pinned` in stats.json
 pin:
   @uv run --quiet python tools/pin.py
+
+# The review action ledger, reviews/ACTIONS.md: review skills append findings,
+# editing skills close them with a commit hash. This checks the table is still
+# parseable after hand edits and counts what is open. Open blockers WARN and do
+# not fail; only a malformed ledger fails. No ledger yet is a silent pass.
+# `--open` lists the open rows; `--init` creates the file from the template.
+# Validate reviews/ACTIONS.md and count open review actions by severity
+check-actions *args:
+  @uv run --quiet python tools/check_actions.py "$@"
 
 # For a manuscript migrating onto this scaffold with figures whose analysis is
 # gone or unrunnable: every unclaimed file under figures/ and si/ is declared

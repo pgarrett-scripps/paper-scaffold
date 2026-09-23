@@ -95,6 +95,12 @@ always present and almost never acted on.
   them. Neither output is tracked in git; `just paper` and `just docx` record what
   they rendered in `.build-state/` and `just check-build` recompares it. No check
   reads git history, so they all work outside a repository.
+- **`just check-actions`** -- the review action ledger `reviews/ACTIONS.md`
+  still parses: one table with the fixed columns, unique `A-NNNN` ids, allowed
+  severity and status values, and a `closed` value on every done or wontfix
+  row. Prints open counts by severity. Open blockers are a WARNING, not a
+  failure; a missing ledger passes silently. See
+  [working-with-ai.md](working-with-ai.md#the-review-action-ledger).
 
 `just check` deliberately does not check the audiobooks, and there is no upstream
 figure copy to compare against any more. See HISTORY.md's "Decisions reversed"

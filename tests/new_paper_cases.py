@@ -95,6 +95,12 @@ def run_cases() -> bool:
             ("stats.json copied", (dest / "stats.json").is_file()),
             ("analysis/ copied", (dest / "analysis" / "justfile").is_file()),
             ("tools/ copied", (dest / "tools" / "prose_check.py").is_file()),
+            # The action ledger starts empty, from the template, so the first
+            # review has a file to append to.
+            ("reviews/ACTIONS.md seeded",
+             (dest / "reviews" / "ACTIONS.md").read_text()
+             == (ROOT / "tools" / "actions-template.md").read_text()
+             if (dest / "reviews" / "ACTIONS.md").is_file() else False),
             # docs/ travels because CLAUDE.md links into it; the migration
             # guide and the pre-3.20 release notes do not, since a new paper
             # is neither migrating nor older than any release.

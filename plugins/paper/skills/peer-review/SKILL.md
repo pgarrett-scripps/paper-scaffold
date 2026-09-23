@@ -12,6 +12,22 @@ Work from the manuscript root and follow AGENTS.md/CLAUDE.md. This skill is
 read-only: it writes reviewer reports and never edits the manuscript. It is
 self-contained and does not use any external review pipeline or plugin.
 
+## Read the action ledger first
+
+`reviews/ACTIONS.md` records every finding earlier reviews raised and whether
+it was fixed; its header states the rules. Read it before reviewing. If it is
+missing, create it with `just check-actions --init` (a paper on a scaffold
+older than 3.24.0 has no such recipe: write a file whose table header is
+`| id | severity | status | source | summary | fix | closed |` with a
+`|---|---|---|---|---|---|---|` separator under it). A problem that matches an
+`open`, `done` or `wontfix` row is not a new finding: cite the existing id in
+the findings file instead of raising it again. A `done` row whose problem is
+back in the current text is reopened, not duplicated. Appending to the ledger
+is the only write this skill makes outside its findings file; it still never
+edits the manuscript. The ledger is the editor's input, not the reviewers':
+reviewer agents judge the paper independently and are not given it; the
+editor marks which required changes are already on it.
+
 ## Parameters
 
 All optional, given in plain words after the skill name. Interpret them
@@ -108,3 +124,26 @@ the parameter interpretation, each reviewer's report, and the editor's
 section, in that order. Print the decision, the top three required changes,
 and the file path. Nothing was edited, so do not run `just paper` or
 `just verify`.
+
+## Update the action ledger
+
+After writing the findings file, and before the final print:
+
+1. Every item in the editor's consolidated list of required
+   changes becomes one action: `blocker` for an item that blocks submission
+   or drove a reject or major-revision decision, otherwise `major` or `minor`
+   as the reviewers ranked it. Individual reviewers' points are not added
+   separately.
+2. Skip a finding that matches an `open` or `wontfix` row. Reopen a matching
+   `done` row whose problem is back: `status` to `open`, `closed` to
+   `reopened <YYYY-MM-DD>: <what came back>`.
+3. Append each remaining finding as a row: the next id (`just check-actions`
+   prints it), its severity, `open`, source
+   `<YYYY-MM-DD>-peer-review.md#<ref>` naming the finding, a one-line summary,
+   the routed fix as `fix`, and an empty `closed`.
+4. Run `just check-actions` and repair any format error in the rows you
+   wrote. Print the ids you added or reopened with the verdict.
+
+When `/paper:review-all` launched this review (its prompt says so), skip
+this section: review-all merges every review into the ledger once, after all
+of them finish, so parallel reviews never write the file at the same time.

@@ -17,6 +17,15 @@ numbers, units, and punctuation. Adding a requested result intentionally
 changes the text and does not require an unchanged-text comparison. The
 wording-only edit guard is unsuitable for intentional declaration changes.
 
+## Open review actions
+
+Before editing, run `just check-actions --open` (silent when there is no
+`reviews/ACTIONS.md`; a paper on a scaffold older than 3.24.0 has no recipe,
+so read the file directly). Tell the user which open rows bear on this task:
+rows whose `fix` is `/paper:declare-number`, and rows about the numbers and
+statistic ids in scope. Work on the rows the user asks for; do not widen the
+task to clear the list.
+
 ## Choose the appropriate tier
 
 1. **Computed result:** use real analysis and its inputs. Add a new entry
@@ -59,3 +68,15 @@ Rebuild any other deliverable named stale, then finish with `just paper` and
 `just verify`. Report the ID or literal/exception chosen, deliberate display
 changes, check results, and exact word count/readability. If a comparison or
 re-derivation could not run, report that limit explicitly.
+
+## Close the review actions this fixed
+
+For each ledger row this edit actually fixed, and that the checks above
+confirm, edit its row in `reviews/ACTIONS.md`: `status` to `done`, `closed`
+to the short hash of the commit that contains the fix. This skill does not
+commit unless asked, so until then write `uncommitted: <what changed>`; the
+commit that lands it, or the next session, replaces that with the hash. The
+ledger edit rides in the following commit, since a commit cannot name its
+own hash. Leave a row open when the fix is partial, and say which part
+remains in the report. Run `just check-actions` after editing the ledger
+and report the ids closed.
