@@ -290,6 +290,34 @@ def run_cases() -> bool:
             if at == old:
                 print("  asset origin.at: kept a stale date across an output change")
                 ok = False
+
+            # 8. print geometry: size read back from the file, and a stated
+            #    min_pt recorded for a figure no matplotlib canvas drew.
+            with redirect_stdout(io.StringIO()):
+                _assets.record("fig.t", fig_rel, min_pt=6, **kw)
+            geo = json.loads(_assets.OUT.read_text())["values"]["fig.t"].get("print", {})
+            if geo.get("min_pt") != 6 or not geo.get("width_in"):
+                print(f"  asset print geometry: expected size and min_pt, got {geo}")
+                ok = False
+
+            # 9. generators run in parallel must not drop each other's
+            #    entries: the read-modify-write is serialized by a lock.
+            import threading
+
+            def one(i):
+                _assets.record(f"fig.p{i}", fig_rel, **kw)
+            with redirect_stdout(io.StringIO()):
+                threads = [threading.Thread(target=one, args=(i,))
+                           for i in range(8)]
+                for t in threads:
+                    t.start()
+                for t in threads:
+                    t.join()
+            got = set(json.loads(_assets.OUT.read_text())["values"])
+            lost = {f"fig.p{i}" for i in range(8)} - got
+            if lost:
+                print(f"  asset lock: parallel records lost {sorted(lost)}")
+                ok = False
     finally:
         _assets.OUT = saved
 

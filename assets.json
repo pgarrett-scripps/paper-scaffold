@@ -13,8 +13,14 @@
       "inputs": {
         "analysis/pyproject.toml": "sha256:762ba6f1daa2d1dba8c7569529df2d69e4a6aed7c1b63e7455ed3d0b2a147f5d",
         "analysis/scripts/example_data.csv": "sha256:c19c83771308bceecc3f22425ecea53ee3c37db0af1e4ceeea61e844b212b187",
-        "analysis/scripts/gen_example_figure.py": "sha256:1b2fcdf2200dcbb301c5638db731dce50115fdf4c57ad9f73ffc7af96d803f54",
+        "analysis/scripts/gen_example_figure.py": "sha256:e58bcd281fd3ef38011b2cb74ecc891cb102c130bab30bc51b74290622b68350",
         "analysis/uv.lock": "sha256:e21d564964b2cd47035d7523fe2ce1644f8815c3882c59d5ef8bf9aa58927c97"
+      },
+      "print": {
+        "width_in": 5.0,
+        "height_in": 3.0,
+        "dpi": 300,
+        "min_pt": 10.0
       }
     },
     "fig.toc": {
@@ -30,6 +36,11 @@
         "analysis/pyproject.toml": "sha256:762ba6f1daa2d1dba8c7569529df2d69e4a6aed7c1b63e7455ed3d0b2a147f5d",
         "analysis/scripts/gen_toc_figure.py": "sha256:517f10a9d9d67a1129bc0a6b55166dfcdc6a4ebf74bdf6d628293e23cabd02b3",
         "analysis/uv.lock": "sha256:e21d564964b2cd47035d7523fe2ce1644f8815c3882c59d5ef8bf9aa58927c97"
+      },
+      "print": {
+        "width_in": 3.25,
+        "height_in": 1.75,
+        "dpi": 300
       }
     },
     "tbl.example": {

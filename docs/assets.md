@@ -117,6 +117,18 @@ input means a stale figure reported as current, so that half stays explicit.
 An input that is not present — the normal state of a fresh clone, since
 `analysis/data/` is untracked — is reported as unverified, never as stale.
 
+A figure entry also records its **print geometry** under `print`: `width_in`,
+`height_in` and `dpi` read back from the written raster (after any
+`bbox_inches="tight"` crop), and `min_pt`, the smallest visible type on it,
+when the generator passes the matplotlib figure as `record(..., fig=fig)`. A
+figure no matplotlib canvas drew may state `min_pt=` instead. Journal rules are
+a column width in inches and a type floor in points, and neither is visible in
+the manuscript source.
+
+`record()` takes an advisory lock around its read-modify-write of
+`assets.json` (`.build-state/assets.lock`), so a project that runs its
+generators in parallel does not lose entries.
+
 This replaced `.assets-stamp`, a pair of whole-tree hashes that fired on the same
 failures and could only report "analysis/ has changed" without naming the figure
 it ruined — and that also fired on a new file no generator imports, a change
