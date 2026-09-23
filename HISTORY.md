@@ -64,6 +64,42 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 3.26.0
+
+Extension hooks: a paper extends the toolchain in files it owns, so an upgrade
+replaces scaffold files instead of merging local edits into them. Nothing
+changes for a paper that declares nothing. Reference: docs/hooks.md;
+`just hooks` lists what a paper declares.
+
+- **`project.toml`** (validated strictly; `schema_version = 1`):
+  - `[[stages.verify]]`, `stages.check`, `stages.preflight` and
+    `stages.submission` add named gate stages after the built-in ones. A
+    stage extends a gate and never replaces one.
+  - `[preflight] bib_audit_require_complete = false` drops the DOI
+    completeness flag.
+  - `[sources] typst` adds files to `fmt`, `fmt-check`, the prose rules and
+    the todo check.
+  - `[word]` adds Lua filters and Python steps before and after pagination.
+    Those files and project.toml count toward staleness.
+  - `[bibliography] single = true` declares one shared reference list: the
+    SI cites `@key`, and a new `si-bibliography-mode` error flags a mismatch.
+- **`project.just`** holds the paper's own recipes, imported by the justfile.
+  A name clash with a scaffold recipe is an error, not an override.
+- **CLAUDE.md** now says paper-specific toolchain changes go in these files,
+  never in a scaffold file.
+
+Upgrade: copy the justfile, `tools/`, `tests/`, `docs/` and CLAUDE.md's
+"Paper scaffold" paragraph. Then move each local edit to a scaffold file into
+`project.toml`, `project.just` or `hooks/` (docs/hooks.md), and restore the
+scaffold file:
+- justfile additions to `verify`/`check`/`preflight`/`all`/`submission`
+  become stages;
+- private recipes move to `project.just`;
+- edits to the `typst_sources` line move to `[sources] typst`;
+- `export_docx.py` table and style patches become `[word]` steps;
+- deleted `@si-key` rules in CLAUDE.md/STYLE.md become
+  `[bibliography] single = true`.
+
 ## 3.25.1
 
 - **`just review-text` handles `#si-contents`.** The helper is a `context`

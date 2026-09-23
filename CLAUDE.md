@@ -12,7 +12,10 @@ SCAFFOLD_VERSION (`just version`; upstream is your local clone of that
 repository). The scaffold owns the toolchain: `justfile`, `tools/`, `tests/`,
 `journals/`, `word/`, `docs/` and the staleness records in `.build-state/`.
 This project owns the manuscript: `paper.typ`, `config.typ`, `si-body.typ`,
-`analysis/`, and the declarations in `stats.json` and `assets.json`. To move
+`analysis/`, and the declarations in `stats.json` and `assets.json`. A
+paper-specific gate stage, recipe, Word step or extra source goes in
+`project.toml`, `project.just` or `hooks/` (see
+[docs/hooks.md](docs/hooks.md)), never in an edit to a scaffold file. To move
 to a newer scaffold, run `just upgrade-plan`: it lists the "Upgrade:" line of
 each HISTORY.md entry above this version and classes each scaffold file as
 pristine (replace with `--apply-pristine`) or customized (merge by hand,
