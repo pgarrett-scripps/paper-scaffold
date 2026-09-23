@@ -167,8 +167,35 @@ def bibliography_cases() -> bool:
               "reported as a non-fatal review item")
         ok = False
 
+    # Registry quirks that are not citation errors. A year one apart from the
+    # registered print/online pair (2019/2020) is a New Year straddle: shown,
+    # never fatal. A generic deposit title says nothing about the work. An
+    # article number written "Article 123" is the registered "123". A record
+    # whose accents became "?" and whose date is [[null]] still compares.
+    quirks = [
+        ("adjacent year", dict(entry, year="2021"), metadata,
+         [("year", False)]),
+        ("generic deposit title", entry,
+         dict(metadata, title=["ProteomeXchange dataset"]), [("title", False)]),
+        ("article number", dict(entry, pages="Article 123"),
+         dict(metadata, page="123"), []),
+        ("damaged accents", dict(entry, author="M{\\\"u}ller, M. and Einstein, A."),
+         dict(metadata, author=[{"family": "Mu?ller", "given": "M."},
+                                {"family": "Einstein", "given": "A."}]), []),
+    ]
+    if ba._years({"published-print": {"date-parts": [[None]]}}):
+        print("  bib-audit metadata: a [[null]] date part became a year")
+        ok = False
+    for name, local, registered, want in quirks:
+        got = [(i.field, i.fatal) for i in
+               ba._metadata_issues(local, "ok", registered)]
+        if got != want:
+            print(f"  bib-audit metadata [{name}]: expected {want}, got {got}")
+            ok = False
+
+    # Two years away is not a straddle, so the wrong-work case needs it.
     wrong = dict(entry, title="A Different Paper",
-                 author="Curie, Pierre and Einstein, Albert", year="2021")
+                 author="Curie, Pierre and Einstein, Albert", year="2025")
     issues = ba._metadata_issues(wrong, "ok", metadata)
     fatal = {item.field for item in issues if item.fatal}
     if fatal != {"title", "author", "year"}:

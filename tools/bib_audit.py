@@ -68,6 +68,11 @@ CONCERNING = {"expression_of_concern", "expression-of-concern", "correction",
 TITLE_MARKERS = ("retracted:", "retracted article:", "withdrawn:")
 
 
+# Registered titles that name the kind of deposit rather than the work, as
+# _text() leaves them. Grow it when a repository turns out to do the same.
+GENERIC_DEPOSIT_TITLES = {"dataset", "proteomexchange dataset"}
+
+
 @dataclass(frozen=True)
 class MetadataIssue:
     """One disagreement between a BibTeX entry and its DOI record."""
@@ -119,6 +124,10 @@ def _text(value: object) -> str:
         return ""
     s = html.unescape(str(value))
     s = re.sub(r"<[^>]+>", " ", s)              # JATS in Crossref titles
+    # A registry record whose accents were lost in a charset conversion reads
+    # "Mu?ller". Dropping the "?" rejoins the word, which then matches the
+    # entry's "M{\"u}ller" once the accent is stripped below.
+    s = s.replace("?", "")
     # BibTeX accents may wrap their letter (\v{c}, \"{o}) or not (\'i).
     # Keep the letter before removing the remaining TeX command names.
     s = re.sub(r"\\(?:['\"`^~=.uvHckbdtr])\s*\{?([A-Za-z])\}?",
@@ -223,7 +232,7 @@ def _years(message: dict) -> set[str]:
     out = set()
     for key in ("published-print", "published-online", "published", "issued"):
         parts = (message.get(key) or {}).get("date-parts", [])
-        if parts and parts[0]:
+        if parts and parts[0] and parts[0][0]:     # [[null]] occurs
             out.add(str(parts[0][0]))
     return out
 
@@ -281,9 +290,13 @@ def _metadata_issues(entry: dict, state: str,
         # Some old deposits contain only a product or proceedings name. That
         # cannot verify the rest of the local title, but neither does it prove
         # the local title wrong. Keep it visible without failing preflight.
-        visibly_incomplete = (len(registered_title) <= 3
-                              and local_title[:len(registered_title)]
-                              == registered_title)
+        # A repository that registers every deposit under one generic title
+        # ("Dataset", "ProteomeXchange dataset") says nothing about the title
+        # either, and the entry's descriptive title is the useful one.
+        generic_deposit = " ".join(registered_title) in GENERIC_DEPOSIT_TITLES
+        visibly_incomplete = generic_deposit or (
+            len(registered_title) <= 3
+            and local_title[:len(registered_title)] == registered_title)
         issue("title", title, record["title"], not visibly_incomplete)
 
     registered_people, registered_authors = _registered_people(record["authors"])
@@ -300,7 +313,13 @@ def _metadata_issues(entry: dict, state: str,
     years = record["years"]
     local_year = str(entry.get("year", ""))
     if years and local_year not in years:
-        issue("year", local_year, " or ".join(sorted(years)), True)
+        # Online-first and issue years routinely straddle New Year, and not
+        # every record carries both. A year one apart stays visible for
+        # review; a failed identity check is kept for a larger disagreement.
+        adjacent = local_year.isdigit() and any(
+            year.isdigit() and abs(int(local_year) - int(year)) <= 1
+            for year in years)
+        issue("year", local_year, " or ".join(sorted(years)), not adjacent)
 
     venue = entry.get("journal") or entry.get("booktitle") or ""
     venues = [v for v in record["venues"] if v]
@@ -324,9 +343,13 @@ def _metadata_issues(entry: dict, state: str,
         if local and registered and _text(local) != _text(registered):
             issue(field, local, registered, False)
 
+    # An article number is often written "Article 123" or "article e123" in
+    # the entry and registered as the bare "123"/"e123".
     local_pages, registered_pages = entry.get("pages", ""), record["pages"]
+    local_page_text = " ".join(
+        t for t in _text(local_pages).split() if t != "article")
     if (local_pages and registered_pages
-            and _text(local_pages) != _text(registered_pages)):
+            and local_page_text != _text(registered_pages)):
         issue("pages", local_pages, registered_pages, False)
     return out
 
