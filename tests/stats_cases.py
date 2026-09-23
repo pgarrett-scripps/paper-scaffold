@@ -358,6 +358,27 @@ def check_stats_cases() -> bool:
         if hashcache.sha(f) != want2:
             print("  hashcache: served a stale digest after the file changed")
             ok = False
+        # The racy-clean window: a same-size rewrite that keeps the mtime (a
+        # coarse-timestamp filesystem, two writes in one tick). Fresh files
+        # must be re-hashed; old ones may be served from the cache.
+        import os as _os
+        st0 = f.stat()
+        f.write_bytes(b"TWO-LONGER")
+        _os.utime(f, ns=(st0.st_atime_ns, st0.st_mtime_ns))
+        want3 = "sha256:" + _hl.sha256(b"TWO-LONGER").hexdigest()
+        if hashcache.sha(f) != want3:
+            print("  hashcache: a same-size, same-mtime rewrite served the "
+                  "stale digest of a fresh file")
+            ok = False
+        if str(f.resolve()) in hashcache._load():
+            print("  hashcache: a digest was cached inside the racy window")
+            ok = False
+        old = st0.st_mtime_ns - 10 * hashcache.RACY_NS
+        _os.utime(f, ns=(old, old))
+        hashcache.sha(f)
+        if hashcache._load().get(str(f.resolve()), [None])[-1] != want3:
+            print("  hashcache: an old file's digest was not cached")
+            ok = False
 
     # The deep check's summary must say what actually ran. On an
     # all-hand-entered manuscript _rederive has nothing to do, and the old
