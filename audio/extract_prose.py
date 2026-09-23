@@ -139,11 +139,91 @@ def crossrefs():
     return _CROSSREFS
 
 
+# Calls whose result is layout or document state, never words: a counter reset
+# before the SI's tables, `#context` reading a page number, spacing and breaks.
+# A line that STARTS with one is code, and before this the voice read it out
+# ("hash counter figure dot where kind table dot update zero").
+CODE_CALLS = ("counter", "state", "context", "pagebreak", "colbreak", "v", "h",
+              "place", "metadata", "layout")
+_CODE_START = re.compile(
+    r"(?m)^[ \t]*#(?:" + "|".join(CODE_CALLS) + r")(?![\w-])")
+_IDENT = re.compile(r"[A-Za-z_][\w-]*")
+
+
+def _balanced_end(text, i):
+    """Index just past the bracket group opening at text[i], strings skipped."""
+    depth, in_str, esc = 0, False, False
+    for k in range(i, len(text)):
+        ch = text[k]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+        elif ch == '"':
+            in_str = True
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth == 0:
+                return k + 1
+    return len(text)
+
+
+def _expr_end(text, i):
+    """End of the code expression starting at text[i]: an identifier, then any
+    chain of `(...)`, `[...]`, `{...}` groups and `.method` accesses. `context`
+    takes the expression after it, so `#context counter(page).display()` goes
+    as one unit. A bare group (`#context { ... }`) is an expression too."""
+    m = _IDENT.match(text, i)
+    if m:
+        i = m.end()
+        if m[0] == "context":
+            j = i
+            while j < len(text) and text[j] in " \t":
+                j += 1
+            if j < len(text) and (text[j] in "([{" or _IDENT.match(text, j)):
+                return _expr_end(text, j)
+            return i
+    elif i < len(text) and text[i] in "([{":
+        i = _balanced_end(text, i)
+    while i < len(text):
+        if text[i] in "([{":
+            i = _balanced_end(text, i)
+        elif text[i] == "." and _IDENT.match(text, i + 1):
+            i = _IDENT.match(text, i + 1).end()
+        else:
+            break
+    return i
+
+
+def strip_code_lines(text):
+    """Drop a layout or state call (CODE_CALLS) that starts a line, however
+    many lines its brackets span. Newlines inside it are kept, so paragraph
+    breaks around it survive; prose after it on the same line is kept too."""
+    out, pos = [], 0
+    for m in _CODE_START.finditer(text):
+        if m.start() < pos:
+            continue            # inside an expression already removed
+        end = _expr_end(text, m.end() - len(m[0].lstrip(" \t#")))
+        out.append(text[pos:m.start()])
+        out.append(" " + "\n" * text.count("\n", m.start(), end))
+        pos = end
+    out.append(text[pos:])
+    return "".join(out)
+
+
 def clean(text, refs=None):
     # 0a. Typst directives and line comments. A document's front matter can carry
     #     its own `#let` helpers, and the SI's overview chapter starts before the
     #     first heading, so without this the audiobook opens by reading source.
+    #     Layout and state calls on their own line (a counter reset, #context,
+    #     #pagebreak(), #v(1em)) are code for the same reason.
     text = strip_directives(text, " ")
+    text = strip_code_lines(text)
     text = re.sub(r"(?m)^\s*//.*$", " ", text)
 
     # 0. remove fenced code blocks and #raw(...) config dumps

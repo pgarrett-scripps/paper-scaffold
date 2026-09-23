@@ -47,6 +47,21 @@ def run_cases() -> bool:
         ("citations are still dropped", "shown before @smith2020.", "shown before.",
          "smith"),
         ("an unknown label is dropped, not read", "see @fig:gone.", "see.", "gone"),
+        # Layout and state calls starting a line are code, not prose (the uno
+        # SI Overview read its counter reset aloud).
+        ("counter reset is dropped",
+         "#counter(figure.where(kind: table)).update(0)\nOverview.",
+         "Overview.", "counter"),
+        ("wrapped context block is dropped whole",
+         '#context {\n  let n = counter(page).get()\n  [p #n]\n}\nProse.',
+         "Prose.", "page"),
+        ("context with a method chain", "#context counter(page).display()\nProse.",
+         "Prose.", "display"),
+        ("spacing call keeps the prose after it", "#v(1em) Then prose.",
+         "Then prose.", "1em"),
+        ("pagebreak is dropped", "Before.\n\n#pagebreak()\n\nAfter.", "Before.", "pagebreak"),
+        ("a name that only starts like one is prose", "#vector is narrated.",
+         "vector", None),
     ]
     for name, src, want, forbid in cases:
         got = ep.clean(src, refs)
