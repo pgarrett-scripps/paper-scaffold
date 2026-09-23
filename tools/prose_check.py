@@ -425,6 +425,98 @@ def check_reference_order(sources: dict[str, str]) -> list[Finding]:
     return out
 
 
+# A citation of a float or section, in both reference forms.
+XREF = rf"(?:@|#refn?\(\s*<)((?:sec|{FLOAT}):[A-Za-z0-9_-]+)"
+
+
+def check_cross_reference_order(sources: dict[str, str]) -> list[Finding]:
+    """SI floats should be first reached from the main text in S-order.
+
+    check_reference_order scores each document on its own sequence, which is
+    right for numbering but blind to the order that matters most for an SI:
+    the order the MAIN text sends a reader into it. A manuscript reached
+    Table S16 second and Figure S6 first with every check clean. So: number
+    the SI's floats by where they sit in the SI, take each one's first
+    citation in the main text, and require that sequence to rise per kind.
+    A jump is one finding, on the label cited early, like the single-document
+    rule. A float reached only from inside the SI is not reported here; that
+    is uncited-figure's territory.
+    """
+    main, si = sources.get("main"), sources.get("SI")
+    if main is None or si is None:
+        return []
+    defined = [m.group(1) for m in DEFINITION.finditer(si)]
+    number: dict[str, int] = {}
+    for kind in ("fig", "tbl", "tab"):
+        for i, label in enumerate(d for d in defined if d.startswith(kind + ":")):
+            number[label] = i + 1
+
+    # A citation from inside a main-text caption does not send the reader.
+    prose = readability._strip_balanced(main, "#figure(")
+    cited: list[str] = []
+    for m in re.finditer(XREF, prose):
+        if m.group(1) in number and m.group(1) not in cited:
+            cited.append(m.group(1))
+
+    out = []
+    for kind in ("fig", "tbl", "tab"):
+        highest, early_label = 0, ""
+        jumped: dict[str, list[int]] = {}
+        for label in (c for c in cited if c.startswith(kind + ":")):
+            n = number[label]
+            if n < highest:
+                jumped.setdefault(early_label, []).append(n)
+            else:
+                highest, early_label = n, label
+        for label, skipped in jumped.items():
+            lo, hi = min(skipped), max(skipped)
+            span = f"{KIND[kind]} S{lo}" if lo == hi else \
+                f"{KIND[kind]}s S{lo}–S{hi}"
+            out.append(Finding(
+                "cross-reference-order", "warn",
+                f"the main text reaches {KIND[kind]} S{number[label]} "
+                f"(<{label}>) before {span}: move the float earlier in the "
+                f"SI, or its first main-text mention later",
+                subject=label, where="main"))
+    return out
+
+
+# A level-1 SI heading and its label, which typstyle may wrap onto the next
+# line when the title is long. An unlabeled heading is not checked: nothing
+# can cite it by name, and the back-matter headings are unlabeled on purpose.
+SI_SECTION = re.compile(
+    r"(?m)^=[ \t]+([^\n<]+?)\s*\n?\s*<(sec:[A-Za-z0-9_-]+)>")
+
+
+def check_unreached_si_sections(sources: dict[str, str]) -> list[Finding]:
+    """Every level-1 SI section should be reachable from the main text.
+
+    An SI is read from the main text, not front to back, so a section that no
+    main-text sentence points at, by its label or by any float or subsection
+    inside it, is one the reader is never sent to. A warning, because a
+    section can be reached through a sibling's prose and still be fine; read
+    it rather than silence it.
+    """
+    main, si = sources.get("main"), sources.get("SI")
+    if main is None or si is None:
+        return []
+    refs = set(re.findall(XREF, main))
+    heads = list(SI_SECTION.finditer(si))
+    out = []
+    for i, h in enumerate(heads):
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(si)
+        block = si[h.end():end]
+        inside = {h.group(2)} | set(DEFINITION.findall(block)) | set(
+            re.findall(r"<(sec:[A-Za-z0-9_-]+)>", block))
+        if not inside & refs:
+            out.append(Finding(
+                "unreached-si-section", "warn",
+                f"SI section \"{h.group(1)}\" (<{h.group(2)}>) is cited from "
+                f"nowhere in the main text, by section or by a float inside it",
+                subject=h.group(2), where="SI"))
+    return out
+
+
 # An `image("...")` call and whatever arguments follow it, which may include a
 # `width:`. `[^)]` rather than `.` so a reflowed multi-line call still matches.
 IMAGE_CALL = re.compile(r'image\(\s*"([^"]+)"([^)]*)\)')
@@ -1259,6 +1351,8 @@ def check_structure(sources: dict[str, str]) -> list[Finding]:
                 subject=label, where=where))
 
     out += check_reference_order(sources)
+    out += check_cross_reference_order(sources)
+    out += check_unreached_si_sections(sources)
 
     # An acronym used more than once but never followed by, or preceded by, a
     # parenthetical expansion anywhere in the manuscript.

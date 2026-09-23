@@ -311,6 +311,50 @@ def suppression_cases() -> bool:
         ok = False
     return ok
 
+def si_reach_cases() -> bool:
+    """How the main text sends a reader into the SI: in S-order, and to every
+    labeled SI section at least once."""
+    import prose_check as pc
+
+    fig = '#figure(image("x.png"), caption: [{cap}]) <{label}>'
+    si = ("= Methods <sec:si-a>\n"
+          + fig.format(cap="c", label="fig:s1") + "\n"
+          + fig.format(cap="c", label="fig:s2") + "\n"
+          + fig.format(cap="c", label="tbl:s1") + "\n"
+          "= Timing\n<sec:si-b>\n"      # typstyle may wrap the label
+          "== Protocol <sec:si-b-sub>\nText.\n"
+          "= Extra <sec:si-c>\nNothing points here.\n")
+    order = [
+        ("in S-order", "See @fig:s1, then @fig:s2.", 0),
+        ("S2 reached before S1", "See @fig:s2, then @fig:s1.", 1),
+        ("kinds are numbered separately", "See @tbl:s1, then @fig:s1.", 0),
+        ("#refn counts as reaching", "Figure S#refn(<fig:s2>) then @fig:s1.", 1),
+        ("a main caption does not send the reader",
+         fig.format(cap="see @fig:s2", label="fig:m") + "\nSee @fig:m, @fig:s1, @fig:s2.", 0),
+    ]
+    ok = True
+    for name, main, want in order:
+        got = len(pc.check_cross_reference_order({"main": main, "SI": si}))
+        if got != want:
+            print(f"  cross-reference order [{name}]: expected {want}, got {got}")
+            ok = False
+
+    reach = [
+        ("nothing cited", "No pointers.", {"sec:si-a", "sec:si-b", "sec:si-c"}),
+        ("by a float inside", "See @fig:s2.", {"sec:si-b", "sec:si-c"}),
+        ("by a subsection inside, wrapped label",
+         "See @sec:si-b-sub and @sec:si-a.", {"sec:si-c"}),
+        ("by section label", "See #ref(<sec:si-c>), @sec:si-a, @sec:si-b.", set()),
+    ]
+    for name, main, want in reach:
+        got = {f.subject for f in
+               pc.check_unreached_si_sections({"main": main, "SI": si})}
+        if got != want:
+            print(f"  unreached SI section [{name}]: expected {sorted(want)}, "
+                  f"got {sorted(got)}")
+            ok = False
+    return ok
+
 def house_style_cases() -> bool:
     """The opt-in list and bold rules: what they flag, what they leave alone,
     and that they stay silent until a project enables them."""
@@ -383,7 +427,7 @@ def house_style_cases() -> bool:
 def run_cases() -> bool:
     ok = True
     for case in (structural_cases, boundary_cases, suppression_cases,
-                 house_style_cases,):
+                 si_reach_cases, house_style_cases,):
         ok &= case()
     return ok
 

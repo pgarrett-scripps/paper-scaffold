@@ -54,6 +54,8 @@ RULES: dict[str, tuple[str, str]] = {
     "word-repetition":    ("warn",  "the word"),
     "semicolon-count":    ("warn",  ""),
     "reference-order":    ("warn",  "the label cited early"),
+    "cross-reference-order": ("warn", "the SI label the main text cites early"),
+    "unreached-si-section": ("warn", "the section label, e.g. sec:si-methods"),
     "unexpanded-acronym": ("warn",  "the acronym"),
     "derivable-number":   ("warn",  "the typed value"),
     "unaccounted-number": ("warn",  "the typed value"),
