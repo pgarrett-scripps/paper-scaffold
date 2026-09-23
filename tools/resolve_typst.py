@@ -576,6 +576,21 @@ def label_numbers(body: str) -> dict[str, str]:
     return {label[1:-1]: num for label, num in numbered.items()}
 
 
+def substitute_si_contents(source: str, body: str) -> str:
+    """`source` with every `#si-contents` replaced by the sentence counted
+    over `body` (assembled as for label_numbers). For exports that evaluate
+    Typst but cannot carry the helper's `context` block (the review copy)."""
+    if not _SI_CONTENTS.search(mask(source, strings=True)):
+        return source
+    protected, _ = _protect_raw(body)
+    summary = _number_labels(protected)[3]
+    if not (summary["sections"] or summary["fig"] or summary["tbl"]):
+        raise ResolveError("#si-contents is used, but no numbered SI section "
+                           "or labeled SI float exists to list")
+    sentence = si_contents_sentence(summary)
+    return _SI_CONTENTS.sub(lambda _: sentence, source)
+
+
 def export_includes(src: str, path: Path, stack=()) -> str:
     """Inline captured includes for Word, preserving nested relative paths."""
     if path in stack:

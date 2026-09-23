@@ -387,15 +387,15 @@ class Hardening(unittest.TestCase):
     def test_all_skips_narration_without_the_voice_model(self):
         # audio/ is tracked but its voice model is not, so a fresh clone must
         # get the PDF and Word from `just all` rather than die in _audio-check.
-        # The build steps are stubbed: this is about the audio condition only.
+        # Runs the condition recipe `all` calls, not `all` itself, so a project
+        # that adds steps to `all` keeps this test.
         text = (ROOT / "justfile").read_text()
+        self.assertIn("just _narrate-if-voice", text)
         self.put("justfile", "set allow-duplicate-recipes\n" + text +
-                 "\npaper:\n  @true\n\ncheck:\n  @true\n\n"
-                 "audiobook-all:\n  @echo NARRATED\n")
-        self.put("tools/submission.py", "")
+                 "\naudiobook-all:\n  @echo NARRATED\n")
         self.put("audio/config.py", 'VOICE_NAME = "v"\n')
         def run():
-            return subprocess.run(["just", "all"], cwd=self.root,
+            return subprocess.run(["just", "_narrate-if-voice"], cwd=self.root,
                                   capture_output=True, text=True, check=False)
         proc = run()
         self.assertEqual(proc.returncode, 0, proc.stderr)

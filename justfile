@@ -201,6 +201,16 @@ density:
 all: paper
   #!/usr/bin/env bash
   set -euo pipefail
+  just _narrate-if-voice
+  # The upload set, from the capture `paper` just made (no second build).
+  uv run --quiet python tools/submission.py all
+  just check
+
+# Narrate when audio/ and its voice model exist, else say why not. A recipe of
+# its own so a project that customizes `all` keeps this condition (and its test).
+_narrate-if-voice:
+  #!/usr/bin/env bash
+  set -euo pipefail
   voice=""
   if [ -d audio ]; then
     voice=$(cd audio && python3 -c "import config; print(config.VOICE_NAME)")
@@ -217,9 +227,6 @@ all: paper
     echo ""
     echo "PDF, Word, review text and both audiobooks rebuilt from the current source."
   fi
-  # The upload set, from the capture `paper` just made (no second build).
-  uv run --quiet python tools/submission.py all
-  just check
 
 # The one command that answers "is this done". Everything under it already
 # existed and was already documented; what did not exist was a single thing to

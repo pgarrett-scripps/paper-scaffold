@@ -64,6 +64,25 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 3.25.1
+
+- **`just review-text` handles `#si-contents`.** The helper is a `context`
+  block, which the review export refuses rather than risk dropping prose, so
+  a manuscript using it had no review copy (koth-paper worked around it in
+  its justfile). The export now writes in the same sentence the Word export
+  builds, from `resolve_typst.substitute_si_contents`.
+
+- **`just all`'s narration check is its own recipe, `_narrate-if-voice`.**
+  Its test ran the whole `all`, so a project that added steps to `all`
+  (koth-paper, cascade) had to patch the test. The test now runs only the
+  condition.
+
+Upgrade: copy `tools/export_text.py`, `tools/resolve_typst.py`,
+`tests/test_export_text.py` and `tests/hardening.py`; in the justfile, add
+`_narrate-if-voice` and call it from `all` in place of the inline voice
+check. Delete any local `just review-text || echo` workaround in `paper` and
+any local skip in the `all` test.
+
 ## 3.25.0
 
 About twenty improvements the papers had each made on their own copy, moved

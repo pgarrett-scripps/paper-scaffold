@@ -73,6 +73,19 @@ Funding statement survives.
             export(self.root)
         self.assertEqual(output.read_bytes(), original)
 
+    def test_si_contents_becomes_the_word_sentence(self):
+        """`#si-contents` is a `context` block the export refuses to drop;
+        the review copy writes in the sentence the Word export uses."""
+        paper = self.root / 'paper.typ'
+        paper.write_text('#let si-contents = context [unused]\n'
+                         + paper.read_text().replace('Funding statement survives.',
+                                                     'Funding statement survives.\n\n#si-contents')
+                         + '#include "si-body.typ"\n')
+        (self.root / 'si-body.typ').write_text(
+            '= Methods\n#figure(rect(), caption: [a]) <fig:a>\n')
+        output, = export(self.root)
+        self.assertIn('Section S1 Methods. Figure S1 (PDF).', output.read_text())
+
     def test_si_reference_list_is_omitted_like_the_main_one(self):
         """The SI's own list goes the way the main one does: cut, not filtered.
 

@@ -212,6 +212,14 @@ def export(root: Path, document: str | None = None) -> list[Path]:
                     (temp / name).write_text(instrument(sources[name], name, identifier), encoding='utf-8')
             else:
                 paper = sources['paper.typ']
+                # `#si-contents` is a `context` block, which the evaluated
+                # export refuses; write in the sentence the Word export uses.
+                import resolve_typst
+                start, end = body_span(paper, 'paper.typ')
+                counted = paper[start:end]
+                if 'si-body.typ' in sources:
+                    counted += '\n\n' + resolve_typst._SI_MARK + '\n' + sources['si-body.typ']
+                paper = resolve_typst.substitute_si_contents(paper, counted)
                 # Preserve declarations and acknowledgments between BODY END
                 # and the bibliography, while keeping the bibliography out.
                 _, end = body_span(paper, 'paper.typ')
