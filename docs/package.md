@@ -16,12 +16,13 @@ puts its own behaviour. The package never ships or replaces those files.
 | `paper.typ`, `config.typ`, `si-body.typ`, `cover-letter.typ` | `justfile` | `tools/` (every tool) |
 | `analysis/` (apart from the three helpers) | `stats.typ`, `assets.typ`, `code.typ` | `tests/` (fixture and cases) |
 | `stats.json`, `assets.json`, `references.bib`, `*.csl` | `wordcount.typ`, `wordcount-sections.typ` | `journals/*.toml` |
-| `journal.toml`, `project.toml`, `project.just`, `hooks/` | `analysis/scripts/_stats.py`, `_assets.py`, `_provenance.py` and `_toolchain/` (when `analysis/scripts/` exists) | `word/paper-reference.docx`, `word/reference.docx` |
+| `journal.toml`, `project.toml`, `project.just`, `hooks/` | `analysis/scripts/_stats.py`, `_assets.py`, `_provenance.py` and `_toolchain/` (when `analysis/scripts/` exists) | `word/reference.docx` (the multi-document reference) |
 | `prose-check.toml`, `word-limits.toml`, `word-watchlist.toml` | `audio/extract_prose.py`, `make_audiobook.py`, `make_cover.py` (when `audio/config.py` exists) | `docs/`, `HISTORY.md` |
 | `pyproject.toml` (the pin), `uv.lock` | `slides/theme.typ` (when `slides/` exists) | |
 | `CLAUDE.md`, `AGENTS.md`, `STYLE.md`, `README.md`, `.gitignore`, `.claude/`, `.vscode/` | `.paper/scaffold.lock.json` | |
 | `audio/config.py`, `slides/config.typ`, `slides/*.typ` decks | `.paper/docs/` (a gitignored mirror, not locked) | |
 | A local `word/*.docx` or `journals/*.toml` (an override, below) | | |
+| The `[word] reference` document, if the paper declares one | | |
 
 Why each generated file has to exist on disk:
 
@@ -50,26 +51,24 @@ profiles, the Word reference documents, the test fixture and the docs.
 
 ### Overrides: a paper's own reference document or journal profile
 
-A paper may keep its own `word/paper-reference.docx` (cascade and spectrl use
-journal-styled ones: black headings, a left-aligned 20 pt title),
-`word/reference.docx`, or `journals/<name>.toml`. A local file at one of those
-paths wins over the package's copy, for the build, the Word export and the
-staleness record. It belongs to the paper: `paper sync` never writes it and
+A paper may keep its own `word/reference.docx` (the multi-document Word
+reference) or `journals/<name>.toml`. A local file at one of those paths wins
+over the package's copy, for the build, the Word export and the staleness
+record. It belongs to the paper: `paper sync` never writes it and
 `paper sync --check` does not flag it. The lock lists it under `overrides`
 with its hash, and `paper sync` prints it, so a reader can see that the paper
 does not use the stock file.
 
-**With 3.27.0 (`[word.style]`, branch `word-style`).** The Word reference
-document stops being a shipped file: the build generates it from the
-`[word.style]` settings in `project.toml`, and `[word] reference = "..."`
-names a paper's own document as the escape hatch. The package then ships no
-`.docx` and `paper sync` writes none; this design never vendors or syncs a
-reference document. What remains of the override rule for Word is the lock
-recording the hash of a paper-owned file under `word/`, so `paper sync`
-reports that the paper does not use the generated reference. The merge of the
-two branches touches only the lookup in `tools/export_docx.py` (here a
-`locate()` call) and the staleness list in `tools/build_state.py`, which must
-hash the `[word] reference` file or the generating settings instead of
+The single paper's Word reference document is not a shipped file (3.27.0):
+the export generates it from the `[word.style]` settings in `project.toml`,
+or uses the paper's own document named by `[word] reference = "..."`
+(cascade and spectrl-style journal templates with edits no setting
+expresses). The package ships no `paper-reference.docx` and `paper sync`
+writes none; nothing vendors or syncs it. A declared file under `word/` is
+still listed in the lock's `overrides`, so `paper sync` reports that the
+paper does not use the generated reference. `export_docx.py` reads the
+declared file from the manuscript directly (no `locate()`), and
+`build_state.py` hashes `project.toml` and that file, not
 `word/paper-reference.docx`.
 
 The lookup is one function, `paths.locate(root, name)`: the manuscript's copy
@@ -183,7 +182,7 @@ the scaffold checkout there is nothing to sync, and the stage says so.
     "stats.typ": "<sha256>"
   },
   "overrides": {
-    "word/paper-reference.docx": "<sha256>"
+    "journals/jpr-article.toml": "<sha256>"
   }
 }
 ```
@@ -196,21 +195,24 @@ the network or the scaffold checkout, as the dissertation's
 
 The build record (`.build-state/paper.pdf.json`) used to hash
 `tools/<build tools>`, `journals/*.toml`, `word/paper-reference.docx` and the
-`justfile` in the manuscript directory. It now hashes the same names through
-`paths.locate`, so the content comes from the package unless the paper
-overrides it. `pyproject.toml` and `uv.lock`, which carry the pin, stay in the
-record as before.
+`justfile` in the manuscript directory. It now hashes the build tools and
+journal profiles through `paths.locate`, so the content comes from the package
+unless the paper overrides it. `pyproject.toml` and `uv.lock`, which carry the
+pin, stay in the record as before, so any pin move (a new package version)
+marks `paper.pdf` and `paper.docx` stale. In the scaffold checkout the package
+is installed editable and a tool edit does not change the version; the tool
+contents catch that.
 
-The record hashes the files' contents, not the version string. In the scaffold
-checkout the package is installed editable and a tool edit does not change the
-version; in a paper the pin changes the contents anyway. Content is right in
-both. A pin bump therefore marks `paper.pdf` and `paper.docx` stale when (and
-only when) a build tool changed.
+The Word reference document is not a file in the record (3.27.0). It is
+generated from `project.toml`'s `[word.style]` by `paper_word_reference.py`
+(both hashed), or it is the paper's own `[word] reference`, which
+`project_hooks.build_inputs` adds to the record and the capture. A change to
+either marks `paper.docx` stale.
 
 The captured manuscript (`.build-state/manuscripts/<id>/`) still carries
 `tools/` beside the sources, so an old capture converts the way it was built.
 
-## Migration from 3.26.x
+## Migration from 3.26.x and 3.27.x
 
 ```bash
 cd ~/Repos/paper-scaffold          # a clone with the release tags
@@ -227,8 +229,9 @@ after the identity fields new-paper.sh fills in) or customized.
 |---|---|---|
 | `tools/`, `tests/`, `docs/`, `DOCUMENTATION.md`, `LICENSE.scaffold` | removed | **refused** |
 | `justfile`, the Typst modules, the analysis helpers, the audio scripts, `slides/theme.typ` | replaced by sync | **refused** |
-| `journals/*.toml`, `word/*.docx` | removed | kept as an override |
-| `HISTORY.md` | removed | kept (the paper's own history) |
+| `journals/*.toml`, `word/reference.docx` | removed | kept as an override |
+| `word/paper-reference.docx` (no longer read from 3.27.0) | removed | compared as Word renders it: only recoloured black, removed; other edits, removed and their `[word.style]` block written into `project.toml`; edits no setting expresses, kept and declared as `[word] reference` |
+| `HISTORY.md` (the package's from 4.0.0) | removed | **refused** (move the paper's notes to `notes/PROJECT-HISTORY.md`, restore the stock file) |
 | `CLAUDE.md`, `STYLE.md`, `README.md`, `.gitignore`, `.claude/`, `.vscode/`, `cover-letter.typ`, `audio/config.py` | kept | kept |
 | `pyproject.toml` | rewritten with the pin | rewritten; extra dependencies kept, anything else **refused** |
 | a file in `tools/` or `tests/` the scaffold never had | | **refused** (move it to `hooks/`) |

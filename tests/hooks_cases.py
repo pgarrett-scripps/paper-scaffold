@@ -246,6 +246,99 @@ class Word(Tmp):
                     ph.load(self.root)
 
 
+class WordStyle(Tmp):
+    """[word.style] and [word] reference: the Word export's styles."""
+
+    def test_settings_are_validated(self):
+        self.write('[word.style]\nfont = "Times New Roman"\nfont_size = 12\n'
+                   'line_spacing = 2.0\nmargins = "1in"\ntitle_size = 20\n'
+                   'title_align = "left"\ntitle_color = "000000"\n'
+                   'heading_color = "0f4761"\n')
+        style = ph.load(self.root).word.style
+        self.assertEqual(style["heading_color"], "0F4761")
+        self.assertEqual(style["margins"], "1in")
+        for bad in ('fontsize = 12', 'font_size = "12"', 'font_size = 12.3',
+                    'font_size = true', 'line_spacing = 5', 'margins = "1 inch"',
+                    'margins = "10in"', 'title_align = "right"',
+                    'heading_color = "blue"', 'font = ""'):
+            with self.subTest(bad=bad):
+                self.write(f"[word.style]\n{bad}\n")
+                with self.assertRaises(ValueError):
+                    ph.load(self.root)
+
+    def test_reference_and_style_are_exclusive(self):
+        self.write('[word]\nreference = "word/custom.docx"\n[word.style]\nfont_size = 11\n')
+        with self.assertRaisesRegex(ValueError, "exclusive"):
+            ph.load(self.root)
+        self.write('[word]\nreference = "word/custom.dotx"\n')
+        with self.assertRaises(ValueError):
+            ph.load(self.root)
+
+    def test_reference_is_a_build_input(self):
+        self.write('[word]\nreference = "word/custom.docx"\n')
+        with self.assertRaisesRegex(ValueError, "custom.docx"):
+            ph.build_inputs(self.root)
+        (self.root / "word").mkdir()
+        (self.root / "word/custom.docx").write_bytes(b"x")
+        self.assertEqual(ph.build_inputs(self.root), ["project.toml", "word/custom.docx"])
+
+    def test_a_settings_change_makes_the_word_file_stale(self):
+        from build_state import snapshot
+        self.write('[word.style]\nfont_size = 12\n')
+        before = snapshot(self.root)
+        self.write('[word.style]\nfont_size = 11\n')
+        self.assertNotEqual(before, snapshot(self.root))
+
+    def test_the_word_reference_and_the_pin_make_the_word_file_stale(self):
+        # 4.0.0: the record follows [word] reference (the declared file and
+        # its contents) and uv.lock (the installed package version), and no
+        # longer names word/paper-reference.docx itself.
+        from build_state import snapshot
+        (self.root / "word").mkdir()
+        for name in ("a.docx", "b.docx"):
+            (self.root / "word" / name).write_bytes(b"x")
+        self.write('[word]\nreference = "word/a.docx"\n')
+        before = snapshot(self.root)
+        self.assertNotIn("word/paper-reference.docx", before)
+        self.assertIn("word/a.docx", before)
+        (self.root / "word/a.docx").write_bytes(b"y")
+        edited = snapshot(self.root)
+        self.assertNotEqual(before, edited)
+        self.write('[word]\nreference = "word/b.docx"\n')
+        self.assertNotEqual(edited, snapshot(self.root))
+        lock = 'version = 1\n[[package]]\nname = "paper-scaffold"\nversion = "{}"\n'
+        (self.root / "uv.lock").write_text(lock.format("4.0.0"))
+        pinned = snapshot(self.root)
+        (self.root / "uv.lock").write_text(lock.format("4.0.1"))
+        self.assertNotEqual(pinned, snapshot(self.root))
+
+    def test_a_left_over_template_is_an_error(self):
+        (self.root / "word").mkdir()
+        (self.root / "word/paper-reference.docx").write_bytes(b"x")
+        with self.assertRaisesRegex(ValueError, "no longer read"):
+            ph.build_inputs(self.root)
+        self.write('[word]\nreference = "word/paper-reference.docx"\n')
+        self.assertEqual(ph.build_inputs(self.root),
+                         ["project.toml", "word/paper-reference.docx"])
+
+    def test_the_export_uses_the_settings(self):
+        import zipfile
+        import export_docx
+        from unittest.mock import patch
+        self.write('[word.style]\ntitle_align = "left"\nheading_color = "123456"\n')
+        source = self.root / "paper.resolved.typ"
+        source.write_text("= Main\n\nProse.\n")
+        out = io.StringIO()
+        with patch.multiple(export_docx, ROOT=self.root, SRC=source,
+                            OUT=self.root / "paper.docx"), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            self.assertEqual(export_docx.main(), 0)
+        with zipfile.ZipFile(self.root / "paper.docx") as z:
+            styles = z.read("word/styles.xml").decode()
+        heading = styles[styles.index('w:styleId="Heading1"'):]
+        self.assertIn('<w:color w:val="123456"', heading[:heading.index("</w:style>")])
+
+
 class Bibliography(Tmp):
     """[bibliography] single: the SI cites the main list's keys on purpose."""
 
@@ -339,7 +432,7 @@ class ProjectJust(Tmp):
 
 def run_cases() -> bool:
     suite = unittest.TestSuite()
-    for case in (Stages, Sources, Word, Bibliography, Wiring, ProjectJust):
+    for case in (Stages, Sources, Word, WordStyle, Bibliography, Wiring, ProjectJust):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(case))
     return unittest.TextTestRunner(verbosity=1).run(suite).wasSuccessful()
 

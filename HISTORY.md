@@ -64,7 +64,7 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
-## 4.0.0 (draft: not released; the version is still 3.26.1)
+## 4.0.0
 
 The toolchain is a package. A paper holds what it owns plus a pin, and an
 upgrade is: move the pin, run `paper sync`. Reference: docs/package.md.
@@ -81,33 +81,86 @@ upgrade is: move the pin, run `paper sync`. Reference: docs/package.md.
 - **`paper sync --check`** is the first `just verify` stage: it fails on a
   missing or edited generated file, a lock from another release, or a leftover
   `tools/`, `tests/` or `docs/`.
-- **Overrides.** A paper's own `word/*.docx` or `journals/*.toml` wins over the
-  package's copy (`tools/paths.py` `locate()`), is never written or flagged,
-  and is listed in the lock.
-- **Staleness** hashes the build tools, reference document and journal
-  profiles by content wherever they resolve, so a pin bump marks outputs stale
-  only when a build input changed.
+- **Overrides.** A paper's own `word/reference.docx` (the multi-document
+  reference) or `journals/*.toml` wins over the package's copy
+  (`tools/paths.py` `locate()`), is never written or flagged, and is listed
+  in the lock. The single paper's Word reference is not a shipped file
+  (3.27.0): it is generated from `[word.style]`, or it is the paper's own
+  `[word] reference`, so the package ships and syncs no docx for it.
+- **Staleness** hashes the build tools and journal profiles by content
+  wherever they resolve, and `uv.lock`, so a pin move marks outputs stale.
+  `paper.docx` goes stale on `project.toml` (`[word.style]`, `[word]
+  reference`), on the declared reference file, and on the generator; no
+  longer on `word/paper-reference.docx`.
 - **`just upgrade-plan`** is now `just upgrade-notes` (the old name is an
   alias): the upgrade instructions between the lock's release and the
   installed one.
   `--apply-pristine` is gone; there is nothing to copy.
-- **`paper migrate`** moves a 3.26.x paper once: pristine toolchain copies are
-  removed, generated files replaced, customized reference documents and
-  journal profiles kept as overrides; a customized tool, test or generated
-  file is refused and nothing changes.
+- **`paper migrate`** moves a 3.26.x or 3.27.x paper once: pristine
+  toolchain copies are removed, generated files replaced, customized journal
+  profiles kept as overrides; a customized tool, test, generated file or
+  `HISTORY.md` is refused and nothing changes. A leftover
+  `word/paper-reference.docx` is settled by the 3.27.0 rules, compared as
+  Word renders it: stock or only recoloured black, removed; other edits,
+  removed and written into `project.toml` as the `[word.style]` block that
+  reproduces them; edits no setting expresses, kept and declared as
+  `[word] reference`.
+- **`HISTORY.md` is the package's.** It is read from the installed release
+  (`.paper/docs/HISTORY.md`); a paper's own notes go in
+  `notes/PROJECT-HISTORY.md`.
 - **In a paper, `just test` is the extractor fixture check**; the case suites
   test the toolchain and run in this repository.
 - `scripts/new-paper.sh` writes the pinned `pyproject.toml` and runs
   `paper sync` instead of copying the toolchain (`--pin` to choose).
 
-Upgrade: from 3.26.x, run `just upgrade-plan` first and settle every
-customized scaffold file into `project.toml`, `project.just` or `hooks/`
-(3.26.0), commit, then from a scaffold clone at v4.0.0:
-`uv run paper migrate --project PAPER --dry-run`, then without `--dry-run`.
-It rewrites `pyproject.toml` with the pin, runs `uv lock`, `uv sync` and
-`paper sync`. Then `just text-baseline` (before) and `just paper`,
-`just text-diff`, `just verify`; commit with `git add -A`. A hook that ran
-`python tools/x.py` now runs `uv run paper tool x`.
+Upgrade: from 3.26.x or 3.27.x. First settle every customized scaffold file
+into `project.toml`, `project.just` or `hooks/` (3.26.0; `just upgrade-plan`
+lists them), and move any notes of the paper's own out of `HISTORY.md` into
+`notes/PROJECT-HISTORY.md`, restoring `HISTORY.md` to its stock text; run
+`just text-baseline`; commit. Then from a scaffold clone at v4.0.0 run
+`uv run paper migrate --project PAPER --dry-run`, read its REFUSED lines and
+its "Word template" line, and rerun without `--dry-run`. It removes the
+toolchain copies, rewrites `pyproject.toml` with the pin, handles
+`word/paper-reference.docx` (removed; or removed with a `[word.style]` block
+added to `project.toml`; or kept as `[word] reference`: check the block it
+wrote), and runs `uv lock`, `uv sync` and `paper sync`. Then `just paper`,
+`just text-diff`,
+`just docx` (headings are black unless `heading_color` says otherwise),
+`just verify`; commit with `git add -A`. A hook that ran `python tools/x.py`
+now runs `uv run paper tool x`.
+
+## 3.27.0
+
+Word styling is declared, not a binary to edit. The Word export never
+compiles the Typst preamble, so the paper's look reaches Word only through
+the reference document, and each paper kept a hand-edited
+`word/paper-reference.docx` that every upgrade had to diff by eye.
+
+- **`[word.style]` in `project.toml`**: `font`, `font_size`,
+  `line_spacing`, `margins`, `title_size`, `title_align`, `title_color`,
+  `heading_color`, each optional and validated strictly.
+  `tools/paper_word_reference.py` generates the reference document from
+  them into `.build-state/word-reference/`, cached by a hash of the settings
+  and the tool. A settings change makes `paper.docx` stale. docs/word-export.md.
+- **The stock headings are black.** Title, Subtitle and Heading 1-9 were
+  pandoc's blue, which three of the papers recoloured locally.
+- **`[word] reference = "word/custom.docx"`** keeps a hand-made reference
+  document, used as it is. It cannot be combined with `[word.style]`.
+- **`word/paper-reference.docx` is no longer shipped or read.** A paper
+  that still has one and does not declare it gets a build error that names
+  the fix. `--translate` prints the `[word.style]` block that reproduces an
+  old template, and `just upgrade-plan` states which case each paper is in.
+
+Upgrade: copy `tools/`, `tests/` and `docs/` (`--apply-pristine`). Then handle
+`word/paper-reference.docx` as `just upgrade-plan` classes it. The stock
+file, or one only recoloured black: `git rm` it. One with other edits: put
+the `[word.style]` block the plan prints into `project.toml` and `git rm`
+the file. One with edits no setting expresses: keep it and declare
+`[word] reference = "word/paper-reference.docx"`. For a paper whose own copy
+of `upgrade_plan.py` predates this, run
+`uv run python tools/paper_word_reference.py --translate word/paper-reference.docx`
+after copying `tools/`. Rebuild with `just docx`: headings turn black unless
+`heading_color` says otherwise.
 
 ## 3.26.1
 

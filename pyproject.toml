@@ -3,7 +3,7 @@ name = "paper-scaffold"
 # The toolchain release. A paper pins it in its own pyproject.toml
 # (docs/package.md); `paper version` and the lock say which one it runs.
 # See HISTORY.md for what bumps major, minor, and patch.
-version = "3.26.1"
+version = "4.0.0"
 description = "The paper-scaffold manuscript toolchain: tools, gates and `paper sync`"
 requires-python = ">=3.10"
 

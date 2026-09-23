@@ -4,15 +4,51 @@ How `just docx` turns the Typst source into an editable Word file.
 
 ## The Word export is more delicate than it looks
 
-The native paper exporter now uses `word/paper-reference.docx` for reusable Word
-styles. Edit that file in Word to change headings, body text, captions or code;
-builds preserve those changes. The template has single-spaced image paragraphs
-and references, and removes conflicting theme settings where concrete fonts or
-colors are specified. Template edits invalidate the build fingerprint.
-`uv run python tools/paper_word_reference.py` explicitly resets this template;
-normal builds never regenerate it. Older projects without the file retain the
-existing code-style fallback. The legacy HTML exporter does not use this template.
-`--black-headings` sets the title and headings in black instead of blue.
+Every Word style in `paper.docx` comes from a reference document. The export
+never compiles the Typst preamble, so the paper's look reaches Word only
+through that file. `tools/paper_word_reference.py` generates it: pandoc's
+default, then the stock adjustments (black title and headings, single-spaced
+figures and references, code in DejaVu Sans Mono, concrete fonts and colours
+winning over theme settings), then the settings in `project.toml`:
+
+```toml
+[word.style]
+font = "Times New Roman"   # every text style but code; replaces the theme fonts
+font_size = 12             # body text, pt (6-36, half-points)
+line_spacing = 2.0         # body line spacing, a multiple (1-3)
+margins = "1in"            # all four sides: in, cm, mm or pt, up to 3in
+title_size = 20            # the Title style, pt
+title_align = "left"       # the Title style: "left" or "center"
+title_color = "000000"     # Title and Subtitle, six hex digits
+heading_color = "000000"   # Heading 1-9
+```
+
+Every key is optional; one left out keeps the stock value. Headings keep
+their own sizes when `font_size` changes. With `line_spacing` set, table
+cells and tight lists (the Compact style) stay single-spaced, like figures
+and references. `margins` also sets a US Letter page when none is set, and
+figure widths follow the text width it leaves.
+
+The generated file is cached in `.build-state/word-reference/`, keyed by the
+settings, the tool and the pandoc version. `project.toml` is a build input,
+so changing a setting makes `paper.docx` stale. To look at the file:
+`uv run python tools/paper_word_reference.py` prints its path.
+
+A paper that needs more than these settings keeps its own reference
+document, made in Word, and declares it instead:
+
+```toml
+[word]
+reference = "word/custom.docx"   # exclusive with [word.style]
+```
+
+That file is used as it is, with no stock adjustments. It is a build input
+too. Before 3.27.0 the scaffold shipped `word/paper-reference.docx` for
+papers to edit. That file is no longer read, and a build stops if one is
+left undeclared. `uv run python tools/paper_word_reference.py --translate
+word/paper-reference.docx` prints the `[word.style]` block that reproduces
+it, or lists what no setting can express. Add
+`--baseline <the release's copy>` to count only the paper's own edits.
 
 After pandoc writes the file, `export_docx.paginate` sets the keep rules the
 PDF follows without being told: a table row never splits, a short table stays

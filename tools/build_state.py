@@ -48,12 +48,15 @@ def snapshot(root: Path, dependencies=()) -> dict[str, str | None]:
                                          "pyproject.toml", "uv.lock", "justfile", "journal.toml"))
     # The selected journal profile steers where the graphical abstract lands,
     # so a placement change is a source change to both outputs.
-    # Journals, build tools and the reference docx may come from the installed
-    # toolchain (tools/paths.py): hash their CONTENTS under the manuscript-
-    # relative name, so an upgrade that changes one is a source change and a
-    # paper's own override is captured the same way.
+    # Journals and build tools may come from the installed toolchain
+    # (tools/paths.py): hash their CONTENTS under the manuscript-relative
+    # name, so an upgrade that changes one is a source change and a paper's
+    # own override is captured the same way. The Word reference document is
+    # not a file here (3.27.0): it is generated from project.toml's
+    # [word.style] by paper_word_reference.py, both hashed, or it is the
+    # paper's [word] reference, which build_inputs() names. uv.lock records
+    # the installed release, so any pin move is a source change too.
     toolchain = {f"tools/{name}" for name in BUILD_TOOLS}
-    toolchain.add("word/paper-reference.docx")
     toolchain.update(f"journals/{p.name}" for base in (root, DATA)
                      for p in (base / "journals").glob("*.toml"))
     # project.toml and the Word steps it names (docs/hooks.md), captured with

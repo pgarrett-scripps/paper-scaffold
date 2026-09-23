@@ -297,6 +297,61 @@ def merge_check(base: bytes, ours: bytes, theirs: bytes) -> int | None:
     return r.returncode
 
 
+# 3.27.0 generates the Word reference document from project.toml's
+# [word.style] instead of shipping this binary. Its bytes always differ (the
+# creation time), so it is compared as Word renders it.
+LEGACY_WORD_TEMPLATE = "word/paper-reference.docx"
+
+
+def legacy_template_decision(project_copy: bytes, release_copy: bytes | None
+                             ) -> tuple[str, dict, list[str], str]:
+    """What to do with a paper's old reference document, per 3.27.0.
+
+    Returns (action, style, leftovers, detail). `action` is "delete" (the
+    stock file, or one whose only edits the generated stock now makes, such
+    as black headings), "style" (delete it and add the [word.style] `style`),
+    "reference" (edits no setting expresses: keep it and declare
+    [word] reference), or "unknown" (damaged, or no pandoc: `detail` says
+    why). Shared by `just upgrade-plan` and `paper migrate`.
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from paper_word_reference import differences, effective, translate
+        if release_copy is not None and not differences(
+                effective(project_copy), effective(release_copy)):
+            return "delete", {}, [], "the stock template"
+        style, left = translate(project_copy, release_copy)
+    except Exception as exc:  # a damaged file, or no pandoc: say so, do not stop
+        return "unknown", {}, [], str(exc)
+    if not style and not left:
+        return "delete", {}, [], "equal to the generated stock"
+    if not left:
+        return "style", style, [], "customized"
+    return "reference", style, left, "customized beyond [word.style]"
+
+
+def legacy_template_note(project_copy: bytes, release_copy: bytes | None) -> str:
+    """Delete, translate to [word.style], or declare [word] reference."""
+    from paper_word_reference import toml_block
+    action, style, left, detail = legacy_template_decision(project_copy, release_copy)
+    if action == "unknown":
+        return f"customized locally: compare by hand ({detail})"
+    if action == "delete" and detail == "the stock template":
+        return ("the stock template: `git rm` it (the generated one has "
+                "black headings)")
+    if action == "delete":
+        return "equal to the generated stock: `git rm` it"
+    if action == "style":
+        return ("customized: add to project.toml, then `git rm` it: "
+                + toml_block(style).replace("\n", "; "))
+    return (f"customized beyond [word.style] ({len(left)} difference(s); "
+            "`uv run paper tool paper_word_reference --translate "
+            f"{LEGACY_WORD_TEMPLATE} --baseline OLD` lists them): keep it and declare "
+            f'[word] reference = "{LEGACY_WORD_TEMPLATE}" in project.toml, '
+            "or accept the closest settings: "
+            + toml_block(style).replace("\n", "; "))
+
+
 @dataclass
 class FileRow:
     path: str                     # path in the project
@@ -340,6 +395,8 @@ def classify(project: Path, blobs: Blobs, cur: dict[str, Entry],
             row.cls = "removed-upstream"
             if pdata is None:
                 row.note = "already gone"
+            elif up == LEGACY_WORD_TEMPLATE:
+                row.note = legacy_template_note(pdata, cdata)
             elif np_ == nc:
                 row.note = "pristine: `git rm` it"
             else:

@@ -29,11 +29,12 @@ def tiny_png() -> bytes:
 
 class PaperWordTests(unittest.TestCase):
     def test_custom_reference_survives_export_and_is_fingerprinted(self):
+        from paper_word_reference import generate
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            reference = root / 'word/paper-reference.docx'
-            reference.parent.mkdir()
-            with zipfile.ZipFile(ROOT / 'word/paper-reference.docx') as archive:
+            reference = root / 'word/custom.docx'
+            generate(reference, {})
+            with zipfile.ZipFile(reference) as archive:
                 files = {n: archive.read(n) for n in archive.namelist()}
             styles = ET.fromstring(files['word/styles.xml'])
             ns = {'w': W}
@@ -45,6 +46,8 @@ class PaperWordTests(unittest.TestCase):
             with zipfile.ZipFile(reference, 'w') as archive:
                 for n, data in files.items():
                     archive.writestr(n, data)
+            (root / 'project.toml').write_text(
+                'schema_version = 1\n[word]\nreference = "word/custom.docx"\n')
             source = root / 'paper.resolved.typ'
             source.write_text('= Test\n\n```python\nprint("editable")\n```\n\n$ x^2 $\n')
             output = root / 'paper.docx'
@@ -56,7 +59,7 @@ class PaperWordTests(unittest.TestCase):
                 self.assertIn(b'<m:oMath>', archive.read('word/document.xml'))
             before = snapshot(root)
             reference.write_bytes(b'edited template')
-            self.assertNotEqual(before['word/paper-reference.docx'], snapshot(root)['word/paper-reference.docx'])
+            self.assertNotEqual(before['word/custom.docx'], snapshot(root)['word/custom.docx'])
 
     def test_supporting_information_keeps_its_own_reference_list(self):
         """Two lists, numbered independently, each holding only its own works.
@@ -169,16 +172,77 @@ class PaperWordTests(unittest.TestCase):
         self.assertEqual(export_docx.main_only(src), '= T\n\nMain.\n')
         self.assertEqual(export_docx.main_only('= T\n\nNo SI.\n'), '= T\n\nNo SI.\n')
 
-    def test_black_headings_is_opt_in(self):
-        from paper_word_reference import create_reference
+    def test_stock_reference_has_black_title_and_headings(self):
+        from paper_word_reference import generate
         ns = {'w': W}
-        for black in (False, True):
-            with tempfile.TemporaryDirectory() as folder:
-                target = create_reference(Path(folder), black_headings=black)
-                with zipfile.ZipFile(target) as archive:
-                    styles = ET.fromstring(archive.read('word/styles.xml'))
-                color = styles.find('w:style[@w:styleId="Heading1"]/w:rPr/w:color', ns)
-                self.assertEqual(color.get('{' + W + '}val') == '000000', black)
+        with tempfile.TemporaryDirectory() as folder:
+            target = generate(Path(folder) / 'r.docx', {})
+            with zipfile.ZipFile(target) as archive:
+                styles = ET.fromstring(archive.read('word/styles.xml'))
+            for sid in ('Title', 'Subtitle', 'Heading1', 'Heading6', 'Heading9Char'):
+                color = styles.find(f'w:style[@w:styleId="{sid}"]/w:rPr/w:color', ns)
+                self.assertEqual(color.attrib, {'{' + W + '}val': '000000'}, sid)
+
+    def test_word_style_settings_reach_the_styles(self):
+        from paper_word_reference import generate, guess, translate
+        ns = {'w': W}
+        val = '{' + W + '}val'
+        style = {'font': 'Times New Roman', 'font_size': 11.5, 'line_spacing': 2.0,
+                 'margins': '2.5cm', 'title_size': 20, 'title_align': 'left',
+                 'title_color': '112233', 'heading_color': '0F4761'}
+        with tempfile.TemporaryDirectory() as folder:
+            target = generate(Path(folder) / 'r.docx', style)
+            with zipfile.ZipFile(target) as archive:
+                styles = ET.fromstring(archive.read('word/styles.xml'))
+                document = ET.fromstring(archive.read('word/document.xml'))
+            data = target.read_bytes()
+            width = export_docx.text_width(target)
+        run = styles.find('w:docDefaults/w:rPrDefault/w:rPr', ns)
+        fonts = run.find('w:rFonts', ns)
+        self.assertEqual(fonts.get('{' + W + '}ascii'), 'Times New Roman')
+        self.assertIsNone(fonts.get('{' + W + '}asciiTheme'))
+        self.assertEqual(run.find('w:sz', ns).get(val), '23')
+        self.assertEqual(styles.find('w:docDefaults/w:pPrDefault/w:pPr/w:spacing', ns)
+                         .get('{' + W + '}line'), '480')
+        # Tables and tight lists stay single-spaced.
+        self.assertEqual(styles.find('w:style[@w:styleId="Compact"]/w:pPr/w:spacing', ns)
+                         .get('{' + W + '}line'), '240')
+        # One family: the title and headings lose the theme's heading face.
+        heading_font = styles.find('w:style[@w:styleId="Heading1"]/w:rPr/w:rFonts', ns)
+        self.assertEqual(heading_font.get('{' + W + '}hAnsi'), 'Times New Roman')
+        code_font = styles.find('w:style[@w:styleId="SourceCode"]/w:rPr/w:rFonts', ns)
+        self.assertEqual(code_font.get('{' + W + '}ascii'), 'DejaVu Sans Mono')
+        title = styles.find('w:style[@w:styleId="Title"]', ns)
+        self.assertEqual(title.find('w:rPr/w:sz', ns).get(val), '40')
+        self.assertEqual(title.find('w:pPr/w:jc', ns).get(val), 'left')
+        self.assertEqual(title.find('w:rPr/w:color', ns).get(val), '112233')
+        self.assertEqual(styles.find('w:style[@w:styleId="Heading2"]/w:rPr/w:color', ns)
+                         .get(val), '0F4761')
+        margin = document.find('.//w:sectPr/w:pgMar', ns)
+        self.assertEqual({margin.get('{' + W + '}' + s) for s in ('top', 'left')}, {'1417'})
+        # Figure widths follow the page the margins leave.
+        self.assertAlmostEqual(width, (12240 - 2 * 1417) / 1440)
+        # The translation reads the settings back, exactly.
+        self.assertEqual(guess(data)['margins'], f'{1417 / 1440:g}in')
+        found, left = translate(data)
+        self.assertEqual(left, [])
+        self.assertEqual({k: found[k] for k in ('font', 'title_align', 'heading_color')},
+                         {k: style[k] for k in ('font', 'title_align', 'heading_color')})
+
+    def test_reference_is_cached_by_its_settings(self):
+        from paper_word_reference import reference_for
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            first = reference_for(root, {})
+            self.assertEqual(first.parent, root / '.build-state/word-reference')
+            stamp = first.stat().st_mtime_ns
+            self.assertEqual(reference_for(root, {}), first)
+            self.assertEqual(first.stat().st_mtime_ns, stamp)
+            self.assertNotEqual(reference_for(root, {'font_size': 11}), first)
+            # A captured build under .build-state/ shares the project's cache.
+            capture = root / '.build-state/manuscripts/abc'
+            capture.mkdir(parents=True)
+            self.assertEqual(reference_for(capture, {}), first)
 
     def test_legacy_project_without_template_still_exports(self):
         with tempfile.TemporaryDirectory() as folder:

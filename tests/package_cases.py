@@ -33,11 +33,38 @@ def sh(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *IDENT, *args], cwd=cwd, check=True, capture_output=True)
 
 
-def write(root: Path, files: dict[str, str]) -> None:
+def write(root: Path, files: dict[str, str | bytes]) -> None:
     for rel, text in files.items():
         p = root / rel
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text)
+        if isinstance(text, bytes):
+            p.write_bytes(text)
+        else:
+            p.write_text(text)
+
+
+def word_template(style: dict, italic_heading: bool = False) -> bytes:
+    """A reference document as a paper would have held one: generated from
+    `style`, optionally with an edit no [word.style] setting expresses."""
+    import zipfile
+    from paper_word_reference import generate
+    with tempfile.TemporaryDirectory() as tmp:
+        path = generate(Path(tmp) / "t.docx", style)
+        if italic_heading:
+            with zipfile.ZipFile(path) as z:
+                parts = {n: z.read(n) for n in z.namelist()}
+            xml = parts["word/styles.xml"].decode()
+            at = xml.index('w:styleId="Heading2"')
+            rpr = xml.index("<w:rPr>", at) + len("<w:rPr>")
+            parts["word/styles.xml"] = (xml[:rpr] + "<w:i/>" + xml[rpr:]).encode()
+            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+                for n, b in parts.items():
+                    z.writestr(n, b)
+        return path.read_bytes()
+
+
+# The template a 3.26.x paper was given: pandoc's blue headings.
+OLD_BLUE = {"heading_color": "0F4761", "title_color": "0F4761"}
 
 
 def paper(d: Path) -> Path:
@@ -103,19 +130,22 @@ def sync_cases(check) -> None:
         (root / "tools").rmdir()
 
         # An override is the paper's: never written, never flagged, and wins.
-        write(root, {"word/paper-reference.docx": "journal styled\n"})
-        sm.sync(root)
-        lock = json.loads((root / sm.LOCK).read_text())
-        check("an override is listed in the lock",
-              "word/paper-reference.docx" in lock["overrides"], lock["overrides"])
-        check("an override is not flagged", sm.check(root) == [], sm.check(root))
         import paths
-        check("an override wins over the package's copy",
-              paths.locate(root, "word/paper-reference.docx")
-              == root / "word/paper-reference.docx")
         check("without one the package's copy is used",
               paths.locate(root, "word/reference.docx")
               == paths.DATA / "word/reference.docx")
+        write(root, {"word/reference.docx": "journal styled\n"})
+        sm.sync(root)
+        lock = json.loads((root / sm.LOCK).read_text())
+        check("an override is listed in the lock",
+              "word/reference.docx" in lock["overrides"], lock["overrides"])
+        check("an override is not flagged", sm.check(root) == [], sm.check(root))
+        check("an override wins over the package's copy",
+              paths.locate(root, "word/reference.docx")
+              == root / "word/reference.docx")
+        check("the package ships no single-paper reference document (3.27.0)",
+              not (paths.DATA / "word/paper-reference.docx").exists())
+        (root / "word/reference.docx").unlink()
 
         # Optional features: written when present, removed when dropped.
         write(root, {"audio/config.py": "VOICE_NAME = 'x'\n",
@@ -161,18 +191,27 @@ V1 = {
     "tests/run.py": "pass\n",
     "docs/README.md": "docs\n",
     "journals/j.toml": "[journal]\n",
-    "word/paper-reference.docx": "stock\n",
 }
 
 
-def migrate_fixture(d: Path, edits: dict[str, str]) -> tuple[Path, Path]:
+_STOCK: list[bytes] = []
+
+
+def STOCK_TEMPLATE() -> bytes:  # the release's copy, generated once
+    if not _STOCK:
+        _STOCK.append(word_template(OLD_BLUE))
+    return _STOCK[0]
+
+
+def migrate_fixture(d: Path, edits: dict) -> tuple[Path, Path]:
     scaffold, project = d / "paper-scaffold", d / "proj"
-    write(scaffold, V1)
+    write(scaffold, {**V1, "word/paper-reference.docx": STOCK_TEMPLATE()})
     sh(scaffold, "init", "-q")
     sh(scaffold, "add", "-A")
     sh(scaffold, "commit", "-q", "-m", "v1")
     sh(scaffold, "tag", "-a", "v1.0.0", "-m", "v1")
     write(project, {k: v for k, v in V1.items() if not k.startswith("scripts/")})
+    write(project, {"word/paper-reference.docx": STOCK_TEMPLATE()})
     write(project, {"pyproject.toml": '[project]\nname = "proj"\nversion = "1.0.0"\n'
                                       'dependencies = ["rich", "scipy"]\n',
                     "paper.typ": "real prose\n", **edits})
@@ -218,25 +257,30 @@ def migrate_cases(check) -> None:
               any(r.startswith("justfile: customized") for r in plan.refused),
               plan.refused)
 
-    # Pristine toolchain, customized reference document: migrates.
+    # Pristine toolchain, customized journal profile, and a reference
+    # document only recoloured black (what the 3.27.0 stock now is): migrates.
     with tempfile.TemporaryDirectory() as tmp:
         scaffold, project = migrate_fixture(Path(tmp), {
-            "word/paper-reference.docx": "journal styled\n"})
+            "journals/j.toml": "[journal]\nmine = 1\n",
+            "word/paper-reference.docx": word_template({})})
         plan = mg.classify(project, scaffold, None, PIN)
         check("a pristine paper has no refusals", plan.refused == [], plan.refused)
-        check("the customized reference document stays as an override",
-              plan.overrides == ["word/paper-reference.docx"], plan.overrides)
+        check("the customized journal profile stays as an override",
+              plan.overrides == ["journals/j.toml"], plan.overrides)
+        check("a black-only reference document is removed",
+              "word/paper-reference.docx" in plan.remove
+              and plan.project_toml is None, (plan.remove, plan.word_note))
         check("extra dependencies are kept", plan.extra_deps == ["scipy"],
               plan.extra_deps)
         rc = quiet_main(project, scaffold, None, PIN, False, False)
         check("migrate exits 0", rc == 0, rc)
         check("toolchain directories removed",
               not any((project / d).exists() for d in ("tools", "tests", "docs")))
-        check("pristine journal profile and HISTORY removed",
-              not (project / "journals/j.toml").exists()
-              and not (project / "HISTORY.md").exists())
+        check("pristine HISTORY and the old template removed",
+              not (project / "HISTORY.md").exists()
+              and not (project / "word/paper-reference.docx").exists())
         check("override kept",
-              (project / "word/paper-reference.docx").read_text() == "journal styled\n")
+              (project / "journals/j.toml").read_text() == "[journal]\nmine = 1\n")
         py = (project / "pyproject.toml").read_text()
         check("pyproject pins the package", PIN in py and '"scipy"' in py, py)
         check("paper prose untouched",
@@ -250,6 +294,67 @@ def migrate_cases(check) -> None:
             check("a second migrate is refused", False)
         except mg.MigrateError as e:
             check("a second migrate is refused", "already has" in str(e), e)
+
+    import project_hooks as ph
+
+    # The untouched old template (blue headings): removed, nothing added.
+    with tempfile.TemporaryDirectory() as tmp:
+        scaffold, project = migrate_fixture(Path(tmp), {})
+        plan = mg.classify(project, scaffold, None, PIN)
+        check("the stock old template is removed",
+              "word/paper-reference.docx" in plan.remove and plan.project_toml is None,
+              plan.remove)
+
+    # Edits [word.style] expresses: removed, the block goes into project.toml.
+    with tempfile.TemporaryDirectory() as tmp:
+        scaffold, project = migrate_fixture(Path(tmp), {
+            "word/paper-reference.docx": word_template(
+                {"heading_color": "000000", "title_color": "000000",
+                 "title_size": 20, "title_align": "left"}),
+            "project.toml": "schema_version = 1\n\n[word]\nlua_filters = []\n"})
+        plan = mg.classify(project, scaffold, None, PIN)
+        check("an expressible template has no refusals", plan.refused == [],
+              plan.refused)
+        rc = quiet_main(project, scaffold, None, PIN, False, False)
+        check("migrate with [word.style] exits 0", rc == 0, rc)
+        style = ph.load(project).word.style
+        check("project.toml gets the paper's own edits, not the old blue",
+              style == {"title_size": 20, "title_align": "left"}, style)
+        check("the translated template is removed",
+              not (project / "word/paper-reference.docx").exists())
+        check("its build inputs are clean", ph.build_inputs(project) == ["project.toml"],
+              ph.build_inputs(project))
+
+    # Edits no setting expresses: kept and declared as [word] reference.
+    with tempfile.TemporaryDirectory() as tmp:
+        data = word_template(OLD_BLUE, italic_heading=True)
+        scaffold, project = migrate_fixture(Path(tmp), {
+            "word/paper-reference.docx": data})
+        rc = quiet_main(project, scaffold, None, PIN, False, False)
+        check("migrate with [word] reference exits 0", rc == 0, rc)
+        word = ph.load(project).word
+        check("the template is declared as [word] reference",
+              word.reference == "word/paper-reference.docx" and not word.style,
+              (word.reference, word.style))
+        check("the declared template is kept as it was",
+              (project / "word/paper-reference.docx").read_bytes() == data)
+        check("the migrated paper passes --check", sm.check(project) == [],
+              sm.check(project))
+
+    # A customized HISTORY.md is refused: from 4.0.0 it is the package's.
+    with tempfile.TemporaryDirectory() as tmp:
+        scaffold, project = migrate_fixture(Path(tmp), {
+            "HISTORY.md": "# History\n\nOur own notes.\n"})
+        plan = mg.classify(project, scaffold, None, PIN)
+        check("a customized HISTORY.md is refused",
+              any(r.startswith("HISTORY.md") and "PROJECT-HISTORY" in r
+                  for r in plan.refused), plan.refused)
+
+    # Adding [word] reference into an existing [word] table.
+    text = mg.word_table("schema_version = 1\n[word]\nlua_filters = []\n", None)
+    check("reference is inserted into an existing [word] table",
+          'reference = "word/paper-reference.docx"' in text
+          and text.count("[word]") == 1, text)
 
 
 def run_cases() -> bool:

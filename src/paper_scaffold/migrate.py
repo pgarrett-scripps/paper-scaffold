@@ -9,7 +9,13 @@ docs/package.md "Migration from 3.26.x":
   pristine are removed, customized are refused;
 - files paper sync generates: pristine are replaced, customized are refused;
 - journals/ and word/: pristine are removed, customized stay as overrides;
-- HISTORY.md: pristine is removed, customized stays (the paper's own);
+- word/paper-reference.docx (no longer read from 3.27.0) by what Word
+  renders from it: stock, or edited only as the new stock is (black
+  headings), is removed; other edits [word.style] expresses are removed and
+  written into project.toml as that block; edits it cannot express keep the
+  file, declared as `[word] reference` in project.toml;
+- HISTORY.md (package-owned from 4.0.0): pristine is removed, customized is
+  refused (move the paper's own notes to notes/PROJECT-HISTORY.md);
 - pyproject.toml: rewritten with the pin, extra dependencies kept, any other
   table or key refused;
 - a file in tools/ or tests/ the scaffold never had: refused.
@@ -31,6 +37,7 @@ from . import use_tools, version
 REMOVE_OR_REFUSE = ("tools/", "tests/", "docs/")
 REMOVE_OR_REFUSE_FILES = ("DOCUMENTATION.md", "LICENSE.scaffold")
 OVERRIDABLE = ("journals/", "word/")
+LEGACY_WORD = "word/paper-reference.docx"  # 3.27.0 generates it instead
 GENERATED = (sync_mod.ALWAYS + sync_mod.ANALYSIS_HELPERS + sync_mod.AUDIO
              + sync_mod.SLIDES)
 PYPROJECT_KEYS = {
@@ -58,6 +65,10 @@ class Plan:
     refused: list[str] = field(default_factory=list)
     pyproject: str = ""
     extra_deps: list[str] = field(default_factory=list)
+    # project.toml's new text when the old Word template moves into it
+    # ([word.style] or [word] reference), and one line saying why.
+    project_toml: str | None = None
+    word_note: str = ""
 
 
 def _toml():
@@ -169,10 +180,15 @@ def classify(project: Path, scaffold: Path | None, base: str | None,
             (plan.replace if pristine else plan.refused).append(
                 rel if pristine else f"{rel}: customized, and paper sync now "
                 "writes it (move the change to project.just / project.toml / hooks/)")
+        elif rel == LEGACY_WORD and not pristine:
+            legacy_word(plan, local, blobs.get(entry.sha))
         elif rel.startswith(OVERRIDABLE):
             (plan.remove if pristine else plan.overrides).append(rel)
         elif rel == "HISTORY.md":
-            (plan.remove if pristine else plan.kept).append(rel)
+            (plan.remove if pristine else plan.refused).append(
+                rel if pristine else f"{rel}: customized; from 4.0.0 it is the "
+                "package's release history. Move this paper's own notes to "
+                "notes/PROJECT-HISTORY.md, restore the stock file, rerun")
         else:
             plan.kept.append(rel)
     for rel in sorted(listing):
@@ -193,12 +209,74 @@ def classify(project: Path, scaffold: Path | None, base: str | None,
     plan.pyproject, plan.extra_deps = rewrite_pyproject(
         project, scaffold_py, plan.pin, plan.refused)
     touched = plan.remove + plan.replace + ["pyproject.toml", ".gitignore"]
+    if plan.project_toml is not None and (project / "project.toml").exists():
+        touched.append("project.toml")
     if up._in_git(project):
         dirty = up.dirty_paths(project, [p for p in touched if (project / p).exists()])
         if dirty:
             plan.refused.append("uncommitted changes in " + ", ".join(sorted(dirty))
                                 + ": commit or discard them first")
     return plan
+
+
+def word_table(text: str, style: dict | None) -> str:
+    """project.toml's `text` with the old template's replacement added:
+    `style` as a [word.style] block, or None for [word] reference."""
+    import re
+    import paper_word_reference as pwr
+    tomllib = _toml()
+    word = tomllib.loads(text).get("word", {}) if text.strip() else {}
+    if "style" in word or "reference" in word:
+        raise MigrateError("project.toml already declares [word.style] or "
+                           f"[word] reference, and {LEGACY_WORD} is still here: "
+                           "settle it by hand (.paper/docs/word-export.md)")
+    if not text.strip():
+        text = "schema_version = 1\n"  # a new project.toml (docs/hooks.md)
+    elif not text.endswith("\n"):
+        text += "\n"
+    if style is not None:
+        out = (text + f"\n# From {LEGACY_WORD} (paper migrate).\n"
+               + pwr.toml_block(style) + "\n")
+    else:
+        line = f'reference = "{LEGACY_WORD}"  # edits [word.style] cannot express\n'
+        header = re.search(r"^\[word\][ \t]*(#.*)?$\n?", text, re.MULTILINE)
+        if header:
+            out = text[:header.end()] + line + text[header.end():]
+        else:
+            out = text + "\n[word]\n" + line
+    tomllib.loads(out)  # a broken edit is a bug here, never a broken paper
+    return out
+
+
+def legacy_word(plan: Plan, local: bytes, release_copy: bytes | None) -> None:
+    """Sort the paper's customized word/paper-reference.docx (3.27.0 rules)."""
+    import paper_word_reference as pwr
+    import upgrade_plan as up
+    action, style, left, detail = up.legacy_template_decision(local, release_copy)
+    if action == "unknown":
+        plan.refused.append(f"{LEGACY_WORD}: cannot be compared ({detail}); "
+                            "settle it by hand (.paper/docs/word-export.md)")
+        return
+    path = plan.project / "project.toml"
+    text = path.read_text() if path.is_file() else ""
+    try:
+        if action == "delete":
+            plan.remove.append(LEGACY_WORD)
+            plan.word_note = f"{LEGACY_WORD}: {detail}, removed"
+        elif action == "style":
+            plan.project_toml = word_table(text, style)
+            plan.remove.append(LEGACY_WORD)
+            plan.word_note = (f"{LEGACY_WORD}: removed; project.toml gets "
+                              + pwr.toml_block(style).replace("\n", "; "))
+        else:
+            plan.project_toml = word_table(text, None)
+            plan.overrides.append(LEGACY_WORD)
+            plan.word_note = (f"{LEGACY_WORD}: kept, declared as [word] reference "
+                              f"({len(left)} edit(s) no [word.style] setting "
+                              "expresses; `uv run paper tool paper_word_reference "
+                              f"--translate {LEGACY_WORD}` lists them)")
+    except MigrateError as e:
+        plan.refused.append(str(e))
 
 
 def report(plan: Plan) -> str:
@@ -221,6 +299,8 @@ def report(plan: Plan) -> str:
                                      if not fnmatch.fnmatch(k, ".claude/*")], 20)
     if plan.extra_deps:
         block("pyproject: extra dependencies kept", plan.extra_deps, 20)
+    if plan.word_note:
+        lines.append(f"  Word template (3.27.0)\n    {plan.word_note}")
     return "\n".join(lines)
 
 
@@ -236,6 +316,8 @@ def apply(plan: Plan, install: bool = True) -> None:
         if (project / d).is_dir():
             shutil.rmtree(project / d)
     (project / "pyproject.toml").write_text(plan.pyproject)
+    if plan.project_toml is not None:
+        (project / "project.toml").write_text(plan.project_toml)
     gitignore = project / ".gitignore"
     text = gitignore.read_text() if gitignore.is_file() else ""
     if ".paper/docs/" not in text.split("\n"):

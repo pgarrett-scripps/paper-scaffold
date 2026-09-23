@@ -123,7 +123,9 @@ Details: [docs/numbers.md](docs/numbers.md), [docs/assets.md](docs/assets.md).
   `#import "stats.typ": s, n` and `#import "assets.typ": fig, tbl`.
 - **Word export never compiles the preamble.** If you change the preamble or
   the resolver, run `just docx` and confirm the headings, abstract and
-  equations survive, not just the exit code.
+  equations survive, not just the exit code. Word fonts, spacing,
+  margins and heading colours are `[word.style]` in `project.toml`
+  (docs/word-export.md).
 
 ## Done means `just verify` is clean
 

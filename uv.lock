@@ -1073,7 +1073,7 @@ wheels = [
 
 [[package]]
 name = "paper-scaffold"
-version = "3.26.1"
+version = "4.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "bibtexparser" },
