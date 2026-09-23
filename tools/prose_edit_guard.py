@@ -62,6 +62,10 @@ LABEL = re.compile(r"\)\s*<((?:fig|tbl|tab|eq|sec):[A-Za-z0-9_:-]+)>|"
 REF = re.compile(r"@([A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*)|"
                  r"#refn?\(\s*<([^>]+)>")
 HEADING = re.compile(r"(?m)^(=+)\s+([^\n<]+?)(?:\s*<[^>]+>)?\s*$")
+# The path of an import: `#import "@preview/alexandria:0.2.0": ...` is neither
+# a citation (@preview) nor a number (0.2.0), and adding the SI's reference
+# list adds one such line to a pass that changed no prose.
+IMPORT_PATH = re.compile(r'(?m)^([ \t]*#import[ \t]+)("[^"\n]*")')
 
 
 def _nums(text: str) -> list[str]:
@@ -69,7 +73,8 @@ def _nums(text: str) -> list[str]:
 
 
 def profile(path: Path) -> dict:
-    src = mask(path.read_text())
+    src = IMPORT_PATH.sub(lambda m: m.group(1) + " " * len(m.group(2)),
+                          mask(path.read_text()))
     calls = matches(CALL, src)
     return {
         "numbers": _nums(src),
@@ -166,8 +171,14 @@ def check(tag: str) -> int:
     if added_stats:
         print(f"  FATAL -- statistic calls invented or changed: {dict(added_stats)}")
         ok = False
+    prefix = _si_prefix()
     for key in ("labels", "refs", "assets"):
         a, b = union(want, key), union(now, key)
+        if key == "refs" and prefix:
+            a, b, moved = _prefix_renames(a, b, prefix)
+            if moved:
+                print(f"  note -- {moved} citation(s) moved between the main and "
+                      f"the SI reference list by the {prefix!r} prefix alone")
         lost, gained = sorted((a - b).elements()), sorted((b - a).elements())
         if lost or gained:
             print(f"  FATAL -- {key} changed. lost={lost[:8]} gained={gained[:8]}")
@@ -193,6 +204,35 @@ def check(tag: str) -> int:
     print("  prose-edit guard: PASS (no number invented, no reference or float lost)"
           if ok else "  prose-edit guard: FAIL")
     return 0 if ok else 1
+
+
+def _si_prefix() -> str | None:
+    """The SI reference list's citation prefix ("si-"), or None without one."""
+    from manuscript_sources import si_bibliography
+    si = si_bibliography(ROOT)
+    return (si["list_prefix"] or si["prefix"]) if si else None
+
+
+def _prefix_renames(before, after, prefix: str):
+    """Cancel `@key` <-> `@si-key` pairs: the same work, routed to another list.
+
+    Moving the SI onto its own reference list rewrites every SI citation from
+    @key to @si-key. That changes which list prints the work, not what is
+    cited, so a lost `key` matched by a gained `si-key` (or the reverse) is a
+    move. Returns (before, after, the number of pairs cancelled).
+    """
+    before, after = before.copy(), after.copy()
+    lost = before - after
+    moved = 0
+    for ref, n in list((after - before).items()):
+        other = ref[len(prefix):] if ref.startswith(prefix) else prefix + ref
+        k = min(n, lost.get(other, 0))
+        if k:
+            lost[other] -= k
+            before[other] -= k
+            after[ref] -= k
+            moved += k
+    return +before, +after, moved
 
 
 def main() -> int:

@@ -33,7 +33,8 @@ sys.path.insert(0, str(ROOT / "tools"))
 import readability  # noqa: E402
 import typst_prose  # noqa: E402
 from manuscript_sources import (
-    call_span, mask, si_bibliography, without_si_bibliography)
+    call_span, mask, si_bibliography, si_citations,
+    without_si_bibliography)
 from atomic_io import write_text
 
 OUT = ROOT / "paper.resolved.typ"
@@ -622,6 +623,13 @@ def resolve_si_bibliography(si_src: str, paper_src: str, config_src: str) -> str
             f"prefixes must match (`just prose-check` reports this too)")
 
     call = si["call"]
+    # The template's bibliographyx prints nothing, heading included, for an
+    # SI that cites nothing through the prefix; a plain #bibliography would
+    # print its title regardless. `full: true` lists everything either way.
+    prefix = si["list_prefix"] or si["prefix"]
+    if (not re.search(r"\bfull:\s*true\b", call)
+            and not si_citations(si_src, prefix)):
+        return without_si_bibliography(si_src, paper_src)
     plain = call.replace("#bibliographyx(", "#bibliography(", 1)
     plain = re.sub(r"\s*prefix:\s*\"[^\"\n]*\"\s*,?", "", plain, count=1)
     plain = _bib_style(plain, config_src, "#bibliographyx")

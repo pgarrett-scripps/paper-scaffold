@@ -115,6 +115,30 @@ class Hardening(unittest.TestCase):
             paper.write_text("= Results\nSee the table.\n")
             self.assertEqual(prose_edit_guard.check("test"), 0)
 
+    def test_edit_guard_ignores_import_paths_and_si_prefix_moves(self):
+        # Adding the SI's own list adds `#import "@preview/alexandria:0.2.0"`
+        # and rewrites SI citations @key -> @si-key; neither is a prose change.
+        self.put("paper.typ", '#show: alexandria(prefix: "si-", read: p => read(p))\n'
+                              '= Results\nSee @a2020.\n')
+        si = self.put("si-body.typ", "= Details\nAs @b2020 found.\n")
+        with patch.object(prose_edit_guard, "ROOT", self.root), patch.object(
+                prose_edit_guard, "SNAP_DIR", self.root / ".edit-guard"), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            prose_edit_guard.snapshot("test")
+            si.write_text('#import "@preview/alexandria:0.2.0": load-bibliography\n'
+                          "= Details\nAs @si-b2020 found.\n"
+                          '#bibliographyx("references.bib", prefix: "si-")\n')
+            self.assertEqual(prose_edit_guard.check("test"), 0, out.getvalue())
+            self.assertIn("moved between the main and the SI", out.getvalue())
+            # A citation that is not the same work under the prefix still fails.
+            si.write_text('#import "@preview/alexandria:0.2.0": load-bibliography\n'
+                          "= Details\nAs @si-c2020 found.\n"
+                          '#bibliographyx("references.bib", prefix: "si-")\n')
+            self.assertEqual(prose_edit_guard.check("test"), 1)
+            # A number in the prose, unlike one in an import path, still counts.
+            si.write_text("= Details\nAs @b2020 found in 0.2.0.\n")
+            self.assertEqual(prose_edit_guard.check("test"), 1)
+
     def test_build_hash_tracks_includes_csl_filter_but_not_pins(self):
         self.put("paper.typ", '#include "sections/results.typ"')
         self.put("sections/results.typ", "Original.")

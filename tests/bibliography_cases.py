@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import io
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -319,9 +321,91 @@ def si_bibliography_cases() -> bool:
             ok = False
     return ok
 
+# The template's bibliographyx, as si-body.typ defines it: Alexandria's, but
+# printing nothing -- heading included -- for an SI that cites nothing.
+SI_BIBX = '''#import "@preview/alexandria:0.2.0": (
+  get-bibliography, load-bibliography, render-bibliography,
+)
+#let bibliographyx(
+  path,
+  prefix: auto,
+  title: auto,
+  full: false,
+  style: "ieee",
+) = {
+  load-bibliography(path, prefix: prefix, full: full, style: style)
+  context {
+    let bib = get-bibliography(prefix)
+    if bib.references.len() > 0 { render-bibliography(bib, title: title) }
+  }
+}
+'''
+
+
+def empty_si_list_cases() -> bool:
+    """An SI that cites nothing through the prefix has no reference list.
+
+    koth-paper and uno-lfq-paper backed out of the SI's own list because
+    Alexandria printed a bare "References" heading at the end of an SI that
+    cited nothing. The template now prints nothing then, and the Word
+    projection has to agree, or the SI docx ends on the same empty heading.
+    """
+    import resolve_typst as rt
+    from manuscript_sources import si_citations
+    ok = True
+    config = '#let paper-bib-style = "american-chemical-society"'
+
+    got = si_citations('A @si-a, #cite(<si-b>), @sec:si-x, @a. // @si-c\n'
+                       '`@si-d` #link("mailto:x@si-e.org")', "si-")
+    if got != ["si-a", "si-b"]:
+        print(f"  si_citations: read {got}, expected ['si-a', 'si-b']")
+        ok = False
+
+    uncited = SI_BODY.replace("SI prose @si-b2020.", "SI prose, cross-ref @sec:si-x.")
+    out = rt.resolve_si_bibliography(uncited, SI_PAPER, config)
+    if "#bibliography" in out or "<si-references>" in out or "#set heading" in out:
+        print(f"  resolve_si_bibliography: an SI citing nothing kept its list: {out!r}")
+        ok = False
+    if "cross-ref @sec:si-x." not in out:
+        print(f"  resolve_si_bibliography: dropping the list lost prose: {out!r}")
+        ok = False
+    # `full: true` prints every entry whatever is cited, in both outputs.
+    full = uncited.replace('prefix: "si-",', 'prefix: "si-",\n  full: true,')
+    if "#bibliography(" not in rt.resolve_si_bibliography(full, SI_PAPER, config):
+        print("  resolve_si_bibliography: a full: true list was dropped")
+        ok = False
+
+    if shutil.which("typst"):
+        bib = ("@article{a2020, title={Alpha}, author={A, B}, year={2020}}\n"
+               "@article{b2020, title={Beta}, author={C, D}, year={2020}}\n")
+        for name, cite, want in (("cites nothing", "", False),
+                                 ("cites one", " @si-b2020", True)):
+            with tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                (root / "references.bib").write_text(bib)
+                (root / "doc.typ").write_text(
+                    '#import "@preview/alexandria:0.2.0": alexandria\n'
+                    '#show: alexandria(prefix: "si-", read: p => read(p))\n'
+                    + SI_BIBX + f"SI prose{cite}.\n"
+                    '#bibliographyx("references.bib", prefix: "si-", '
+                    'title: [SIREFS], style: "american-chemical-society") <si-references>\n'
+                    '#context [#metadata(query(heading).len()) <n>]\n')
+                proc = subprocess.run(
+                    ["typst", "query", "--root", d, str(root / "doc.typ"), "<n>",
+                     "--field", "value", "--one"], capture_output=True, text=True)
+                if proc.returncode != 0:
+                    print(f"  si list [{name}]: did not compile: {proc.stderr.strip()}")
+                    ok = False
+                elif (proc.stdout.strip() == "1") != want:
+                    print(f"  si list [{name}]: {proc.stdout.strip()} heading(s), "
+                          f"expected {1 if want else 0}")
+                    ok = False
+    return ok
+
+
 def run_cases() -> bool:
     ok = True
-    for case in (bibliography_cases, si_bibliography_cases,):
+    for case in (bibliography_cases, si_bibliography_cases, empty_si_list_cases,):
         ok &= case()
     return ok
 

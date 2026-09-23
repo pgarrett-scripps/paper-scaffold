@@ -30,7 +30,28 @@
 // rather than to the main text's. A bare @key here compiles and silently joins
 // the MAIN reference list, so `just prose-check` reports one. The matching
 // `#show: alexandria(prefix: "si-", ...)` lives in paper.typ.
-#import "@preview/alexandria:0.2.0": bibliographyx
+//
+// `bibliographyx` is Alexandria's own, less one thing: an SI that cites
+// nothing prints nothing, where Alexandria would still print a bare
+// "References" heading. It keeps Alexandria's name and arguments on purpose:
+// the tools read the `#bibliographyx(...)` call at the foot of this file
+// literally, and the Word export drops the list by the same rule.
+#import "@preview/alexandria:0.2.0": (
+  get-bibliography, load-bibliography, render-bibliography,
+)
+#let bibliographyx(
+  path,
+  prefix: auto,
+  title: auto,
+  full: false,
+  style: "ieee",
+) = {
+  load-bibliography(path, prefix: prefix, full: full, style: style)
+  context {
+    let bib = get-bibliography(prefix)
+    if bib.references.len() > 0 { render-bibliography(bib, title: title) }
+  }
+}
 #import "config.typ": paper-bib-style
 
 Replace this with a summary of what the Supporting Information contains. Text

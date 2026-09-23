@@ -72,6 +72,13 @@ in `wordcount.typ`), dropped by the readability report and the narrator, and
 omitted from the plain-text review copy, exactly as the main list is. `just
 docx` sets both lists, one citeproc run each.
 
+An SI that cites nothing through the prefix prints no list and no heading.
+Alexandria's own `bibliographyx` prints its "References" heading regardless,
+so `si-body.typ` defines a local `bibliographyx` above the call that renders
+the list only when it has entries; the call itself is unchanged. The resolved
+text and the SI Word file drop the list in the same case. `full: true` keeps
+it.
+
 A manuscript that wants one list deletes the show rule and the
 `#bibliographyx` call and writes plain `@key` throughout; every tool then
 behaves as it did before this existed.

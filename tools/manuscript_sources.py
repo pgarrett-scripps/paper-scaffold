@@ -168,6 +168,22 @@ def without_si_bibliography(si_src: str, paper_src: str = "", *,
     return out
 
 
+def si_citations(si_src: str, prefix: str) -> list[str]:
+    """The keys si_src cites through the SI list's prefix, in order.
+
+    `@si-key` and `#cite(<si-key>)` both count; comments, strings and raw
+    text do not. The template's `bibliographyx` prints nothing -- not even
+    its heading -- when this is empty, and the Word projection has to drop
+    the list by the same rule, or the SI docx ends on a bare "References".
+    """
+    if not prefix:
+        return []
+    code = mask(si_src, strings=True)
+    key = re.escape(prefix) + r"[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*"
+    return [m.group(1) or m.group(2) for m in re.finditer(
+        r"(?<![\w\\:./-])@(" + key + r")|\bcite\(\s*<(" + key + r")>", code)]
+
+
 def _bibliography_block(si: str, span: tuple[int, int]) -> tuple[int, int]:
     """The call plus the layout wrapped around it: `#set` line, and label.
 

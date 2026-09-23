@@ -64,6 +64,35 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 3.24.2
+
+Two fixes from rolling out the SI's own reference list.
+
+- **No empty SI "References".** Alexandria's `bibliographyx` prints its
+  heading even when the SI cites nothing, which is why koth-paper and
+  uno-lfq-paper backed the switch out. `si-body.typ` now imports
+  `get-bibliography`, `load-bibliography` and `render-bibliography` and
+  defines a local `bibliographyx` that renders only a non-empty list; the
+  call at the foot is unchanged, so every parser still reads it. The resolver
+  (and so the SI docx) drops the list when no `@si-` citation exists, unless
+  the call says `full: true`.
+- **`just edit-check` ignores import paths**, so
+  `#import "@preview/alexandria:0.2.0"` is no longer read as a citation
+  (`@preview`) and a number (`0.2.0`). A pure `@key` -> `@si-key` rename
+  counts as a citation moved between lists, not one lost and one gained.
+
+Bare main-text references ("Figure 3") in an SI on its own reference list
+are intended: SI floats are numbered S1, S2, ..., so an unprefixed number
+already means the main text, and `just submission` adds no "of the main
+text" there.
+
+Upgrade: copy `tools/resolve_typst.py`, `tools/manuscript_sources.py`,
+`tools/prose_edit_guard.py`, `tests/bibliography_cases.py`,
+`tests/hardening.py` and `docs/manuscript.md`. In `si-body.typ`, replace the
+`#import "@preview/alexandria:0.2.0": bibliographyx` line with the template's
+import and `#let bibliographyx(...)` block (above the `#bibliographyx` call;
+leave the call as it is).
+
 ## 3.24.1
 
 `tools/submission.py` used an atomic regex group, `(?>...)`, which Python
