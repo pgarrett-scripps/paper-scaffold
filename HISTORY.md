@@ -64,6 +64,67 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 3.25.0
+
+About twenty improvements the papers had each made on their own copy, moved
+upstream so the next roll-out deletes local patches instead of merging them.
+Every new rule or helper is opt-in or silent on an unchanged manuscript.
+
+- **Prose checks.**
+  - `list-in-prose` and `bold-in-prose` are house-style rules. They are off by
+    default; turn them on with `enable = [...]` in `prose-check.toml`.
+  - New warnings: `cross-reference-order` (a float cited before an earlier
+    one) and `unreached-si-section` (an SI section the main text never cites).
+- **Bibliography audit.**
+  - Generational suffixes are no longer read as surnames.
+  - Journal abbreviations are matched against the registered title.
+  - Registry quirks are tolerated, and URL-only entries (GitHub, crates.io,
+    web) are resolved.
+  - A known registrar defect is waived with `[allow] doi-metadata =
+    ["key:field"]` in `prose-check.toml`, each with a comment.
+- **Export and resolver.**
+  - `@fig:x[]` prints the number alone.
+  - The source index follows `tbl()` ids into the generated `si/*.typ`.
+  - An opt-in `#si-contents` sentence for the Word export.
+  - `dfile("id")`, `dfile-short`, `dfile-number` and `dfile-count()` number
+    supplementary data files from `paper-data-files` in `config.typ`.
+- **Analysis helpers.**
+  - `add(minimum=, maximum=)` seeds one-sided guards.
+  - `write(keep_hand_ids=)` prunes unlisted hand entries.
+  - `record(fig=, min_pt=)` stores print geometry.
+  - An `assets.json` lock lets generators run in parallel.
+  - `hashcache` skips files changed in the last 2 s.
+- **Narration.**
+  - It drops standalone code lines (`#counter`, `#context`, `#pagebreak`,
+    `#v`, `#place` and the like) across lines.
+  - It speaks inline math with no `MATH` entry as words ("T equals 84").
+  - It speaks `±`, `×` and subscripts.
+  - `MATH_WORDS` and `UNICODE_SPEAK` in `audio/config.py` extend it.
+- **Recipes and documents.**
+  - `just all` skips narration when the voice model is missing.
+  - `just version` counts changes in the manuscript directory only.
+  - A multi-document build compiles, counts and scores readability in
+    parallel.
+  - Its Word file updates page fields on open, and captions keep their lines
+    together.
+
+Upgrade: copy every file under `tools/`, `tests/`, `docs/`, `word/`, plus
+`justfile`, `wordcount.typ`, `assets.typ`, `analysis/scripts/_assets.py`,
+`analysis/scripts/_stats.py` and `audio/extract_prose.py`; merge
+customizations by hand. Then delete what is now upstream:
+- the paper's own list/bold rules (use `enable = [...]`);
+- crossref-order, SI-reach, URL, CASSI, suffix, abbreviation and registry
+  patches in `bib_audit.py`/`prose_check.py`;
+- a `bib audit =` waiver (move it to `[allow] doi-metadata`);
+- local `dfile` code (move the list to `#let paper-data-files = (...)`,
+  write `#dfile-count()`);
+- local `si-contents` resolver patches (use the block in docs/manuscript.md);
+- local math speech (keep only paper terms in `audio/config.py`).
+
+`audio/config.py` belongs to the paper; add the new optional `MATH_WORDS` and
+`UNICODE_SPEAK` blocks by hand. Narration changes wherever inline math had no
+`MATH` entry, so run `just audiobook-all` afterwards.
+
 ## 3.24.3
 
 Audiobook fixes from the spectrl SI narration, plus one edit-check false alarm.
