@@ -65,6 +65,64 @@
   }
 }
 
+// SUPPLEMENTARY DATA FILES, numbered once (opt-in).
+//
+// Files supplied beside the SI rather than rendered in it (a TSV per table,
+// say) are cited by number, "Supplementary Data File 2", and Typst's figure
+// counter never sees them. Typing those numbers into sentences is the same
+// mistake as typing a figure number: insert, drop or reorder a file and every
+// mention that is now wrong stays silent. So the ORDER is declared once, in
+// config.typ, as asset ids:
+//
+//   #let paper-data-files = ("tbl.data-depth", "tbl.data-resources")
+//
+// and `dfile("id")` / `dfile-short("id")` / `dfile-count()` render from it.
+// An id outside the list, or not declared in assets.json, stops the build as
+// an undeclared figure id does. The printed words are config.typ's
+// `paper-data-file-name` and `paper-data-file-short` when set. The Word
+// export, word count, readability report and narrator resolve the same calls
+// from the same list (tools/typst_prose.py: resolve_data_files).
+//
+// config.typ is imported INSIDE the helpers, not at the top of this file, so
+// a manuscript that never calls them never needs the binding, and a test or
+// slide deck that uses fig() without a config.typ is unaffected. The one
+// constraint: config.typ must not call dfile() itself (that import is a cycle).
+#let _data-files() = {
+  import "config.typ" as paper-config
+  let c = dictionary(paper-config)
+  (
+    files: c.at("paper-data-files", default: ()),
+    name: c.at("paper-data-file-name", default: "Supplementary Data File"),
+    short: c.at("paper-data-file-short", default: "File"),
+  )
+}
+
+// The number alone, or none in draft mode for an id the list lacks.
+#let dfile-number(id) = {
+  let i = _data-files().files.position(x => x == id)
+  if i == none {
+    if assets-draft-mode { return none }
+    panic("'" + id + "' is not in paper-data-files in config.typ. Add it "
+      + "there, in the order the files are supplied.")
+  }
+  i + 1
+}
+
+#let _dfile(id, word) = {
+  let e = _entry(id)
+  let n = dfile-number(id)
+  if e == none or n == none { _placeholder(id) } else [#word #n]
+}
+
+// "Supplementary Data File N": the full phrase, for a first mention.
+#let dfile(id) = _dfile(id, _data-files().name)
+
+// "File N": the short form, for a list that has already said what these are.
+#let dfile-short(id) = _dfile(id, _data-files().short)
+
+// How many data files there are, for "Supplementary Data Files 1–#dfile-count()".
+#let dfile-count() = _data-files().files.len()
+
 // A generated table. The file under si/ is a bare #table(...) with no caption
 // and no label -- those live at the call site, in si-body.typ.
 #let tbl(id) = {

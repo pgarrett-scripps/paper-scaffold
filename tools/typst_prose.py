@@ -246,6 +246,90 @@ def resolve_stats(text: str, path: Path | None = None) -> str:
     return re.sub(STATS_N, repl("value"), text)
 
 
+# Supplementary data files, numbered by config.typ's `paper-data-files`
+# (assets.typ: dfile). Group 1 is the `#` (absent in code mode), group 2 the
+# variant, group 3 the id. The lookbehind keeps a project's own `mydfile(`
+# from matching.
+DFILE = r'(?<![\w-])(#?)dfile(-short|-number)?\(\s*"([^"]+)"\s*,?\s*\)'
+DFILE_COUNT = r"(?<![\w-])(#?)dfile-count\(\s*\)"
+
+# The registry as Typst evaluates it, cached per process. Tests assign a dict
+# here to avoid the compile.
+DATA_FILES: dict | None = None
+_DATA_FILES_PROBE = (
+    '#import "/config.typ" as _cfg\n'
+    "#let _c = dictionary(_cfg)\n"
+    '#metadata((files: _c.at("paper-data-files", default: ()),'
+    ' name: _c.at("paper-data-file-name", default: "Supplementary Data File"),'
+    ' short: _c.at("paper-data-file-short", default: "File"))) <data-files>\n'
+)
+
+
+def data_file_registry(root: Path | None = None) -> dict:
+    """config.typ's data-file list and words, read by Typst itself.
+
+    Asking Typst rather than parsing config.typ means the list may be built
+    any way Typst allows, and the defaults are the ones assets.typ applies.
+    Called only when the prose uses a dfile call, so a manuscript without data
+    files never pays for the query. `root` (tests) reads another manuscript,
+    uncached.
+    """
+    global DATA_FILES
+    if root is not None or DATA_FILES is None:
+        import subprocess
+        cache = root is None
+        root = root or Path(__file__).resolve().parent.parent
+        try:
+            proc = subprocess.run(
+                ["typst", "query", "--root", str(root), "-", "<data-files>",
+                 "--field", "value", "--one"],
+                input=_DATA_FILES_PROBE, capture_output=True, text=True,
+                cwd=root)
+        except FileNotFoundError:
+            raise SystemExit("error: the prose uses dfile() but typst is not "
+                             "on PATH to read paper-data-files from config.typ")
+        if proc.returncode:
+            raise SystemExit("error: could not read paper-data-files from "
+                             f"config.typ: {proc.stderr.strip()}")
+        reg = json.loads(proc.stdout)
+        if not cache:
+            return reg
+        DATA_FILES = reg
+    return DATA_FILES
+
+
+def resolve_data_files(text: str, code_wrap: bool = False) -> str:
+    """Substitute `#dfile("id")`, `#dfile-short("id")`, `#dfile-number("id")`
+    and `#dfile-count()` with what the PDF prints for them.
+
+    A no-op without such a call. An id missing from `paper-data-files` raises,
+    as the compile does. With `code_wrap`, a code-mode call (no `#`) becomes a
+    content block `[...]`, so the resolved Typst stays valid.
+    """
+    if not re.search(DFILE, text) and not re.search(DFILE_COUNT, text):
+        return text
+    reg = data_file_registry()
+    files = list(reg.get("files", []))
+
+    def out(hash_: str, words: str) -> str:
+        return f"[{words}]" if code_wrap and not hash_ else words
+
+    def sub(m: re.Match) -> str:
+        hash_, variant, id = m.groups()
+        if id not in files:
+            raise SystemExit(
+                f"error: '{id}' is not in paper-data-files in config.typ; add "
+                "it there, in the order the files are supplied")
+        n = files.index(id) + 1
+        if variant == "-number":
+            return out(hash_, str(n))
+        word = reg["short"] if variant == "-short" else reg["name"]
+        return out(hash_, f"{word} {n}")
+
+    text = re.sub(DFILE, sub, text)
+    return re.sub(DFILE_COUNT, lambda m: out(m.group(1), str(len(files))), text)
+
+
 def markup(delim: str) -> str:
     """Pattern for one inline-markup pair (`*strong*`, `_emph_`), tolerant of the
     line break `just fmt` may have put inside it. Group 1 is the content.

@@ -158,6 +158,7 @@ def run_cases() -> bool:
             pass
 
         ok = _si_contents_cases(rt) and ok
+        ok = _data_file_cases(rt, typst_prose) and ok
     finally:
         typst_prose.STATS_JSON = saved
         tbl_tmp.cleanup()
@@ -231,6 +232,80 @@ def _si_contents_cases(rt) -> bool:
     if proc.returncode or want not in " ".join(text.split()):
         print(f"  resolver [si-contents]: the PDF printed {' '.join(text.split())[:160]!r}"
               f"{proc.stderr[:200]}, the Word export {want!r}")
+        ok = False
+    return ok
+
+
+def _data_file_cases(rt, typst_prose) -> bool:
+    """`dfile("id")`: every text copy says what the PDF prints (uno-paper).
+
+    The registry is Typst's reading of config.typ, so the parity check
+    compiles assets.typ against a throwaway config.typ and compares
+    pdftotext's reading with the resolver's substitution.
+    """
+    import shutil
+    import subprocess
+    ok = True
+    saved = typst_prose.DATA_FILES
+    try:
+        typst_prose.DATA_FILES = {"files": ["tbl.a", "tbl.b"],
+                                  "name": "Supplementary Data File",
+                                  "short": "File"}
+        for name, src, want, forbid in (
+                ("markup dfile", 'see #dfile("tbl.b").',
+                 "see Supplementary Data File 2.", "dfile"),
+                ("short, number and count", '#dfile-short("tbl.a"), '
+                 '#dfile-number("tbl.b") of #dfile-count()',
+                 "File 1, 2 of 2", "dfile"),
+                ("code-mode call stays valid Typst",
+                 '#figure(dfile("tbl.a"))', "#figure([Supplementary Data File 1])",
+                 None),
+                ("a project helper ending in dfile is not ours",
+                 '#mydfile("x")', '#mydfile("x")', None)):
+            got = rt.resolve_notation(src, {}, "t")
+            if want not in got or (forbid and forbid in got.replace("mydfile", "")):
+                print(f"  resolver [{name}]: expected {want!r} in {got!r}")
+                ok = False
+        try:
+            rt.resolve_notation('#dfile("tbl.nope")', {}, "t")
+            print("  resolver [dfile]: an id outside paper-data-files was accepted")
+            ok = False
+        except SystemExit:
+            pass
+    finally:
+        typst_prose.DATA_FILES = saved
+
+    if not (shutil.which("typst") and shutil.which("pdftotext")):
+        print("  resolver [dfile]: typst or pdftotext missing; PDF parity not checked")
+        return ok
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        shutil.copyfile(ROOT / "assets.typ", d / "assets.typ")
+        (d / "assets.json").write_text(json.dumps({"values": {
+            "tbl.a": {"kind": "table", "path": "si/a.typ"},
+            "tbl.b": {"kind": "table", "path": "si/b.typ"}}}))
+        (d / "config.typ").write_text(
+            '#let paper-data-files = ("tbl.a", "tbl.b")\n'
+            '#let paper-data-file-short = "Data"\n')
+        prose = ('#dfile("tbl.b") and #dfile-short("tbl.a") '
+                 'of #dfile-count() (#dfile-number("tbl.b")).')
+        (d / "doc.typ").write_text(
+            '#import "assets.typ": dfile, dfile-short, dfile-count, dfile-number\n'
+            + prose + "\n")
+        proc = subprocess.run(["typst", "compile", "--root", tmp, str(d / "doc.typ")],
+                              capture_output=True, text=True)
+        pdf = " ".join(subprocess.run(["pdftotext", str(d / "doc.pdf"), "-"],
+                                      capture_output=True, text=True).stdout.split())
+        try:
+            typst_prose.DATA_FILES = typst_prose.data_file_registry(d)
+            text = typst_prose.resolve_data_files(prose)
+        except SystemExit as e:
+            text = f"raised {e}"
+        finally:
+            typst_prose.DATA_FILES = saved
+    if proc.returncode or pdf != text:
+        print(f"  resolver [dfile]: the PDF printed {pdf!r}{proc.stderr[:200]}, "
+              f"the text copies {text!r}")
         ok = False
     return ok
 

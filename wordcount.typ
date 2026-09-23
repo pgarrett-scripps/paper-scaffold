@@ -37,8 +37,13 @@
 // fig() for every generated figure, and an eval scope missing it fails the whole
 // count with `unknown variable: fig` pointing at the slice rather than at the
 // figure. Imported under other names because `fig`/`tbl` would collide with the
-// per-file word-count locals below.
-#import "assets.typ": fig as asset-fig, tbl as asset-tbl
+// per-file word-count locals below. dfile and friends (supplementary data
+// files, opt-in) are injected for the same reason.
+#import "assets.typ": (
+  dfile as asset-dfile, dfile-count as asset-dfile-count,
+  dfile-number as asset-dfile-number, dfile-short as asset-dfile-short,
+  fig as asset-fig, tbl as asset-tbl,
+)
 
 #let src = read("paper.typ")
 #let start-m = src.match(regex("(?m)^// >>> BODY START.*$"))
@@ -59,6 +64,10 @@
     todo: msg => none,
     fig: asset-fig,
     tbl: asset-tbl,
+    dfile: asset-dfile,
+    dfile-short: asset-dfile-short,
+    dfile-number: asset-dfile-number,
+    dfile-count: asset-dfile-count,
   ),
 )
 #let si-body = include "si-body.typ"

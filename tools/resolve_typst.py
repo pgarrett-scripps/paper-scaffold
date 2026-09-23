@@ -249,6 +249,7 @@ def resolve_notation(src: str, assets: dict, where: str) -> str:
 
     src = typst_prose.resolve_stats(src)
     src = typst_prose.resolve_lit(src)
+    src = typst_prose.resolve_data_files(src, code_wrap=True)
 
     def asset(m: re.Match) -> str:
         hash, kind, id, args = (m.group(1), m.group(2), m.group(3),
