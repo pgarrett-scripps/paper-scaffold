@@ -30,6 +30,8 @@ def check(project: Project, document: Document, *, strict=False) -> int:
         findings += pc.check_unaccounted_numbers(targets, stats_path=project.root / "stats.json")
         findings += pc.check_bypassed_assets(targets, assets_path=project.root / "assets.json")
         findings += pc.check_todos(targets)
+        if cfg.runs("list-in-prose") or cfg.runs("bold-in-prose"):
+            findings += pc.check_house_style(targets)
         # Legacy chapter drafts use visible [TODO: ...] rather than todo().
         for path, src in targets.items():
             for m in re.finditer(r"\[TODO[^\]\n]*", mask(src)):

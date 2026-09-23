@@ -110,7 +110,9 @@ $ E = sum_(i=1)^n w_i (x_i - mu)^2 $
 
 = Results
 
-Replace this with the results. See @fig:example and @tbl:example.
+Replace this with the results. See @fig:example and @tbl:example. Tables an
+analysis writes are in @sec:si-tables, and how to reproduce every number is in
+@sec:si-repro.
 
 #figure(
   fig("fig.example", width: 70%),
