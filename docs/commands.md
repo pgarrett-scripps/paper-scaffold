@@ -45,7 +45,7 @@ Every `just` recipe a manuscript uses, in one table.
 | `just prose-check` | Check the prose, plus figure resolution and table shape, against STYLE.md |
 | `just word-audit` | Count flagged words across the manuscript without rebuilding |
 | `just prose-check --list-rules` | Every rule, its severity, and how to configure it |
-| `just bib-audit` | Check DOI metadata, retractions and dead links against Crossref/DataCite (network) |
+| `just bib-audit` | Check DOI metadata, retractions and dead links against Crossref/DataCite, and resolve DOI-less URLs (network) |
 | `just viz` | Diagnostics about the draft -> `viz/`: nine plots plus `report.json` for tools |
 | `just density` | Numerals, parentheticals, acronyms, passives per 1,000 words, and section outliers |
 | `just setup` | Build the Python environment (uv, locked) |

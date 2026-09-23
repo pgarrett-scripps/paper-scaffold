@@ -138,6 +138,28 @@ def bibliography_cases() -> bool:
         print("  bib-audit metadata: TeX accents or 'and others' were reported")
         ok = False
 
+    # Generational suffixes belong to nobody's surname. BibTeX's three-part
+    # "Last, Jr, First", the braced "{Last III}", the unbraced "First Last III",
+    # and Crossref's suffix-in-given all describe the registered "Yates, John
+    # R". The three-part form once failed a correct author line as initial "I".
+    registered_suffix = dict(metadata, author=[
+        {"family": "Curie", "given": "Marie"},
+        {"family": "Yates", "given": "John R. III"},
+    ])
+    for form in ("Yates, III, John R.", "{Yates III}, John R.",
+                 "John R. Yates III", "Yates, John R."):
+        suffixed = dict(entry, author=f"Curie, M. and {form}")
+        if ba._metadata_issues(suffixed, "ok", registered_suffix):
+            print(f"  bib-audit metadata: suffix form {form!r} broke author "
+                  f"matching")
+            ok = False
+    # ...while an initial that spells a suffix ("V." for Vladimir) is kept,
+    # and a different person with the same surname is still caught.
+    vlado = dict(entry, author="Curie, M. and Einstein, V.")
+    if [i.field for i in ba._metadata_issues(vlado, "ok", metadata)] != ["author"]:
+        print("  bib-audit metadata: initial 'V.' was dropped as a suffix")
+        ok = False
+
     short_title = dict(metadata, title=["An Example"])
     issues = ba._metadata_issues(entry, "ok", short_title)
     if [(item.field, item.fatal) for item in issues] != [("title", False)]:
@@ -145,8 +167,35 @@ def bibliography_cases() -> bool:
               "reported as a non-fatal review item")
         ok = False
 
+    # Registry quirks that are not citation errors. A year one apart from the
+    # registered print/online pair (2019/2020) is a New Year straddle: shown,
+    # never fatal. A generic deposit title says nothing about the work. An
+    # article number written "Article 123" is the registered "123". A record
+    # whose accents became "?" and whose date is [[null]] still compares.
+    quirks = [
+        ("adjacent year", dict(entry, year="2021"), metadata,
+         [("year", False)]),
+        ("generic deposit title", entry,
+         dict(metadata, title=["ProteomeXchange dataset"]), [("title", False)]),
+        ("article number", dict(entry, pages="Article 123"),
+         dict(metadata, page="123"), []),
+        ("damaged accents", dict(entry, author="M{\\\"u}ller, M. and Einstein, A."),
+         dict(metadata, author=[{"family": "Mu?ller", "given": "M."},
+                                {"family": "Einstein", "given": "A."}]), []),
+    ]
+    if ba._years({"published-print": {"date-parts": [[None]]}}):
+        print("  bib-audit metadata: a [[null]] date part became a year")
+        ok = False
+    for name, local, registered, want in quirks:
+        got = [(i.field, i.fatal) for i in
+               ba._metadata_issues(local, "ok", registered)]
+        if got != want:
+            print(f"  bib-audit metadata [{name}]: expected {want}, got {got}")
+            ok = False
+
+    # Two years away is not a straddle, so the wrong-work case needs it.
     wrong = dict(entry, title="A Different Paper",
-                 author="Curie, Pierre and Einstein, Albert", year="2021")
+                 author="Curie, Pierre and Einstein, Albert", year="2025")
     issues = ba._metadata_issues(wrong, "ok", metadata)
     fatal = {item.field for item in issues if item.fatal}
     if fatal != {"title", "author", "year"}:
@@ -161,6 +210,37 @@ def bibliography_cases() -> bool:
     if warnings != {"venue", "volume", "issue", "pages"}:
         print("  bib-audit metadata: wrong detail fields produced "
               f"{sorted(warnings)}, expected issue/pages/venue/volume")
+        ok = False
+
+    # Journal abbreviations. Crossref registers the full title, the entry
+    # carries the ISO 4 / CASSI form a style wants, and the two must match
+    # word for word: a prefix ("Proteome Res."), a contraction ("Natl."),
+    # dropped stopwords. The negative cases are real miscitations: an
+    # abbreviation of a different journal, and a journal whose name is the
+    # first word of another's.
+    venues = [
+        ("J. Proteome Res.", "Journal of Proteome Research", True),
+        ("Mol. Cell. Proteomics", "Molecular & Cellular Proteomics", True),
+        ("Proc. Natl. Acad. Sci. U. S. A.", "Proceedings of the National "
+         "Academy of Sciences of the United States of America", True),
+        ("J. Am. Chem. Soc.", "Journal of the American Chemical Society", True),
+        ("Journal of Proteome Research", "J. Proteome Res.", True),
+        ("Anal. Chem.", "Analytical Biochemistry", False),
+        ("Nature", "Nature Methods", False),
+        ("Chem. Res.", "Chemical Reviews", False),
+    ]
+    for local, registered, want in venues:
+        issues = ba._metadata_issues(dict(entry, journal=local), "ok",
+                                     dict(metadata, **{"container-title": [registered]}))
+        got = "venue" not in {i.field for i in issues}
+        if got != want:
+            print(f"  bib-audit venue: {local!r} vs registered {registered!r} "
+                  f"matched={got}, expected {want}")
+            ok = False
+    # Crossref's own short-container-title counts as a registered venue.
+    abbreviated = dict(metadata, **{"short-container-title": ["J. Ex."]})
+    if ba._metadata_issues(dict(entry, journal="J Ex"), "ok", abbreviated):
+        print("  bib-audit venue: short-container-title was not consulted")
         ok = False
 
     datacite = {
@@ -179,11 +259,76 @@ def bibliography_cases() -> bool:
     # preflight fail, not merely print an advisory that can scroll past.
     import contextlib
     import io
-    with contextlib.redirect_stdout(io.StringIO()):
-        rc = ba.audit(entries=[wrong],
-                      fetch=lambda doi, timeout: ("ok", metadata), pause=False)
+    def run(allowed):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = ba.audit(entries=[wrong], allowed=allowed, pause=False,
+                          fetch=lambda doi, timeout: ("ok", metadata))
+        return rc, out.getvalue()
+
+    rc, _ = run(set())
     if rc != 1:
         print("  bib-audit metadata: a core mismatch did not fail the audit")
+        ok = False
+
+    # [allow].doi-metadata in prose-check.toml: the registrar is wrong, not
+    # the entry. The key excuses every field; key:field excuses only that one,
+    # so a wrong year beside an allowed author still fails. Excused mismatches
+    # stay printed, and an allowance that excuses nothing is reported.
+    rc, out = run({"curie2020"})
+    if rc != 0 or "allowed by [allow].doi-metadata" not in out:
+        print("  bib-audit allow: a key allowance did not excuse the entry")
+        ok = False
+    rc, _ = run({"curie2020:author", "curie2020:title"})
+    if rc != 1:
+        print("  bib-audit allow: key:field excused fields it did not name")
+        ok = False
+    rc, _ = run({"curie2020:author", "curie2020:title", "curie2020:year"})
+    if rc != 0:
+        print("  bib-audit allow: naming every mismatched field did not pass")
+        ok = False
+    rc, out = run({"curie2020:volume"})
+    if "no longer excuse anything" not in out or "curie2020:volume" not in out:
+        print("  bib-audit allow: an allowance matching nothing was not reported")
+        ok = False
+
+    # An entry with no DOI is identified only by its URL, and a URL is the
+    # cheapest citation to invent. The audit resolves it: a dead one fails,
+    # a live one prints what the page says about itself for a person to
+    # compare, and an unreachable one is a network fact, not a defect. The
+    # URL parser is pure so its two API routes stay pinned. (koth manuscript)
+    if (ba._url_target("https://github.com/curie/tool.git")
+            != ("github", "curie/tool")
+            or ba._url_target("https://www.crates.io/crates/tool/")
+            != ("crates", "tool")
+            or ba._url_target("https://example.org/tool")[0] != "web"):
+        print("  bib-audit url: a GitHub or crates.io URL was not routed to "
+              "its API")
+        ok = False
+    url_entry = {"_key": "tool2024", "_type": "misc", "title": "{A} Tool",
+                 "author": "Curie, Marie", "url": "https://github.com/curie/tool"}
+    page = {"name": "curie/tool", "about": "A tool", "owner": "curie"}
+    outcomes = {}
+    for state, payload in (("ok", page), ("moved", page),
+                           ("missing", "HTTP 404"), ("error", "timed out")):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            outcomes[state] = (ba.audit(
+                entries=[url_entry], allowed=set(), pause=False,
+                fetch=lambda doi, timeout: ("ok", {}),
+                fetch_url=lambda url, timeout: (state, payload)),
+                buf.getvalue())
+    if outcomes["missing"][0] != 1:
+        print("  bib-audit url: a dead URL did not fail the audit")
+        ok = False
+    if any(outcomes[s][0] != 0 for s in ("ok", "moved", "error")):
+        print("  bib-audit url: a live, moved, or unreachable URL failed the "
+              "audit")
+        ok = False
+    if ("A Tool" not in outcomes["ok"][1]
+            or "owner curie" not in outcomes["ok"][1]):
+        print("  bib-audit url: a live URL did not print the page beside the "
+              "bibliography entry")
         ok = False
     return ok
 

@@ -45,6 +45,24 @@ versus full given names, and the different dashes used for BibTeX page ranges.
 If a registrar omitted a field, the audit says nothing about that field rather
 than pretending it verified information it never received.
 
+Sometimes the registrar is the side that is wrong: a surname fused with a
+footnote marker, or a record that never picked up a published correction. Do
+not edit the bibliography to match. Name the entry in `prose-check.toml` as
+`[allow] doi-metadata = ["key"]`, or `"key:author"` to excuse one field only,
+with the reason in a comment beside it. The mismatch is still printed but no
+longer fails, and an allowance that stops excusing anything is listed for
+deletion.
+
+An entry with no DOI but a `url` is fetched instead. GitHub and crates.io
+URLs go through their APIs, which name the repository's owner and follow a
+rename; anything else is fetched as a page and its title read. Nothing
+registers a title or author list for a URL, so a live one prints what the page
+says about itself under the bibliography's title and authors for a person to
+compare. A URL that returns 404 or 410 fails the audit; one that now redirects
+elsewhere is listed to update; one that cannot be reached is reported as a
+network fact and does not fail, even under `--require-complete`, because many
+sites refuse scripts.
+
 **Neither output is tracked in git**, and neither is `.build-state/`. Git keeps
 every version of a binary forever, a clone pays for all of them, and removing one
 means rewriting history. Ship the PDF as a release asset or a CI artifact.

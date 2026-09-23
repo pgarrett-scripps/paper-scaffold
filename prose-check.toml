@@ -12,6 +12,11 @@
 # such as semicolon-count. Prefer [allow] for anything narrower.
 disable = []
 
+# House-style rules that are off until named here: list-in-prose (no bulleted
+# or numbered lists in running prose) and bold-in-prose (bold only for a run-in
+# paragraph label, never for emphasis). Turn them on if the journal wants it.
+# enable = ["list-in-prose", "bold-in-prose"]
+
 # Values that are fine in this manuscript, per rule. Matching is
 # case-insensitive on the value the finding names.
 [allow]
@@ -38,6 +43,12 @@ unexpanded-acronym = [
 # does not exist. Prefer deleting an uncited entry to allowing it.
 # uncited-reference = ["somekey"]
 # missing-doi = ["somekey"]   # a preprint or dataset with no DOI issued
+
+# A DOI record the registrar has wrong, read by `just bib-audit`: the entry
+# key, or key:field to excuse one field (title, author, year, venue, volume,
+# issue, pages). Check the publisher's page first; the bibliography is only
+# the correct side if the record really is the error.
+# doi-metadata = ["somekey:author"]   # Crossref fuses the surname with "cor"
 
 # A figure or table cited only from somewhere the checker does not read.
 # uncited-figure = ["fig:example"]
