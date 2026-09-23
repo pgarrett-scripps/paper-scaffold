@@ -249,6 +249,7 @@ def resolve_notation(src: str, assets: dict, where: str) -> str:
 
     src = typst_prose.resolve_stats(src)
     src = typst_prose.resolve_lit(src)
+    src = typst_prose.resolve_data_files(src, code_wrap=True)
 
     def asset(m: re.Match) -> str:
         hash, kind, id, args = (m.group(1), m.group(2), m.group(3),
@@ -340,14 +341,16 @@ _CAPTION = re.compile(r"caption:\s*\[")
 
 
 def _number_labels(body: str, native: list[dict] | None = None
-                   ) -> tuple[dict[str, str], list[tuple[int, str]], dict]:
+                   ) -> tuple[dict[str, str], list[tuple[int, str]], dict, dict]:
     """The PDF's numbering, counted over a raw-protected `body`.
 
     Returns the number each labeled float or heading prints ("<fig:x>" ->
     "S1"), the (position, text) caption and heading numbers to write into
-    `body`, and the native rows by label. resolve_crossrefs writes both into
-    the Word export; the narrator (audio/) reads only the numbers, so a
-    spoken "as seen in Table S1" keeps the table it points at.
+    `body`, the native rows by label, and what the SI holds (its numbered
+    level-1 headings and labeled float totals, for `#si-contents`).
+    resolve_crossrefs writes the first two into the Word export; the
+    narrator (audio/) reads only the numbers, so a spoken "as seen in Table
+    S1" keeps the table it points at.
     """
     numbered: dict[str, str] = {}
     actual = {f'<{r["label"]}>': r for r in native or [] if r["label"]}
@@ -359,6 +362,8 @@ def _number_labels(body: str, native: list[dict] | None = None
     # (position, text) pairs written into `body` after the scan -- inserting
     # during it would shift every position the events were sorted on.
     inserts: list[tuple[int, str]] = []
+    # (number, title) of every numbered level-1 SI heading, for `#si-contents`.
+    si_sections: list[tuple[str, str]] = []
 
     def number(n: int) -> str:
         return f"S{n}" if si else str(n)
@@ -415,12 +420,16 @@ def _number_labels(body: str, native: list[dict] | None = None
             levels[depth - 1] += 1
             joined = ".".join(str(n) for n in levels)
             if native is None:
-                inserts.append((m.end(1), f" S{joined}" if si else f" {joined}."))
+                num = f"S{joined}" if si else f"{joined}."
             else:
                 row = next(native_heads, None)
                 if row is None:
                     raise ResolveError("Word export cannot match heading numbering to Typst")
-                inserts.append((m.end(1), " " + row["number"]))
+                num = row["number"]
+            inserts.append((m.end(1), " " + num))
+            if si and depth == 1:
+                title = re.sub(r"\s*<[^>]+>\s*$", "", m.group(0)[depth:].strip())
+                si_sections.append((num.rstrip("."), title))
         else:
             prefix = m.group(1)
             if native is not None:
@@ -428,6 +437,10 @@ def _number_labels(body: str, native: list[dict] | None = None
                 if row is None or row["number"] is None:
                     continue
                 numbered[m.group(0)] = row["number"].rstrip(".")
+                # The compiled numbers replace the counters for everything
+                # else; the SI float totals `#si-contents` reports still count.
+                if si and COUNTER.get(prefix) in ("fig", "tbl"):
+                    counters[COUNTER[prefix]] += 1
                 continue
             # A sec label names the heading it follows -- usually on the same
             # line, on its own line when typstyle wraps a long title. Either
@@ -446,7 +459,39 @@ def _number_labels(body: str, native: list[dict] | None = None
 
     if native is not None and next(native_heads, None) is not None:
         raise ResolveError("Word export did not preserve every numbered heading")
-    return numbered, inserts, actual
+    summary = {"sections": si_sections, "fig": counters["fig"] if si else 0,
+               "tbl": counters["tbl"] if si else 0}
+    return numbered, inserts, actual, summary
+
+
+# `#si-contents` is an opt-in helper a manuscript defines in paper.typ (the
+# definition is in docs/manuscript.md): the "Supporting Information contains"
+# sentence, built at layout time from the SI's own level-1 headings and float
+# counts, so it cannot drift from the headings the way a hand-written
+# paragraph does. Its body is a `context` block, which does not travel to
+# Word, so the same sentence is built here from the numbering pass. The two
+# must phrase it identically; tests/resolver_cases.py compiles the documented
+# definition and compares.
+_SI_CONTENTS = re.compile(r"(?<![\w-])#si-contents(?![\w-])")
+
+
+def si_contents_sentence(summary: dict) -> str:
+    """The sentence, e.g. `Sections S1 Methods, S2 Data. Figures S1–S3 and
+    Table S1 (PDF).` A count of zero drops that part."""
+    def span(noun: str, n: int) -> str:
+        return f"{noun} S1" if n == 1 else f"{noun}s S1–S{n}"
+
+    sections = summary["sections"]
+    secs = ""
+    if sections:
+        secs = ("Section " if len(sections) == 1 else "Sections ") + ", ".join(
+            f"{n} {title}" for n, title in sections)
+    floats = " and ".join(span(noun, summary[key])
+                          for noun, key in (("Figure", "fig"), ("Table", "tbl"))
+                          if summary[key])
+    if secs and floats:
+        return f"{secs}. {floats} (PDF)."
+    return f"{secs or floats} (PDF)."
 
 
 def resolve_crossrefs(head: str, body: str, native: list[dict] | None = None) -> str:
@@ -487,10 +532,20 @@ def resolve_crossrefs(head: str, body: str, native: list[dict] | None = None) ->
             if _REF.match(part, call.start()) is None:
                 raise ResolveError("unsupported reference syntax; use ref(<label>) "
                                    "or refn(<label>) with optional supplement: none")
-    numbered, inserts, actual = _number_labels(body, native)
+    numbered, inserts, actual, summary = _number_labels(body, native)
 
     for at, text in sorted(inserts, reverse=True):
         body = body[:at] + text + body[at:]
+
+    if _SI_CONTENTS.search(mask(head + body, strings=True)):
+        if not (summary["sections"] or summary["fig"] or summary["tbl"]):
+            raise ResolveError(
+                "#si-contents is used, but the export holds no numbered SI "
+                "section or labeled SI float to list -- is si-body.typ "
+                "present and included?")
+        sentence = si_contents_sentence(summary)
+        head = _SI_CONTENTS.sub(lambda _: sentence, head)
+        body = _SI_CONTENTS.sub(lambda _: sentence, body)
 
     def ref(m: re.Match) -> str:
         hash, label, bare = m.group(1), m.group(2), bool(m.group(3))
@@ -517,7 +572,7 @@ def label_numbers(body: str) -> dict[str, str]:
     """{"fig:x": "S1", "sec:y": "2.1", ...} over an assembled body: the main
     text, then _SI_MARK, then the SI -- the same order build() assembles."""
     body, _ = _protect_raw(body)
-    numbered, _, _ = _number_labels(body)
+    numbered, _, _, _ = _number_labels(body)
     return {label[1:-1]: num for label, num in numbered.items()}
 
 

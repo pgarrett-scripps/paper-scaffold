@@ -23,6 +23,7 @@ import re
 import sys
 from pathlib import Path
 
+import typst_prose
 from typst_prose import (
     strip_directives,
     CITE,
@@ -136,6 +137,8 @@ def clean(text: str, gap: str = " ") -> str:
     text = resolve_stats(text)
     # vouched literals -> the literal, for the same reason.
     text = resolve_lit(text)
+    # data files -> "Supplementary Data File 2", as the PDF prints them.
+    text = typst_prose.resolve_data_files(text)
     # notes to self are not prose: dropped whole, draft or not.
     text = re.sub(TODO, gap, text)
     # math: DROP entirely (exempt), including any leftover $...$

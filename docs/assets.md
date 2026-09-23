@@ -134,6 +134,30 @@ files are worth tracking is the author's call**, declared in `inputs=[...]`, and
 `record()` prints a note when a generator declares none — the omission is visible
 where it is made rather than discovered from a wrong figure.
 
+## Supplementary data files by id: `dfile("tbl.x")` (opt-in)
+
+Files supplied beside the SI rather than printed in it (a TSV per table, say)
+are cited by number, and Typst's figure counter never sees them. Declare their
+order once, in `config.typ`, as asset ids:
+
+```typst
+#let paper-data-files = ("tbl.depth", "tbl.resources")
+// optional; these are the defaults
+#let paper-data-file-name = "Supplementary Data File"
+#let paper-data-file-short = "File"
+```
+
+and cite them with `#import "assets.typ": dfile, dfile-short, dfile-count`:
+`#dfile("tbl.resources")` prints "Supplementary Data File 2",
+`#dfile-short("tbl.depth")` "File 1", `#dfile-count()` "2" and
+`#dfile-number("tbl.depth")` "1". Reordering the list renumbers every mention.
+An id outside the list, or not declared in `assets.json`, stops the build
+(`just draft` shows a placeholder instead). The Word export, the word count,
+the readability report and the narrator resolve the same calls from the same
+list, read through Typst (`tools/typst_prose.py`), so every copy says what the
+PDF says. `config.typ` must not call `dfile()` itself: `assets.typ` imports it.
+A manuscript that never writes `dfile` needs no `paper-data-files`.
+
 ## `analysis/` lives inside the manuscript, and writes to it directly
 
 The analysis that produces the numbers is a subdirectory, not a sibling

@@ -113,8 +113,15 @@ class Renderer:
             target = value['target'].strip('<>')
             if target in self.by_label:
                 row = self.by_label[target]
-                return (self.text(row['number']) if value.get('supplement', 'auto') is None
-                        else self.figure_name(row))
+                # A reference carrying its own supplement overrides the
+                # figure's. `@fig:x[]` prints the number alone, which is how
+                # prose that writes the word "Figure" itself avoids repeating
+                # it; only an 'auto' supplement falls back to the figure's.
+                supplement = value.get('supplement', 'auto')
+                if supplement == 'auto':
+                    return self.figure_name(row)
+                return ' '.join(filter(None, (self.text(supplement),
+                                              self.text(row['number']))))
             return '[' + target.strip('<>') + ']'
         if kind == 'cite':
             return '[' + ', '.join(str(k).strip('<>') for k in value['keys']) + ']'

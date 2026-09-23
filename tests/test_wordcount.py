@@ -99,7 +99,10 @@ class TypstTests(unittest.TestCase):
         (self.root / 'stats.typ').write_text(
             '#let s(id) = "forty two"\n#let n(id) = 42\n'
             '#let lit(v) = v\n#let todo(v) = none\n')
-        (self.root / 'assets.typ').write_text('#let fig(id) = []\n#let tbl(id) = []\n')
+        (self.root / 'assets.typ').write_text(
+            '#let fig(id) = []\n#let tbl(id) = []\n'
+            '#let dfile(id) = [Data File 1]\n#let dfile-short(id) = [File 1]\n'
+            '#let dfile-number(id) = 1\n#let dfile-count() = 1\n')
         (self.root / 'paper.typ').write_text('''Front matter excluded.
 // >>> BODY START
 Opening words.
@@ -135,6 +138,14 @@ Back matter excluded.
         self.assertFalse((self.root / 'paper.pdf').exists())
         (self.root / 'nested.typ').write_text('== Sampling\nChanged body with more words.\n')
         self.assertEqual(wc.counts(self.root)['main_words'], 17)
+
+    def test_data_file_calls_count_as_the_words_they_print(self):
+        # uno-paper: the sliced body's eval scope lacked dfile, and one call
+        # failed the whole count.
+        paper = self.root / 'paper.typ'
+        paper.write_text(paper.read_text().replace(
+            'Two words.', 'Two words #dfile("a") of #dfile-count().'))
+        self.assertEqual(wc.counts(self.root)['main_words'], 19)
 
     def test_cli_reports_limits_but_only_gate_blocks_drafting(self):
         (self.root / wc.CONFIG).write_text('''schema_version = 1

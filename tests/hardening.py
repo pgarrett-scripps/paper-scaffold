@@ -89,6 +89,25 @@ class Hardening(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cyclic"):
             manuscript_sources.source_files(self.root)
 
+    def test_source_index_follows_generated_tables(self):
+        # A generated SI table calls #s() for its own numbers; the index must
+        # see those calls through tbl(), or check-stats calls them unused and
+        # a regenerated table never marks the PDF stale.
+        self.put("paper.typ", '#include "si-body.typ"')
+        self.put("si-body.typ", '#figure(tbl("tbl.a")) <tbl:a>\n#tbl("tbl.gone") #tbl("fig.b")')
+        self.put("si/a.typ", '#table([#s("from-table")])')
+        self.put("figures/b.typ", '#s("not-a-table")')
+        self.put("assets.json", json.dumps({"values": {
+            "tbl.a": {"path": "si/a.typ", "kind": "table"},
+            "tbl.gone": {"path": "si/gone.typ", "kind": "table"},
+            "fig.b": {"path": "figures/b.typ", "kind": "figure"}}}))
+        self.assertIn("si/a.typ", manuscript_sources.source_files(self.root))
+        ids = {u["id"] for u in manuscript_sources.usages(self.root)}
+        self.assertIn("from-table", ids)
+        self.assertNotIn("not-a-table", ids)
+        self.put("assets.json", "{not json")
+        self.assertNotIn("si/a.typ", manuscript_sources.source_files(self.root))
+
     def test_edit_guard_protects_helper_ids_and_abstract(self):
         paper = self.put("paper.typ", '= Results\n#s("control")\n#figure(fig("fig.control")) <fig:x>\n@fig:x @fig:x')
         config = self.put("config.typ", '#let paper-abstract = [Observed #s("control").]')

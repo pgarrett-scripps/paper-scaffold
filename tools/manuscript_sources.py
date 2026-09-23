@@ -5,6 +5,7 @@ cannot be inferred; callers must report that limit instead of guessing.
 """
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -218,6 +219,16 @@ def source_files(root: Path = ROOT, entrypoints=None) -> dict[str, str]:
             entrypoints = ENTRYPOINTS
     found = {}
     active = set()
+    manifest: list[dict] = []
+
+    def tables() -> dict:
+        if not manifest:
+            try:
+                values = json.loads((root / "assets.json").read_text(encoding="utf-8"))["values"]
+            except (OSError, ValueError, KeyError, TypeError):
+                values = {}
+            manifest.append(values if isinstance(values, dict) else {})
+        return manifest[0]
 
     def visit(path: Path):
         path = path.resolve()
@@ -240,6 +251,21 @@ def source_files(root: Path = ROOT, entrypoints=None) -> dict[str, str]:
                 continue
             visit(root / target.lstrip("/") if target.startswith("/")
                   else path.parent / target)
+        # A generated table is a source too: `tbl("id")` includes the file
+        # assets.json names, and that file calls `#s()` for its own numbers.
+        # Without following it, those ids read as unused to check-stats and
+        # trace, and a regenerated table did not mark the PDF stale. Only a
+        # table that exists is followed; a missing or malformed declaration is
+        # check-assets' error to report, not a reason for the index to fail.
+        for m in matches(CALL, src):
+            if m.group(1) != "tbl":
+                continue
+            row = tables().get(m.group(2))
+            if not isinstance(row, dict):
+                continue
+            target = root / str(row.get("path", ""))
+            if row.get("kind") == "table" and target.suffix == ".typ" and target.is_file():
+                visit(target)
         active.remove(path)
 
     for name in entrypoints:

@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 import readability  # noqa: E402
 import resolve_typst  # noqa: E402
 from resolve_typst import SUPPLEMENT  # noqa: E402
+import typst_prose  # noqa: E402
 from typst_prose import (  # noqa: E402
     CITE,
     FOOTNOTE,
@@ -166,6 +167,8 @@ def clean(text, refs=None):
     #     same way, for the same reason.
     text = resolve_stats(text)
     text = resolve_lit(text)
+    # data files -> "Supplementary Data File 2", as the PDF prints them.
+    text = typst_prose.resolve_data_files(text)
     # a note to self is not narration
     text = re.sub(TODO, " ", text)
 

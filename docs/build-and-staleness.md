@@ -12,7 +12,8 @@ that actually happen:
   `just check-build` recompares it. Hashes are captured before rendering stats
   or resolving exports, and checked again before replacing the deliverable.
   A source edit during the build preserves the last good output and fails.
-  Compiler dependencies, included chapters, CSL files, and the Word filter
+  Compiler dependencies, included chapters, the generated tables `tbl()`
+  includes, CSL files, and the Word filter
   participate in the check. Concurrent manuscript builds are refused.
 - An output that is **not the file that build produced** — overwritten,
   truncated, or restored from somewhere else. The stamp records the output's own

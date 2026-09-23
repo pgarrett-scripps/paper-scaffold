@@ -53,4 +53,20 @@ def run_cases() -> bool:
         if (want and want not in got) or (forbid and forbid in got):
             print(f"  FAIL narration: {name}: {got!r}")
             ok = False
-    return ok
+    return _data_file_cases(ep) and ok
+
+
+def _data_file_cases(ep) -> bool:
+    """uno-paper's audiobook read `#dfile("...")` aloud, call and all."""
+    import typst_prose
+    saved = typst_prose.DATA_FILES
+    typst_prose.DATA_FILES = {"files": ["tbl.a", "tbl.b"],
+                              "name": "Supplementary Data File", "short": "File"}
+    try:
+        got = ep.clean('Depths are in #dfile("tbl.b"), of #dfile-count().', {})
+    finally:
+        typst_prose.DATA_FILES = saved
+    if "in Supplementary Data File 2, of 2." not in got or "dfile" in got:
+        print(f"  FAIL narration: data file spoken as printed: {got!r}")
+        return False
+    return True
