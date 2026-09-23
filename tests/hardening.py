@@ -203,7 +203,8 @@ class Hardening(unittest.TestCase):
         if not (ROOT / "analysis/scripts/_stats.py").exists():
             self.skipTest("analysis contract removed from this manuscript")
         for name in ("analysis/scripts/_stats.py", "analysis/scripts/_provenance.py",
-                     "tools/manifest_validation.py", "tools/atomic_io.py"):
+                     "tools/manifest_validation.py", "tools/atomic_io.py",
+                     "tools/hashcache.py"):
             self.put(name, (ROOT / name).read_text())
         gen = self.put("analysis/scripts/gen_stats.py", 'from _stats import Stats\ns=Stats()\ns.add("x", 1.0)\ns.write()')
         stats = self.put("stats.json", json.dumps({"values": {
