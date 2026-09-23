@@ -59,6 +59,8 @@ def style_reference(path):
         if sid in ('Caption', 'ImageCaption', 'TableCaption', 'Bibliography'):
             child(rp, 'sz', val=18 if sid != 'Bibliography' else 22)
             child(pp, 'spacing', before=80, after=120, line=240, lineRule='auto')
+        if sid in ('Caption', 'ImageCaption', 'TableCaption'):
+            child(pp, 'keepLines')
         if sid == 'Title':
             child(rp, 'sz', val=28); child(rp, 'b')
             child(pp, 'jc', val='center')

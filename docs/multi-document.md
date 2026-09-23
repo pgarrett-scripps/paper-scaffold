@@ -66,8 +66,12 @@ Full front-matter pagination requires LibreOffice (`soffice`) and Poppler
 (`pdfinfo`) on PATH. Page numbers are calculated from a temporary DOCX render;
 only cached numbers are copied back. The original DOCX is never resaved through
 LibreOffice. Font availability affects pagination, and final Microsoft Word
-layout still needs review in Word. Failed pagination does not replace the last
-good output. Changes to the Word template, CSL, tools, inputs or output invalidate
+layout still needs review in Word. The DOCX also sets `updateFields`, so Word
+recomputes every contents, figure and table page number from its own pagination
+on open; the cached numbers are the fallback for viewers that do not update
+fields. If the LibreOffice pass fails, the build reports it and keeps the DOCX
+with uncached placeholders, which Word still fills on open. Captions carry
+`keepLines`, so a caption never splits across a page. Changes to the Word template, CSL, tools, inputs or output invalidate
 its separate `.build-state/word/` record.
 
 Run `just test-docx` for the content, layout and template regression checks.

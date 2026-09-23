@@ -110,6 +110,36 @@ class WordExportTests(unittest.TestCase):
                         order = [ranks.get(e.tag.rsplit('}', 1)[-1], len(ranks)) for e in element]
                         self.assertEqual(order, sorted(order), name)
 
+    def test_captions_never_split_across_a_page(self):
+        # A two-line caption broken across a page leaves its first line under
+        # the wrong float (dissertation).
+        with zipfile.ZipFile(ROOT/REFERENCE) as archive:
+            styles = ET.fromstring(archive.read('word/styles.xml'))
+        for sid in ('Caption', 'ImageCaption', 'TableCaption'):
+            style = styles.find(f'w:style[@w:styleId="{sid}"]', NS)
+            self.assertIsNotNone(style, sid)
+            self.assertIsNotNone(style.find('w:pPr/w:keepLines', NS), sid)
+
+    def test_word_updates_page_fields_on_open(self):
+        # PAGEREF values cached by word_pagination.py are only a fallback; Word
+        # recomputes them from its own pagination when updateFields is set.
+        import pypandoc
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder)/'fields.docx'
+            pypandoc.convert_text('Text.', 'docx', format='markdown', outputfile=str(output),
+                                  extra_args=['--reference-doc', str(ROOT/REFERENCE)])
+            format_docx(output)
+            format_docx(output)          # idempotent: one element, not two
+            with zipfile.ZipFile(output) as archive:
+                settings = ET.fromstring(archive.read('word/settings.xml'))
+            found = settings.findall('w:updateFields', NS)
+            self.assertEqual(len(found), 1)
+            self.assertEqual(found[0].get('{'+NS['w']+'}val'), 'true')
+            names = [e.tag.rsplit('}', 1)[-1] for e in settings]
+            for later in ('footnotePr', 'endnotePr', 'compat', 'rsids'):
+                if later in names:
+                    self.assertLess(names.index('updateFields'), names.index(later), later)
+
     def test_front_pages_and_live_contents(self):
         import pypandoc
         with tempfile.TemporaryDirectory() as folder:

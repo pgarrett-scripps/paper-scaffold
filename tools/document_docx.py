@@ -427,6 +427,21 @@ def format_docx(path):
     files['[Content_Types].xml'] = serialize(types, files['[Content_Types].xml'])
     order_properties(document)
     files['word/document.xml'] = serialize(document, files['word/document.xml'])
+    # Word recalculates every PAGEREF field on open, so Word's own pagination
+    # decides the contents, figure and table page numbers for the reader.
+    # word_pagination.py's cached values remain the fallback for viewers that
+    # do not update fields, and for the front-matter Roman entries it has to
+    # write as literal text.
+    settings = ET.fromstring(files['word/settings.xml'])
+    if settings.find(tag('updateFields')) is None:
+        # CT_Settings is an ordered sequence: updateFields belongs before the
+        # note, compatibility and revision blocks that follow it.
+        tail = ('hdrShapeDefaults', 'footnotePr', 'endnotePr', 'compat', 'docVars',
+                'rsids', 'attachedSchema', 'themeFontLang', 'clrSchemeMapping')
+        positions = [i for i, e in enumerate(settings) if e.tag in {tag(n) for n in tail}]
+        element = ET.Element(tag('updateFields'), {tag('val'): 'true'})
+        settings.insert(positions[0] if positions else len(settings), element)
+    files['word/settings.xml'] = serialize(settings, files['word/settings.xml'])
     with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as archive:
         for name, contents in files.items():
             archive.writestr(name, contents)
@@ -527,7 +542,15 @@ def build(project, document):
         format_docx(output)
         if data['front']:
             print('dissertation: calculating Word contents and list page numbers', flush=True)
-            paginate(output, project.root)
+            try:
+                paginate(output, project.root)
+            except Exception as error:
+                # Word repopulates the page numbers itself through updateFields.
+                # Other viewers show the uncached placeholders until then, so
+                # this degrades the contents lists rather than the document.
+                print(f'dissertation: page-number cache unavailable ({error}); '
+                      'Word will fill the contents lists on open, other viewers '
+                      'will show placeholders', flush=True)
         with zipfile.ZipFile(output) as z:
             xml = ET.fromstring(z.read('word/document.xml'))
         counts = dict(tables=len(xml.findall('.//w:tbl', NS)), equations=len(xml.findall('.//m:oMath', NS)),
