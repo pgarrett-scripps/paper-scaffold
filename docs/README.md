@@ -22,6 +22,7 @@ the reasons behind them.
 | Build the journal upload set | [Submission outputs](submission.md) |
 | Select a journal, sections and word limits | [Journals and word limits](journals.md) |
 | Check the writing | [Prose checks, formatting and tests](prose-checks.md) |
+| Pre-empt reviewers: review a draft, add a panel, plan an experiment | [Reviewer lessons](reviewer-lessons.md) |
 | Make a talk or listen to a draft | [Slides and audio](slides-and-audio.md) |
 | Add a paper-specific stage, recipe or Word fix without editing the scaffold | [Extension hooks](hooks.md) |
 | Upgrade to a newer scaffold | [Versioning and upgrading](upgrading.md), [HISTORY.md](../HISTORY.md) |

@@ -64,6 +64,44 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 4.2.0
+
+A round of peer review of a computational methods paper had three reviewers
+independently raise the same problems: "preserved" with no tolerance, no
+comparison against another tool or a naive baseline, parameters tuned on the
+reported data, figures that answered no single question. None of the review
+skills looked for them. They do now, each in its own pass and findings format.
+
+- **`docs/reviewer-lessons.md`** (in a paper, `.paper/docs/`) is the
+  reference: ten principles with their reasons and examples, plus checklists
+  for reviewing a draft, adding a figure and planning an experiment. The
+  examples are mass spectrometry; the lessons apply to any methods paper.
+  The skills cite it; the experiment checklist has no skill.
+- **`/paper:peer-review`** gives the methods reviewer what a skeptical
+  referee presses on: undefined "good enough", no comparator other than the
+  input, no held-out data or second setting, undocumented parameters,
+  contribution versus plumbing, physical assumptions, downstream benefit,
+  availability (licence, version, DOI, accessions).
+- **`/paper:story-review`** checks that the opening states the goal, the
+  user and the scope, and that Limitations agrees with the Introduction.
+- **`/paper:claim-audit`** calls "preserved", "negligible", "comparable"
+  with no tolerance and no number **overstated**.
+- **`/paper:figure-review`** checks what each figure is for (one question
+  per panel answered by a number, toy-example schematics, every named
+  phenomenon pictured, a fitting plot type, shared axes with the baseline,
+  tolerance bands, spread), and **`/paper:new-figure`** designs against the
+  same list before writing the generator.
+- **`/paper:prose-review`** flags promotional headings, informal verbs and
+  adjectives where a number exists; **`/paper:literature-check`** flags an
+  Introduction that states the gap without surveying existing approaches.
+- **STYLE.md** gains one line: headings name a topic or metric, not a result.
+
+Upgrade: `uv add` the v4.2.0 pin, `uv run paper sync`, then `just paper`.
+Nothing in the manuscript changes. Run `paper-plugin-update` (or
+`/plugin update paper`) so the skills are current. STYLE.md is the paper's
+own; copy the headings line from the scaffold's STYLE.md "Structure" if you
+want it.
+
 ## 4.1.2
 
 cascade/paper's numbers read stale on every pin move: its `gen_stats.py`

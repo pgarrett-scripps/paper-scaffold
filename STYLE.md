@@ -191,6 +191,9 @@ Prefer prose to bullet lists in the main text. A bulleted manuscript reads as
 slides, and journals typeset lists unpredictably. Lists are fine in the SI for
 genuinely enumerable things such as parameter settings.
 
+Headings name a topic or a metric ("Identification rate after filtering"), never
+a result ("Nothing is lost"). A heading that sells reads as advertising.
+
 Past tense for what was done and found. Present tense for what remains true:
 "denoising removed 84.9% of MS1 peaks" but "the filter exploits a structural
 prior".

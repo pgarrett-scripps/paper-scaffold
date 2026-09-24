@@ -59,7 +59,11 @@ stays out) and merges them. Their maintained files live in `plugins/paper/skills
 in the scaffold and reach every paper as the `paper` Claude Code plugin
 (`.claude/settings.json` enables it; the `paper-scaffold` marketplace serves it).
 `.agents/skills` is a symlink into the scaffold checkout so Codex discovers the
-same instructions. Neither is copied by `new-paper.sh`.
+same instructions. Neither is copied by `new-paper.sh`. What a methods
+reviewer presses on (undefined tolerances, missing comparators, figures that
+do not answer one question) is written up in
+[Reviewer lessons](reviewer-lessons.md); the review skills look for it in
+their own passes and cite that document for the reasons.
 
 | Skill | Does |
 |---|---|

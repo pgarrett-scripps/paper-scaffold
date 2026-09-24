@@ -66,6 +66,18 @@ For each asset, answer each of these and record the evidence:
 - **Numbers.** Where the prose gives a value from the same data (a `#s()` id
   from the same inputs), the figure agrees to the precision shown. Read the
   value with trace; do not estimate it from pixels and call that a match.
+- **What the figure is for.** Each panel answers one question, and the
+  caption states it and gives the answer as a number. A panel that explains
+  a mechanism starts from a small annotated toy example before real data.
+  Every phenomenon the text names (an artifact the method removes, say) is
+  pictured somewhere. The plot type suits the data: dense 2D data in a
+  heatmap, not an overplotted scatter; a structural gap not drawn as empty
+  space. Compared conditions share axes and scales, and the baseline sits in
+  the same panel. Where the text says "preserved" or "within", the tolerance
+  band or pass/fail line is drawn. Replicates and spread are shown, not only
+  means. The reasons are in the figure checklist of
+  `.paper/docs/reviewer-lessons.md` (`docs/` in the scaffold itself); a
+  missing schematic or panel is routed to `/paper:new-figure`.
 - **Journal profile.** Read `journal.toml` and its `journals/<profile>.toml`:
   figure count against `figures-max`, printed resolution against `min-dpi`
   for rasters, and the graphical abstract against its box. `just check-journal`

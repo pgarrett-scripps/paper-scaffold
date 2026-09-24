@@ -64,7 +64,11 @@ Give each row one verdict:
   "significantly" with no test, or a test on a different quantity;
   "increased" for a near-tie whose interval includes the null; a mean
   described as if every replicate moved; a mechanism asserted for an
-  observation; a scope wider than the population the code filtered to.
+  observation; a scope wider than the population the code filtered to;
+  "preserved", "negligible", "unchanged" or "comparable" with no tolerance
+  stated anywhere and no number beside it. The fix names the metric, a
+  tolerance with its source, and the value (principle 2 of
+  `.paper/docs/reviewer-lessons.md`, `docs/` in the scaffold itself).
 - **mismatched**: the sentence describes a different quantity from the one
   the id computes (a fold change read as a difference, intensity read as
   abundance, a per-run number read as per-sample).

@@ -88,6 +88,15 @@ one member supports the claim is a finding.
    depends on it). Say plainly when a search turned up nothing, which is
    itself useful.
 
+Then read the Introduction as a whole. It should survey the existing
+approaches, saying what each does well and where it falls short, before it
+states the gap; a gap asserted with no such survey reads as assumed rather
+than shown, and every factual claim in it should carry a citation or point
+to the manuscript's own result. Report a missing survey, or an uncited
+factual claim, as a finding tied to the paragraph, with the pass 2
+candidates that would fill it (principle 7 of
+`.paper/docs/reviewer-lessons.md`, `docs/` in the scaffold itself).
+
 Do not assert priority. "This was done before" is a question to the author
 with the resolved reference attached, not a verdict.
 
@@ -113,7 +122,8 @@ Shape:
 3. Pass 1 as a table: severity (major / minor), location, key, sentence,
    what the work says, verdict, routed fix.
 4. Pass 2 as a list, each with the resolved reference block ready to paste
-   into references.bib and the sentence it should attach to.
+   into references.bib and the sentence it should attach to, then the
+   Introduction findings.
 5. Pass 3 as a short list.
 
 Route fixes to `/paper:copy-edit` (the sentence overstates what the source
@@ -128,8 +138,8 @@ paragraph and the file path. Nothing was edited, so do not run
 After writing the findings file, and before the final print:
 
 1. Every Pass 1 row other than **supports**, and every
-   Pass 2 candidate marked **foundational** or **competing**, becomes one
-   action. Context candidates and Pass 3 hygiene notes are not added.
+   Pass 2 candidate marked **foundational** or **competing**, and each
+   Introduction finding from pass 2, becomes one action. Context candidates and Pass 3 hygiene notes are not added.
 2. Skip a finding that matches an `open` or `wontfix` row. Reopen a matching
    `done` row whose problem is back: `status` to `open`, `closed` to
    `reopened <YYYY-MM-DD>: <what came back>`.

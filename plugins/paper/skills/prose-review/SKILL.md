@@ -80,7 +80,15 @@ a finding. For each sentence in scope, ask:
 7. **Does the register hold?** Contractions, colloquialisms, journalistic
    hooks, editorial first person ("we strongly believe"), "In this paper,
    we" more than once, a claim of what "future work will" do.
-8. **Is a term of art being flagged wrongly?** "Robust" in robust
+8. **Does it read like a methods paper?** A heading that sells a result
+   ("Nothing is lost") instead of naming a topic or metric ("Identification
+   rate after filtering"); an informal verb or metaphor for a result ("gave
+   up", "a small trim"); an adjective ("slightly fewer", "a large gain")
+   where the number exists, which STYLE.md "Words" already asks for. Read
+   the headings as a list, since that is how an editor first sees them.
+   Principle 10 of `.paper/docs/reviewer-lessons.md` (`docs/` in the
+   scaffold itself) has the examples.
+9. **Is a term of art being flagged wrongly?** "Robust" in robust
    statistics, "significant" with a reported test, "framework" for an actual
    software framework, and any term STYLE.md's domain section defines, are
    not findings. When unsure, say so rather than flag.

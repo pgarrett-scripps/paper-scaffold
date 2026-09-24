@@ -21,6 +21,19 @@ rows whose `fix` is `/paper:new-figure`, and rows about the figures, tables
 and captions in scope. Work on the rows the user asks for; do not widen the
 task to clear the list.
 
+## Decide what the figure has to show
+
+Before writing the generator, settle the design against the figure
+checklist in `.paper/docs/reviewer-lessons.md` (`docs/` in the scaffold
+itself), the one `/paper:figure-review` reads the result against: one
+question per panel, with the answer as a number in the caption; a small
+annotated toy example first when the panel explains a mechanism; every
+phenomenon the text names pictured; a plot type that suits the data; shared
+axes and scales with the baseline in the same panel; the tolerance band
+drawn wherever the text says "preserved" or "within"; replicates and spread,
+not only means. A schematic in CeTZ matches the manuscript's fonts and is
+preferred where the paper allows it; that is a preference, not a rule.
+
 ## Generate and declare
 
 Copy a relevant project generator, or gen_example_figure.py /

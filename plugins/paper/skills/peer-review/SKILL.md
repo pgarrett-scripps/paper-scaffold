@@ -96,6 +96,45 @@ journal expects:
 5. A recommendation: accept, minor revision, major revision, or reject, with
    one sentence of reasoning.
 
+## What a skeptical methods reviewer presses on
+
+Put this in the methods-and-statistics reviewer's brief, and in any
+reviewer's brief when the paper presents a method, tool or pipeline. These
+are the points referees of methods papers raise independently of each
+other; the reasons and worked examples are in
+`.paper/docs/reviewer-lessons.md` (`docs/` in the scaffold itself). They
+are what the reviewer reads for, not sections of the report: a gap becomes a
+major or minor point in the usual shape, and a paper that handles one well
+earns no comment.
+
+- **"Good enough" defined in advance.** Every "preserved", "negligible",
+  "comparable" or "high agreement" needs a metric, a tolerance with its
+  source (replicate spread, a field convention, a user requirement) and a
+  number with its direction and spread. Without them the word reads as
+  advertising.
+- **A comparator other than the input.** Showing the output resembles what
+  went in does not show the method is useful. Ask for an existing tool and
+  a naive baseline (a fixed threshold, random removal at matched size); if
+  the baseline does as well, the method is not the contribution.
+- **Generalisation.** Were parameters tuned on the data used to report
+  performance? Is there held-out data, and more than one instrument, lab or
+  setting? Why was the main dataset chosen?
+- **Parameters and settings.** Every exposed parameter with its purpose,
+  default, range and effect; downstream software settings justified when a
+  metric depends on them; parameters in physical units or with the
+  conversion; a sensitivity check for those that matter.
+- **Contribution versus plumbing.** What is new, in one sentence, with
+  upstream libraries credited for the rest. Engineering others have already
+  done is not a contribution; breadth of validation is.
+- **Physical assumptions.** A rule that treats the instrument or sample as
+  ideal needs evidence (a calibration, a measurement, a citation) or a
+  margin shown not to matter. What the method discards permanently, and who
+  would need it, is stated and scoped.
+- **Downstream benefit.** A gain users care about, not only the metric the
+  method optimises.
+- **Availability.** Licence, code version and DOI, and data accessions,
+  stated where a reader looks (the abstract or the Availability section).
+
 Reviewers judge the paper, not the pipeline: mechanical matters that
 `just verify` already enforces (spelling, formatting, uncited floats) are
 out of scope unless they change meaning. Reviewers do not invent literature;

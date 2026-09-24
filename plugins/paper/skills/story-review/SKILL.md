@@ -66,6 +66,15 @@ PDF.
    and propose the one sentence to align them to. If the message the
    evidence supports is smaller than the one the abstract claims, say so;
    that is usually the cheapest fix in the whole plan.
+   Then check the opening: the first paragraph says what problem this is,
+   who has it, and what is out of scope, with the size of the problem next
+   to how much of it the method fixes. A reader left to guess the scope
+   picks the one that looks worst. Read the Limitations section against
+   the Introduction: if Limitations concedes something the Introduction's
+   case rests on ("keep the original" against an Introduction that argues
+   for replacing it), one of them has to move, and it is usually the
+   Introduction. Principle 1 of `.paper/docs/reviewer-lessons.md` (`docs/`
+   in the scaffold itself) has the reasoning and an example.
 2. **Structure.** Propose a section and paragraph order: what moves,
    merges, splits, or goes to the SI, and why in one line each. Flag a
    result presented before the reader can interpret it, methods detail
