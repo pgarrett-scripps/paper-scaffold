@@ -281,7 +281,13 @@ def guess(data: bytes) -> dict:
     if d.get("/rPrDefault/rPr/sz@val"):
         style["font_size"] = int(d["/rPrDefault/rPr/sz@val"]) / 2
     if d.get("/pPrDefault/pPr/spacing@line"):
-        style["line_spacing"] = round(int(d["/pPrDefault/pPr/spacing@line"]) / 240, 2)
+        # The nearest value project.toml accepts (steps of 0.05 from 1 to 3,
+        # tools/project_hooks.py): a template at line=259 once suggested 1.08,
+        # which every load() then rejected. The rounding shows up in
+        # translate()'s leftovers; a value outside the range is left there.
+        spacing = round(int(d["/pPrDefault/pPr/spacing@line"]) / 240 * 20) / 20
+        if 1 <= spacing <= 3:
+            style["line_spacing"] = spacing
     sides = {page.get(f"/pgMar@{s}") for s in ("top", "right", "bottom", "left")}
     if len(sides) == 1 and None not in sides:
         style["margins"] = f"{int(sides.pop()) / 1440:g}in"

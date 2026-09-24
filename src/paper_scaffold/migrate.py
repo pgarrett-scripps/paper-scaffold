@@ -33,6 +33,7 @@ Everything else is the paper's and is not touched. A refusal changes nothing.
 """
 from __future__ import annotations
 
+import json
 import fnmatch
 import re
 import shutil
@@ -98,15 +99,17 @@ def _dep_name(spec: str) -> str:
 
 
 def pyproject_for(name: str, pin: str, extra: list[str],
-                  groups: dict[str, list[str]]) -> str:
+                  groups: dict[str, list[str]], description: str | None = None,
+                  requires_python: str = ">=3.10") -> str:
     deps = "".join(f'  "{d}",\n' for d in [pin, *extra])
     out = [
         "[project]",
         f'name = "{name}"',
+        *([f"description = {json.dumps(description)}"] if description else []),
         '# Not the toolchain release: that is the paper-scaffold pin below, and',
         '# `paper version` / .paper/scaffold.lock.json say which one is installed.',
         'version = "0.0.0"',
-        'requires-python = ">=3.10"',
+        f"requires-python = {json.dumps(requires_python)}",
         "# The toolchain (docs/package.md). Move the pin with `uv add`, then run",
         "# `uv run paper sync`.",
         "dependencies = [",
@@ -145,7 +148,14 @@ def rewrite_pyproject(project: Path, scaffold_py: bytes | None, pin: str,
     groups = dict(data.get("dependency-groups") or
                   {"audio": ["piper-tts>=1.6", "imageio-ffmpeg", "pillow", "matplotlib"]})
     name = data.get("project", {}).get("name") or project.name
-    return pyproject_for(name, pin, extra, groups), extra
+    # The paper's own description and requires-python survive; the stock
+    # toolchain description of the base release is not the paper's and goes.
+    own = data.get("project", {})
+    description = own.get("description")
+    if description == base.get("project", {}).get("description"):
+        description = None
+    return pyproject_for(name, pin, extra, groups, description,
+                         own.get("requires-python") or ">=3.10"), extra
 
 
 class OtherReleases:
@@ -535,7 +545,7 @@ def main(project: Path, scaffold: Path | None, base: str | None, pin: str | None
          dry_run: bool, install: bool) -> int:
     try:
         plan = classify(project, scaffold, base, pin)
-    except MigrateError as e:
+    except (MigrateError, sync_mod.SyncError) as e:
         print(f"paper migrate: {e}", file=sys.stderr)
         return 2
     print(report(plan))

@@ -314,7 +314,13 @@ def main_sync(root: Path, check_only: bool, force: bool) -> int:
         print("scaffold checkout: the toolchain is this repository, nothing to sync")
         return 0
     if check_only:
-        problems = check(root)
+        try:
+            problems = check(root)
+        except SyncError as e:
+            # A project.toml typo or a missing [slides] theme: one line, not a
+            # traceback, and a failing exit like any other problem.
+            print(f"paper sync --check: {e}", file=sys.stderr)
+            return 1
         if problems:
             for p in problems:
                 print(f"paper sync --check: {p}", file=sys.stderr)

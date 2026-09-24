@@ -932,6 +932,8 @@ docx-check target="":
   set -euo pipefail
   if [[ -f manuscript.toml && -f lib/template.typ ]]; then
     uv run --quiet paper tool document_docx {{quote(target)}} --check
+  elif [[ -f manuscript.toml ]]; then
+    uv run --quiet paper tool build_state check --output paper.docx
   else
     uv run --quiet paper tool build_state check
   fi
@@ -1117,6 +1119,10 @@ check-build:
   uv run --quiet paper tool documents check all || rc=1
   if [[ -f lib/template.typ ]]; then
     uv run --quiet paper tool document_docx --check || rc=1
+  else
+    # No template contract: `just paper` exported paper.docx by the paper's
+    # route (`just docx`), so its staleness is checked the same way.
+    uv run --quiet paper tool build_state check --output paper.docx || rc=1
   fi
   exit $rc
 

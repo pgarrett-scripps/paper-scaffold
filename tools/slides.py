@@ -141,7 +141,6 @@ def snapshot(root: Path, name: str, dependencies=()) -> dict[str, str | None]:
     paths = {root / n for n in source_files(root, entrypoints=(deck,))}
     paths.update(root / n for n in ("assets.json", "pyproject.toml",
                                     "uv.lock", "justfile"))
-    paths.update(locate(root, f"tools/{n}") for n in DECK_TOOLS)
     paths.update(root.glob("*.bib"))
     paths.update(root.glob("*.csl"))
     paths.update(Path(p) if Path(p).is_absolute() else root / p
@@ -155,6 +154,13 @@ def snapshot(root: Path, name: str, dependencies=()) -> dict[str, str | None]:
         except ValueError:
             key = str(path)
         result[key] = digest(path) if path.is_file() else None
+    # The deck tools may be the installed toolchain's (tools/paths.py): key
+    # them by the manuscript-relative name, as build_state.snapshot() does, so
+    # a record is the same on every checkout and a site-packages path never
+    # makes a deck stale on another machine.
+    for name in (f"tools/{n}" for n in DECK_TOOLS):
+        path = locate(root, name)
+        result[name] = digest(path) if path.is_file() else None
     result["stats.json"] = stats_digest(root)
     return result
 

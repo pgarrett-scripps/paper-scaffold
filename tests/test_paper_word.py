@@ -229,6 +229,31 @@ class PaperWordTests(unittest.TestCase):
         self.assertEqual({k: found[k] for k in ('font', 'title_align', 'heading_color')},
                          {k: style[k] for k in ('font', 'title_align', 'heading_color')})
 
+    def test_guessed_line_spacing_is_one_project_toml_accepts(self):
+        """A template at line=259 (1.079) guessed 1.08, which every
+        project_hooks.load() then rejected (steps of 0.05)."""
+        from paper_word_reference import generate, guess, toml_block, translate
+        import project_hooks
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = generate(root / 'r.docx', {'line_spacing': 1.0})
+            target = root / 'template.docx'
+            with zipfile.ZipFile(source) as src, zipfile.ZipFile(target, 'w') as out:
+                for item in src.infolist():
+                    data = src.read(item.filename)
+                    if item.filename == 'word/styles.xml':
+                        text = data.decode()
+                        self.assertIn('w:line="240"', text)
+                        data = text.replace('w:line="240"', 'w:line="259"', 1).encode()
+                    out.writestr(item, data)
+            data = target.read_bytes()
+            self.assertEqual(guess(data)['line_spacing'], 1.1)
+            found, left = translate(data)
+            (root / 'project.toml').write_text('schema_version = 1\n\n' + toml_block(found) + '\n')
+            self.assertEqual(project_hooks.load(root).word.style.get('line_spacing'), 1.1)
+            # The rounding is reported, not hidden.
+            self.assertTrue(any('spacing@line' in line for line in left), left)
+
     def test_reference_is_cached_by_its_settings(self):
         from paper_word_reference import reference_for
         with tempfile.TemporaryDirectory() as folder:

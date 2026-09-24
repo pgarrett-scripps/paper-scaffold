@@ -103,6 +103,15 @@ class SlideCases(unittest.TestCase):
         self.put("slides/lab-meeting.typ", DECK)
         self.assertEqual(build_state.snapshot(self.root), before)
 
+    def test_deck_record_keys_are_machine_independent(self):
+        """The deck tools come from the installed toolchain in a paper; their
+        keys must not be its site-packages path, or a deck built on one
+        checkout reads stale on every other."""
+        keys = slides.snapshot(self.root, "talk")
+        self.assertEqual([k for k in keys if Path(k).is_absolute()], [])
+        self.assertIn("tools/slides.py", keys)
+        self.assertIsNotNone(keys["tools/slides.py"])
+
     # --- reaching the id index --------------------------------------------
 
     def test_deck_ids_reach_the_usage_index(self):

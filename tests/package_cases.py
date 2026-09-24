@@ -206,6 +206,19 @@ def sync_cases(check) -> None:
             check("a declared theme that is missing is refused", False)
         except sm.SyncError as e:
             check("a declared theme that is missing is refused", "missing" in str(e), e)
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            rc = sm.main_sync(root, True, False)
+        check("--check reports a missing theme in one line, exit 1 (no traceback)",
+              rc == 1 and err.getvalue().count("\n") == 1
+              and "missing" in err.getvalue(), (rc, err.getvalue()))
+        (root / "project.toml").write_text('schema_version = 1\n\n[slides]\nthem = 1\n')
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            rc = sm.main_sync(root, True, False)
+        check("--check reports a project.toml typo in one line, exit 1",
+              rc == 1 and err.getvalue().startswith("paper sync --check: ")
+              and err.getvalue().count("\n") == 1, (rc, err.getvalue()))
         (root / "project.toml").write_text(
             'schema_version = 1\n\n[slides]\ntheme = "lib/theme.typ"\n')
         try:
@@ -305,6 +318,19 @@ def migrate_cases(check) -> None:
               and (project / "tests/run.py").is_file()
               and not (project / sm.LOCK).exists()
               and "paper-scaffold" not in (project / "pyproject.toml").read_text())
+
+    # A project.toml the toolchain cannot read: one line and exit 2, never a
+    # traceback from the sync plan migrate builds.
+    with tempfile.TemporaryDirectory() as tmp:
+        scaffold, project = migrate_fixture(Path(tmp), {
+            "slides/talk.typ": "x\n",
+            "project.toml": 'schema_version = 1\n\n[slides]\ntheme = "slides/gone.typ"\n'})
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            rc = mg.main(project, scaffold, None, PIN, False, False)
+        check("migrate reports a bad project.toml in one line, exit 2",
+              rc == 2 and err.getvalue().startswith("paper migrate: ")
+              and "missing" in err.getvalue(), (rc, err.getvalue()))
 
     # The paper's own notes under docs/: refused (docs/ is the package's and
     # would be removed), naming each file and notes/.
@@ -511,6 +537,25 @@ def migrate_cases(check) -> None:
         check("an edit matching no release is still refused",
               any(r.startswith("tools/x.py: customized") for r in plan.refused),
               plan.refused)
+
+    # The paper's requires-python and description survive the rewrite; the
+    # base release's stock toolchain description does not.
+    stock = (b'[project]\nname = "paper"\ndescription = "Python toolchain"\n'
+             b'requires-python = ">=3.10"\ndependencies = ["rich"]\n')
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "pyproject.toml").write_text(
+            '[project]\nname = "uno"\ndescription = "UNO \\"deep\\" paper"\n'
+            'requires-python = ">=3.11"\ndependencies = ["rich", "scipy"]\n')
+        refused: list[str] = []
+        text, _ = mg.rewrite_pyproject(Path(tmp), stock, PIN, refused)
+        own = mg._toml().loads(text)["project"]
+        check("migrate keeps the paper's description and requires-python",
+              own.get("description") == 'UNO "deep" paper'
+              and own.get("requires-python") == ">=3.11" and not refused, text)
+        (Path(tmp) / "pyproject.toml").write_text(stock.decode())
+        own = mg._toml().loads(mg.rewrite_pyproject(Path(tmp), stock, PIN, [])[0])["project"]
+        check("the stock toolchain description is not carried into the paper",
+              "description" not in own and own["requires-python"] == ">=3.10", own)
 
     # Adding [word] reference into an existing [word] table.
     text = mg.word_table("schema_version = 1\n[word]\nlua_filters = []\n", None)

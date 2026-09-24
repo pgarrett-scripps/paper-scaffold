@@ -24,13 +24,19 @@ from manifest_validation import load
 from project_hooks import build_inputs
 
 from paths import DATA, ROOT, locate, tool  # the manuscript (tools/paths.py)
+# Every tool a captured build runs, AND every tools/ module they import (lazy
+# imports included): submission.py runs the captured export_docx.py with only
+# the captured tools/ on its path, so a missing import is a ModuleNotFoundError
+# at `just main-docx` (4.1.1: paths.py and document_project.py were missing).
+# tests/submission_cases.py checks the closure.
 BUILD_TOOLS = ("render_stats.py", "typst_prose.py", "journal.py",
                "resolve_typst.py", "export_docx.py", "word_xml.py",
                "paper_word_reference.py", "readability.py",
                "refs_div.lua", "manuscript_sources.py", "manifest_validation.py",
                "atomic_io.py", "build_state.py", "bibliography.py",
                "manuscript_snapshot.py", "review.py", "paper_report.py",
-               "wordcount.sh", "wordcount.py", "report.py", "project_hooks.py")
+               "wordcount.sh", "wordcount.py", "report.py", "project_hooks.py",
+               "paths.py", "document_project.py")
 INTERMEDIATES = {"stats-rendered.json", "paper.resolved.typ"}
 
 
@@ -225,9 +231,10 @@ def build(mode: str, root: Path = ROOT) -> int:
     return 1
 
 
-def check(root: Path = ROOT) -> list[dict]:
+def check(root: Path = ROOT, outputs=("paper.pdf", "paper.docx")) -> list[dict]:
     out = []
-    for output, recipe in (("paper.pdf", "just paper"), ("paper.docx", "just docx")):
+    recipes = {"paper.pdf": "just paper", "paper.docx": "just docx"}
+    for output, recipe in ((o, recipes[o]) for o in outputs):
         status = "current"
         try:
             if not (root / output).is_file():
@@ -251,6 +258,10 @@ def check(root: Path = ROOT) -> list[dict]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("paper", "resolve", "docx", "check", "stamp"))
+    # A manuscript.toml project with no lib/template.typ builds its PDFs as
+    # documents but still exports paper.docx by the paper's route: its
+    # check-build asks about that one output (4.1.1).
+    parser.add_argument("--output", choices=("paper.pdf", "paper.docx"), action="append")
     args = parser.parse_args()
     try:
         if args.command == "stamp":
@@ -258,12 +269,13 @@ def main() -> int:
             return 0
         if args.command != "check":
             return build(args.command)
-        rows = check()
+        rows = check(outputs=args.output or ("paper.pdf", "paper.docx"))
         for row in rows:
             if row["status"] != "current":
                 print(f"{row['status'].upper()}: {row['output']} -- rebuild: {row['command']}")
         if all(row["status"] == "current" for row in rows):
-            print("paper.pdf and paper.docx are current with the source")
+            print(" and ".join(r["output"] for r in rows) + " "
+                  + ("is" if len(rows) == 1 else "are") + " current with the source")
             return 0
         return 1
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:

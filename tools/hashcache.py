@@ -106,9 +106,30 @@ def sha(p: Path) -> str:
 # and analysis/uv.lock are the analysis environment and are hashed whole.
 # A hash recorded before this (of the raw bytes) is still accepted while the
 # file is unchanged, so upgrading marks nothing stale.
+#
+# 4.1.1: from 4.0.0 a paper's own version is a constant "0.0.0" and the
+# release moves in the paper-scaffold pin instead: the dependency string in
+# pyproject.toml, and in uv.lock the root package's requires-dist entry and
+# the paper-scaffold [[package]] block (its version, git commit and
+# dependency list). Those are removed too, so moving the pin alone marks
+# nothing stale. What the toolchain pulls in is still counted: every other
+# locked package keeps its block, and a changed dependency moves its version
+# there. A hash of the 4.0.0 form (version line only) is still accepted while
+# the file is unchanged; the first pin move after it reads stale once, since
+# the old pin cannot be recovered from a hash (HISTORY.md 4.1.1).
 TOOLCHAIN = ("pyproject.toml", "uv.lock")
 
+# Written by `paper sync` with a header naming the release, so every pin move
+# rewrites them. They are the provenance machinery (hashing, paths), like
+# _provenance.py, which is never recorded: they cannot change a figure or a
+# number. _provenance.code_inputs() does not record them, and a record made
+# before 4.1.1 that holds them is not stale because of them.
+BOOKKEEPING = "analysis/scripts/_toolchain/"
+
 _PROJECT_VERSION = re.compile(r'(?m)^version\s*=\s*"[^"\n]*"[ \t]*\n?')
+_SCAFFOLD_PIN = re.compile(r'"paper-scaffold\s*@[^"\n]*"')
+_SCAFFOLD_SOURCE = re.compile(r'(?m)^paper-scaffold\s*=\s*\{[^\n]*\}[ \t]*$')
+_SCAFFOLD_REQUIRES = re.compile(r'\{ name = "paper-scaffold",[^}\n]*\}')
 
 
 def _without_own_version(name: str, text: str) -> str:
@@ -128,6 +149,21 @@ def _without_own_version(name: str, text: str) -> str:
                    else b for b in blocks)
 
 
+def _without_release(name: str, text: str) -> str:
+    """The recorded form: own version and the paper-scaffold pin removed."""
+    text = _without_own_version(name, text)
+    if name == "pyproject.toml":
+        text = _SCAFFOLD_PIN.sub('"paper-scaffold"', text)
+        return _SCAFFOLD_SOURCE.sub("paper-scaffold = {}", text)
+    blocks = re.split(r"(?m)^(?=\[\[package\]\]$)", text)
+    # The installed toolchain's block, not the scaffold checkout's own
+    # (editable ".") one, whose dependency list is the toolchain itself.
+    text = "".join(b for b in blocks
+                   if not (re.search(r'(?m)^name = "paper-scaffold"$', b)
+                           and not re.search(r'(?m)^source = \{ (?:virtual|editable) = "\." \}', b)))
+    return _SCAFFOLD_REQUIRES.sub('{ name = "paper-scaffold" }', text)
+
+
 def toolchain_file(rel: str) -> bool:
     """Whether a root-relative input path is a root toolchain manifest."""
     return Path(rel).as_posix() in TOOLCHAIN
@@ -142,13 +178,24 @@ def recorded_sha(root: Path, rel: str) -> str:
             for chunk in iter(lambda: fh.read(1 << 20), b""):
                 h.update(chunk)
         return "sha256:" + h.hexdigest()
-    text = _without_own_version(Path(rel).name, path.read_text(encoding="utf-8"))
+    text = _without_release(Path(rel).name, path.read_text(encoding="utf-8"))
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _sha_text(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def input_current(root: Path, rel: str, want: str) -> bool:
     """Whether input `rel` still matches its recorded hash `want`."""
+    if Path(rel).as_posix().startswith(BOOKKEEPING):
+        return True
     path = root / rel
     if sha(path) == want:
         return True
-    return toolchain_file(rel) and recorded_sha(root, rel) == want
+    if not toolchain_file(rel):
+        return False
+    text = path.read_text(encoding="utf-8")
+    name = Path(rel).name
+    return want in (_sha_text(_without_release(name, text)),
+                    _sha_text(_without_own_version(name, text)))

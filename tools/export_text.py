@@ -34,7 +34,58 @@ INVENTORY = r'''
     caption: it.caption,
   )),
 )) <review-export>]
+''' + r'''
+// A `context` element comes back from `typst query` as a bare
+// {"func": "context"}: its evaluated body is not serialized. Measure each one
+// where it is exported (depth first, fields in order, as the JSON walk sees
+// them), so the renderer can tell one that lays out nothing -- a counter reset,
+// an assertion -- from one that puts text on the page.
+#let scaffold-review-context = (context none).func()
+#let scaffold-review-walk(value) = {
+  if type(value) == content {
+    if value.func() == scaffold-review-context {
+      let size = measure(value)
+      ((width: size.width.pt(), height: size.height.pt()),)
+    } else {
+      value.fields().values().map(scaffold-review-walk).flatten()
+    }
+  } else if type(value) == array {
+    value.map(scaffold-review-walk).flatten()
+  } else if type(value) == dictionary {
+    value.values().map(scaffold-review-walk).flatten()
+  } else { () }
+}
+#context [#metadata((
+  contexts: query(<review-export>).map(it => it.value)
+    .filter(value => type(value) != dictionary or "contexts" not in value)
+    .map(scaffold-review-walk).flatten(),
+)) <review-export>]
 '''
+
+
+def context_sizes(rows: list, sizes: list) -> dict[int, dict]:
+    """Pair each `context` node in the query JSON with its measured size.
+
+    Walks in the order the Typst probe did; the counts must agree, so a walk
+    that drifts from the probe fails instead of misattributing a size.
+    """
+    nodes: list[dict] = []
+
+    def walk(value):
+        if isinstance(value, list):
+            for item in value:
+                walk(item)
+        elif isinstance(value, dict):
+            if value.get('func') == 'context':
+                nodes.append(value)
+                return
+            for key, item in value.items():
+                if key != 'func':
+                    walk(item)
+    walk(rows)
+    if len(nodes) != len(sizes):
+        raise ValueError(f'measured {len(sizes)} context blocks but found {len(nodes)}')
+    return {id(node): size for node, size in zip(nodes, sizes)}
 
 
 def instrument_span(source: str, start: int, end: int, identifier: str) -> str:
@@ -65,8 +116,9 @@ def overlay(root: Path, destination: Path, sources: dict[str, str]) -> None:
 
 
 class Renderer:
-    def __init__(self, figures: list[dict]):
+    def __init__(self, figures: list[dict], contexts: dict[int, dict] | None = None):
         self.figures = figures
+        self.contexts = contexts or {}
         self.by_label = {row['label']: row for row in figures if row['label']}
         self.used: set[int] = set()
 
@@ -167,6 +219,16 @@ class Renderer:
                     'box', 'align', 'pad', 'link', 'caption', 'lr', 'text',
                     'upright', 'bold', 'italic', 'cancel', 'class'):
             return self.text(value['body'])
+        if kind == 'context':
+            # Typst serializes a `context` without its evaluated body. One that
+            # measured zero laid out nothing (a counter reset, an assertion),
+            # so its evaluated result is empty. One that puts anything on the
+            # page carries text this export cannot read: refuse it.
+            size = self.contexts.get(id(value))
+            if size is not None and size['width'] == 0 and size['height'] == 0:
+                return ''
+            raise ValueError("unsupported Typst content 'context' that renders "
+                             'visible output; export stopped to avoid losing text')
         if kind == 'footnote':
             return ' [Footnote: ' + self.text(value['body']) + ']'
         raise ValueError(f'unsupported Typst content {kind!r}; export stopped to avoid losing text')
@@ -255,12 +317,17 @@ def export(root: Path, document: str | None = None) -> list[Path]:
             if result.stderr:
                 print(result.stderr, file=sys.stderr, end='')
             rows = json.loads(result.stdout)
+            measured = [row for row in rows if 'contexts' in row]
+            rows = [row for row in rows if 'contexts' not in row]
+            if len(measured) != 1:
+                raise ValueError('context measurement missing from the query')
+            contexts = context_sizes(rows, measured[0]['contexts'])
             inventory = [row for row in rows if row.get('inventory')]
             bodies = [row for row in rows if 'id' in row]
             actual = [row['id'] for row in bodies if row['id'] != 'front']
             if actual != expected or len(inventory) != 1:
                 raise ValueError(f'exported parts differ from expected order: {actual} vs {expected}')
-            renderer = Renderer(inventory[0]['figures'])
+            renderer = Renderer(inventory[0]['figures'], contexts)
             blocks = ['REVIEW COPY: Images, table bodies, and reference lists omitted. '
                       'Bracketed citation/reference keys identify source labels. Equations use plain-text notation.']
             for row in sorted(bodies, key=lambda row: row['id'] != 'front'):

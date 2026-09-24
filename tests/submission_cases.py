@@ -8,7 +8,8 @@ to the journal layout; a missing <si-start> probe is a clear error, not a
 wrong page range; an absent cover-letter.typ is tolerated and leaves no stale
 letter behind; a paper with no SI or a separate SI target ships the right
 set; an SI citing the main list gets its own local list and qualified
-main-text references; and a recorded output reads stale when its source moves.
+main-text references; a recorded output reads stale when its source moves;
+and a captured build's tools import nothing the capture leaves out.
 """
 from __future__ import annotations
 
@@ -322,6 +323,41 @@ parts = ["si"]
         # --note never fails; the strict check does.
         self.assertEqual(submission.main(["check", "--note", "--root", str(self.root)]), 0)
         self.assertEqual(submission.main(["check", "--root", str(self.root)]), 1)
+
+    def test_captured_tools_import_only_captured_tools(self):
+        """A captured build's tools run with nothing else on their path.
+
+        4.1.0 captured export_docx.py but not the paths.py it imports, so
+        `just main-docx` died with ModuleNotFoundError. Copy BUILD_TOOLS the
+        way materialize() does, check every tools/ import (lazy ones too)
+        resolves inside the copy, then run the copied export_docx.py alone.
+        """
+        import ast
+        import os
+        from build_state import BUILD_TOOLS
+        from paths import locate
+        tools = self.root / "captured" / "tools"
+        tools.mkdir(parents=True)
+        for name in BUILD_TOOLS:
+            shutil.copyfile(locate(ROOT, f"tools/{name}"), tools / name)
+        toolchain = {p.stem for p in (ROOT / "tools").glob("*.py")}
+        captured = {p.stem for p in tools.glob("*.py")}
+        for path in tools.glob("*.py"):
+            for node in ast.walk(ast.parse(path.read_text())):
+                if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                    names = [node.module]
+                elif isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                else:
+                    continue
+                for module in names:
+                    module = module.split(".")[0]
+                    if module in toolchain:
+                        self.assertIn(module, captured, f"{path.name} imports {module}")
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        run = subprocess.run([sys.executable, "-E", str(tools / "export_docx.py"), "--help"],
+                             cwd=tools.parent, env=env, capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0, run.stderr)
 
 
 def run_cases() -> bool:

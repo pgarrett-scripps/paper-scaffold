@@ -78,6 +78,10 @@ def code_inputs() -> dict[str, str]:
     number's value, so recording them means the files guaranteed to be irrelevant
     to the output are also the ones guaranteed to invalidate everything. Editing a
     docstring here used to mark every asset in the manuscript stale.
+
+    _toolchain/ (hashcache.BOOKKEEPING) is the same machinery, and `paper sync`
+    rewrites it with a header naming the release: recorded, every pin move
+    marked every figure and number stale (4.1.1).
     """
     skip = {"analysis/scripts/_provenance.py",
             "analysis/scripts/_assets.py",
@@ -98,7 +102,8 @@ def code_inputs() -> dict[str, str]:
             continue                              # stdlib, or outside the paper
         if not rel.startswith("analysis/") or not p.is_file():
             continue
-        if "/.venv/" in rel or "/__pycache__/" in rel or rel in skip:
+        if ("/.venv/" in rel or "/__pycache__/" in rel or rel in skip
+                or rel.startswith(hashcache.BOOKKEEPING)):
             continue
         out[rel] = sha(p)
     return out

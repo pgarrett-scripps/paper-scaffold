@@ -2,6 +2,7 @@
 names one directly instead of by id."""
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -283,6 +284,73 @@ def toolchain_version_cases() -> bool:
                         ("uv.lock", lock.replace('"10.0.0"', '"11.0.0"'))):
             (root / n).write_text(text)
             expect(f"{n} real change", hashcache.input_current(root, n, rec[n]), False)
+
+    # 4.x: the paper's version is constant and the release moves in the
+    # paper-scaffold pin. Moving it (pyproject dependency, lock requires-dist,
+    # the paper-scaffold block) leaves a record current; a dependency the new
+    # toolchain locks differently does not.
+    def pinned(tag, commit, pillow="10.0.0"):
+        py = ('[project]\nname = "paper"\nversion = "0.0.0"\ndependencies = [\n'
+              f'  "paper-scaffold @ git+https://github.com/o/paper-scaffold@v{tag}",\n]\n')
+        lock = ('version = 1\n\n[[package]]\nname = "paper"\nversion = "0.0.0"\n'
+                'source = { virtual = "." }\ndependencies = [\n'
+                '    { name = "paper-scaffold" },\n]\n\n[package.metadata]\n'
+                'requires-dist = [{ name = "paper-scaffold", git = '
+                f'"https://github.com/o/paper-scaffold?rev=v{tag}" }}]\n\n'
+                '[[package]]\nname = "paper-scaffold"\n'
+                f'version = "{tag}"\nsource = {{ git = "https://github.com/o/'
+                f'paper-scaffold?rev=v{tag}#{commit}" }}\ndependencies = [\n'
+                '    { name = "pillow" },\n]\n\n[[package]]\nname = "pillow"\n'
+                f'version = "{pillow}"\nsource = {{ registry = "https://pypi.org/simple" }}\n')
+        return {"pyproject.toml": py, "uv.lock": lock}
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        for n, text in pinned("4.1.0", "a" * 40).items():
+            (root / n).write_text(text)
+        rec = {n: hashcache.recorded_sha(root, n) for n in ("pyproject.toml", "uv.lock")}
+        # A 4.0.0-form record (own version line only) is accepted while unchanged.
+        old = {n: "sha256:" + hashlib.sha256(hashcache._without_own_version(
+                   n, (root / n).read_text()).encode()).hexdigest() for n in rec}
+        for n in rec:
+            expect(f"{n} 4.0 form unchanged", hashcache.input_current(root, n, old[n]), True)
+        for n, text in pinned("4.1.1", "b" * 40).items():
+            (root / n).write_text(text)
+        for n in rec:
+            expect(f"{n} pin move", hashcache.input_current(root, n, rec[n]), True)
+        (root / "uv.lock").write_text(pinned("4.1.1", "b" * 40, pillow="11.0.0")["uv.lock"])
+        expect("uv.lock pin move with a dependency change",
+               hashcache.input_current(root, "uv.lock", rec["uv.lock"]), False)
+
+    # `paper sync` rewrites analysis/scripts/_toolchain/ with the release in a
+    # header: never recorded, and an older record holding one is not stale.
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        scripts = root / "analysis" / "scripts"
+        (scripts / "_toolchain").mkdir(parents=True)
+        (scripts / "_toolchain" / "tc_probe.py").write_text("# release 4.1.0\n")
+        (scripts / "helper_probe.py").write_text("X = 1\n")
+        import importlib.util
+        for name, path in (("tc_probe", scripts / "_toolchain" / "tc_probe.py"),
+                           ("helper_probe", scripts / "helper_probe.py")):
+            spec = importlib.util.spec_from_file_location(name, path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            sys.modules[name] = module
+        with_paper = _provenance.PAPER
+        _provenance.PAPER = root.resolve()
+        try:
+            recorded = _provenance.code_inputs()
+        finally:
+            _provenance.PAPER = with_paper
+            sys.modules.pop("tc_probe")
+            sys.modules.pop("helper_probe")
+        expect("helper recorded", "analysis/scripts/helper_probe.py" in recorded, True)
+        expect("_toolchain not recorded",
+               any("_toolchain" in k for k in recorded), False)
+        rel = "analysis/scripts/_toolchain/tc_probe.py"
+        want = hashcache.recorded_sha(root, rel)
+        (root / rel).write_text("# release 4.1.1\n")
+        expect("old _toolchain record after sync", hashcache.input_current(root, rel, want), True)
     return ok
 
 

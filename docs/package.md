@@ -320,7 +320,7 @@ pin. A generator that needs only `atomic_io`, `manifest_validation`,
 ## Upgrading a paper on 4.x
 
 ```bash
-uv add "paper-scaffold @ git+https://github.com/pgarrett-scripps/paper-scaffold@v4.1.0"
+uv add "paper-scaffold @ git+https://github.com/pgarrett-scripps/paper-scaffold@v4.1.1"
 uv run paper sync          # prints the Upgrade: lines, rewrites the generated files
 just paper && just verify
 ```

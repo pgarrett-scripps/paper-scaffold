@@ -71,6 +71,59 @@ def findings(project: Project, document: Document, cfg) -> list[Finding]:
             rows = pc.check_bibliography(project.root, cfg,
                         bib_paths=[project.root / part.bibliography], cited_keys=cited)
             findings += [replace(row, where=part.bibliography) for row in rows]
+        findings += routing(project, document)
     finally:
         typst_prose.STATS_JSON = saved
     return findings
+
+
+def routing(project: Project, document: Document) -> list[Finding]:
+    """`misrouted-citation` for chapter bibliographies (the SI rule, per part).
+
+    Alexandria routes a citation to a chapter's list by its prefix. `@pep-x`
+    written in the UNO chapter compiles in the whole thesis and prints in the
+    peptacular chapter's references, where a reader of UNO never looks; a
+    bare `@x` whose entry is in the chapter's own file misses that list. Only
+    a key the named bibliography really holds is reported, so a figure label
+    that happens to share a prefix is never flagged.
+    """
+    lists = {name: part for name, part in project.parts.items()
+             if part.bibliography and part.citation_prefix}
+    keys: dict[str, set[str]] = {}
+    for name, part in lists.items():
+        try:
+            keys[name] = {e["_key"] for e in pc._bib_entries(project.root / part.bibliography)}
+        except (OSError, ValueError):
+            keys[name] = set()          # check_bibliography reports the parse
+    out = []
+    for name in document.parts:
+        part = lists.get(name)
+        if part is None:
+            continue
+        src = project.prose(part)
+        code = mask(src, strings=True)
+        for m in re.finditer(r"(?<![\w\\:./-])" + typst_prose.CITE, mask(src)):
+            if not code[m.start():m.start() + 1].strip():
+                continue                # inside a string, not a citation
+            key = m.group(0)[1:]
+            if key.startswith(part.citation_prefix):
+                continue
+            other = next((o for o, p in lists.items() if o != name
+                          and key.startswith(p.citation_prefix)
+                          and key[len(p.citation_prefix):] in keys[o]), None)
+            if other is not None:
+                bare = key[len(lists[other].citation_prefix):]
+                message = (f"@{key} in part {name} prints in part {other}'s "
+                           f"reference list ({lists[other].bibliography}), not "
+                           f"this chapter's; add the entry to {part.bibliography} "
+                           f"and write @{part.citation_prefix}{bare}")
+            elif key in keys[name]:
+                message = (f"@{key} in part {name} has no "
+                           f"{part.citation_prefix!r} prefix, so it misses the "
+                           f"chapter's reference list; write "
+                           f"@{part.citation_prefix}{key}")
+            else:
+                continue
+            out.append(Finding("misrouted-citation", "error", message,
+                               subject=key, where=part.source))
+    return out

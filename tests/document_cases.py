@@ -264,6 +264,44 @@ Excluded block code
             keys = [e["_key"] for e in bib_audit._entries()]
         self.assertEqual(keys, ["one-smith20"])
 
+    def test_part_citation_routing(self):
+        """4.1.1: misrouted-citation runs per part on a manuscript.toml
+        project. A citation into another chapter's list, or a bare key the
+        chapter's own file holds, is an error; a label sharing a prefix and a
+        correctly routed key are not."""
+        manifest = MANIFEST
+        for name in ("one", "two"):
+            manifest = manifest.replace(
+                f'source = "chapters/{name}.typ"',
+                f'source = "chapters/{name}.typ"\nbibliography = "chapters/{name}.bib"\n'
+                f'citation_prefix = "{name}-"')
+        self.write("manuscript.toml", manifest)
+        self.write("chapters/one.bib", "@article{smith20, title={T}, year={2020}}\n")
+        self.write("chapters/two.bib", "@article{jones21, title={U}, year={2021}}\n")
+        self.write("chapters/one.typ",
+                   "// >>> BODY START\nFine @one-smith20. Cross @two-jones21. "
+                   "Bare @smith20. Label @two-fig. Code `@smith20`.\n// <<< BODY END\n")
+        run = self.stock("prose_check.py")
+        rows = [l for l in run.stdout.splitlines() if "misrouted-citation" in l
+                or "prints in part" in l or "has no 'one-' prefix" in l]
+        text = "\n".join(rows)
+        self.assertIn("@two-jones21 in part one prints in part two's", text)
+        self.assertIn("@smith20 in part one has no 'one-' prefix", text)
+        self.assertNotIn("two-fig", text)
+        self.assertNotIn("@one-smith20 in part", text)
+        self.assertEqual(text.count("has no 'one-' prefix"), 1, text)  # not the code span
+        self.assertNotEqual(run.returncode, 0, run.stdout)
+
+    def test_docx_only_staleness_check(self):
+        """A manuscript.toml project without lib/template.typ exports
+        paper.docx by the paper's route; check-build asks about it alone."""
+        import build_state
+        rows = build_state.check(self.root, outputs=("paper.docx",))
+        self.assertEqual([(r["output"], r["status"]) for r in rows],
+                         [("paper.docx", "missing")])
+        text = (ROOT / "justfile").read_text()
+        self.assertEqual(text.count("build_state check --output paper.docx"), 2)
+
     def test_documents_outputs_for_clean(self):
         run = self.stock("documents.py", "outputs")
         self.assertEqual(run.returncode, 0, run.stderr)

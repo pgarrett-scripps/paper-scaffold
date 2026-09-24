@@ -1443,6 +1443,9 @@ def main_documents() -> int:
     findings += check_todos(extra)
     for doc in covering(project):
         findings += document_findings(project, doc, cfg)
+    # A paper.typ + si-body.typ pair kept under manuscript.toml still gets
+    # the SI routing rule; with neither file this finds nothing.
+    findings += check_si_bibliography(cfg=cfg)
     return report(list(dict.fromkeys(findings)), cfg,
                   show_suppressed="--show-suppressed" in sys.argv,
                   strict="--strict" in sys.argv)

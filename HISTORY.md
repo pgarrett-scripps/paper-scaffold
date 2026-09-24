@@ -64,6 +64,61 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 4.1.1
+
+The review-text export refused the dissertation: "unsupported Typst content
+'context'". Its `supplemental-content` resets the heading counter inside a
+`context`, and `typst query` serializes a `context` as a bare
+`{"func": "context"}`, without its evaluated body.
+
+- **`export_text` measures every `context` in the exported content** (the
+  probe walks the queried bodies in the order the JSON walk does, and the
+  counts must agree). One that measures zero laid out nothing (a counter
+  reset, an assertion), so its evaluated result is empty and it exports as
+  nothing. One with any visible output still stops the export ("'context'
+  that renders visible output"), since its text cannot be read back. Alexandria
+  citation groups are unchanged. A single paper's review text is byte-identical.
+- **The captured build carries `paths.py` and `document_project.py`.**
+  `BUILD_TOOLS` missed both, so `just main-docx`, `si-docx` and `preflight`
+  failed with "No module named 'paths'" when the captured `export_docx.py`
+  ran. A test now runs a captured tool with only the captured tools on its
+  path.
+- **A pin move leaves nothing stale.** `analysis/scripts/_toolchain/*.py`
+  (the release header `paper sync` writes) is no longer a figure input, and
+  the root `pyproject.toml` / `uv.lock` are hashed without the paper-scaffold
+  pin, source and lock entry, so moving 4.1.0 to 4.1.1 changes no record.
+  Any other dependency change still reads stale.
+- **`paper_word_reference.guess()` snaps line spacing to 0.05.** A template
+  at w:line 259 guessed 1.08, which the `[word.style]` validator rejects;
+  it now guesses 1.1.
+- **`paper sync --check` and `paper migrate` report a bad project.toml in one
+  line.** A `[slides] theme` typo or missing file raised a `SyncError`
+  traceback; now it prints `paper sync --check: ...` / `paper migrate: ...`
+  and exits nonzero.
+- **`paper migrate` keeps the paper's `requires-python` and `description`.**
+  They were replaced by `>=3.10` and dropped. The base release's stock
+  toolchain description is still not carried over.
+- **Deck records are machine-independent.** `slides.py` keyed the installed
+  deck tools by their site-packages path, so a deck read stale on every
+  other checkout; they are keyed `tools/<name>` like the paper's record.
+- **`misrouted-citation` and the Word staleness check run on manuscript.toml
+  projects.** Each part with a `citation_prefix` is checked: a citation into
+  another part's list (`@pep-x` in the UNO chapter, when the peptacular
+  bibliography holds `x`) or a bare key the part's own file holds is an
+  error. The SI rule runs too when `si-body.typ` exists. Without
+  `lib/template.typ`, `check-build` and `docx-check` now check `paper.docx`
+  (`build_state check --output paper.docx`).
+
+Upgrade: `uv add` the v4.1.1 pin, `uv run paper sync`, then `just paper`.
+Nothing in the manuscript changes. A figure whose record still lists a root
+`pyproject.toml` / `uv.lock` in the 4.0 form (before the version was
+stripped) reads stale once on this pin move: `just assets` re-records it, and
+later moves stay current. A slide deck built before 4.1.1 reads stale once:
+rebuild it with `just slides <name>` when you next need it. A
+manuscript.toml project may now see `misrouted-citation` errors in
+`just prose-check`; fix the citation, or allow it in `prose-check.toml` with
+a reason.
+
 ## 4.1.0
 
 Multi-document projects on the stock recipes, a paper-owned slide theme, and

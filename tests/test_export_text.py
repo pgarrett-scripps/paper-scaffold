@@ -73,6 +73,27 @@ Funding statement survives.
             export(self.root)
         self.assertEqual(output.read_bytes(), original)
 
+    def test_context_that_lays_out_nothing_exports_empty(self):
+        """`typst query` hands back `context` without its evaluated body. One
+        that measures zero (a counter reset, an assertion) evaluated to
+        nothing, so it exports as nothing; the dissertation's supplemental
+        heading reset is this case. One with visible output still refuses."""
+        (self.root / 'included.typ').write_text(
+            'Before #context { counter(heading).update((1, 0)) } after.\n\n'
+            '#context { assert(query(heading).len() > 0); none }\n'
+            '#figure(rect(), caption: [Reset #context counter("x").update(1) caption.])\n')
+        output, = export(self.root)
+        text = output.read_text()
+        # Only the context goes: the spaces either side of it stay.
+        self.assertRegex(text, r'Before +after\.')
+        self.assertRegex(text, r'Figure 1: Reset +caption\.')
+        (self.root / 'included.typ').write_text(
+            'Before #context { counter(heading).update((1, 0)) } after '
+            '#context [page #counter(page).display()].\n')
+        with self.assertRaisesRegex(ValueError, "'context' that renders visible output"):
+            export(self.root)
+        self.assertEqual(output.read_text(), text)
+
     def test_si_contents_becomes_the_word_sentence(self):
         """`#si-contents` is a `context` block the export refuses to drop;
         the review copy writes in the sentence the Word export uses."""
@@ -134,6 +155,10 @@ class RendererTests(unittest.TestCase):
     def test_unknown_construct_is_not_silently_deleted(self):
         with self.assertRaisesRegex(ValueError, 'export stopped'):
             Renderer([]).text({'func': 'unsupported-new-construct', 'body': 'Important text'})
+
+    def test_unmeasured_context_is_not_silently_deleted(self):
+        with self.assertRaisesRegex(ValueError, 'export stopped'):
+            Renderer([]).text({'func': 'context'})
 
     def test_citation_group_keys_are_retained(self):
         state = {'func': 'state-update', 'key': '__alexandria-config'}
