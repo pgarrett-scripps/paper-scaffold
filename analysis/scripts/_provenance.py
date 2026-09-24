@@ -82,6 +82,10 @@ def code_inputs() -> dict[str, str]:
     _toolchain/ (hashcache.BOOKKEEPING) is the same machinery, and `paper sync`
     rewrites it with a header naming the release: recorded, every pin move
     marked every figure and number stale (4.1.1).
+
+    Hashed as recorded_sha() hashes them: a module `paper sync` wrote is
+    hashed without the release in its GENERATED header, so a pin move alone
+    changes no record, and an edit to its body still does (4.1.2).
     """
     skip = {"analysis/scripts/_provenance.py",
             "analysis/scripts/_assets.py",
@@ -105,7 +109,7 @@ def code_inputs() -> dict[str, str]:
         if ("/.venv/" in rel or "/__pycache__/" in rel or rel in skip
                 or rel.startswith(hashcache.BOOKKEEPING)):
             continue
-        out[rel] = sha(p)
+        out[rel] = recorded_sha(PAPER, rel)
     return out
 
 
@@ -114,7 +118,8 @@ def declared_inputs(paths) -> dict[str, str]:
 
     The root pyproject.toml and uv.lock are hashed without the project's own
     version line (tools/hashcache.py says why), so a scaffold upgrade that
-    bumps it does not mark every figure and number stale.
+    bumps it does not mark every figure and number stale; a file `paper sync`
+    wrote (analysis/scripts/_stats.py, say) without the release in its header.
     """
     out: dict[str, str] = {}
     for src in paths:
