@@ -21,6 +21,26 @@ Use this document when you:
 Report failures as findings with the file and line. Do not rewrite the paper
 unasked.
 
+## Proportion: ask for the smallest fix
+
+Reviewers raise good points, but a paper that answered every one with a new
+figure, SI section or experiment would be twice as long and no clearer. The
+review skills hold every request to this order, cheapest first:
+
+1. a sentence or phrase in the main text;
+2. a scope statement in the Limitations ("tested on one instrument; other
+   settings may need retuning");
+3. a citation, or a pointer to the software's documentation or repository;
+4. citing an asset the paper already has;
+5. only then a new figure, table, SI section or experiment.
+
+A request at step 5 names the headline claim that cannot stand without it.
+A methods paper that states its scope honestly is complete; it does not have
+to pre-empt every question. One figure that walks a small example through
+the whole method answers "show the method"; it is never one figure per step.
+An asset the paper already has but never cites (a sweep, a comparison) is
+answered by one citing sentence.
+
 ## Where the review skills use this
 
 The `paper` plugin's skills look for these problems in their own passes and
@@ -29,11 +49,11 @@ cite, not a list they run.
 
 | Skill | What it takes from here |
 |---|---|
-| `/paper:peer-review` | The methods-and-statistics reviewer's concerns: undefined tolerances, comparators, held-out data and settings, parameters, contribution versus plumbing, each algorithm step questioned, the method shown on a toy example and in pseudo-code, physical assumptions, downstream benefit, availability (principles 2 to 6, 8 to 10) |
+| `/paper:peer-review` | The methods-and-statistics reviewer's concerns: undefined tolerances, comparators, held-out data and settings, parameters, contribution versus plumbing, each algorithm step questioned, the method shown on a toy example and in pseudo-code, physical assumptions, downstream benefit, availability (principles 2 to 6, 8 to 10), each held to the smallest fix above |
 | `/paper:story-review` | Goal, user and scope up front; Introduction and Limitations agree (principle 1) |
 | `/paper:claim-audit` | "Preserved", "negligible", "comparable" with no tolerance and no number (principle 2) |
-| `/paper:figure-review`, `/paper:new-figure` | The figure checklist below; figure-review also lists the algorithm steps and named phenomena that no figure shows (principle 3) |
-| `/paper:methods-vs-code` | Every parameter with its purpose, range and effect; search settings with a reason; config keys that exist in the pinned version (principle 6) |
+| `/paper:figure-review`, `/paper:new-figure` | The figure checklist below; figure-review also asks whether one figure shows how the method works (principle 3) |
+| `/paper:methods-vs-code` | Parameters a reader could not use without guessing; non-default search settings with no reason; config keys that exist in the pinned version (principle 6) |
 | `/paper:prose-review` | Promotional headings, informal verbs, adjectives where a number exists (principle 10) |
 | `/paper:intro-review` | The Introduction on its own: problem sized from the literature, each existing approach with its gap, terms and formats defined, aim, scope and design with reasons, no results before the Results (principles 1 and 7) |
 | `/paper:literature-check` | The Introduction surveys existing approaches before it states the gap (principle 7) |
@@ -50,7 +70,7 @@ The experiment checklist has no skill: use it by hand before collecting data.
    tolerance stated in Methods and a number in Results.
 3. Every factual claim in the Introduction is cited or points to our own
    result.
-4. The method has a schematic on a toy example and pseudo-code, in the main
+4. The method has one schematic on a toy example, or pseudo-code, in the main
    text or the SI.
 5. There is at least one comparison against an existing tool or a naive
    baseline, not only against the unprocessed input.
@@ -149,16 +169,18 @@ passed" holds up.
 Reviewers could not tell what the algorithm did from prose and real-data plots
 alone. Several independently asked for the same picture.
 
-- Draw one schematic per step on a small grid or a few points: input, rule
-  and output, with kept and removed items marked.
+- Draw one schematic that walks a small grid or a few points through the
+  steps: input, rule and output, with kept and removed items marked. One
+  figure, not one per step.
 - State the dimensionality and the unit of each operation: per point, per
   spectrum or per feature, and whether it works in 1D or 2D.
 - Define every term before first use and keep it fixed, for example "point"
   versus "peak" or "run" versus "gap".
-- Give pseudo-code with the defaults written in. Where the method merges or
+- Give pseudo-code with the defaults written in (the SI or a documented
+  function in the code repository is enough). Where the method merges or
   aggregates data, explain how it decides and what it can get wrong.
-- Illustrate every artifact the method targets. A named phenomenon with no
-  picture reads as unsupported.
+- Illustrate the main artifact the method targets, in that same figure where
+  possible. A named phenomenon with no picture reads as unsupported.
 
 ### 4. Compare against something other than yourself
 
@@ -183,12 +205,14 @@ used for reporting, was flagged as limiting every conclusion.
 
 - Keep tuning and evaluation data separate. If they overlap, say so and add a
   held-out check.
-- Test on more than one instrument, lab or acquisition setting, and say why
-  the main dataset was chosen.
+- Test on more than one instrument, lab or acquisition setting where the
+  claim is general; otherwise say why the main dataset was chosen and scope
+  the claim to it in the Limitations.
 - Express parameters in physical units (seconds, ppm, ion mobility) rather
   than counts that depend on acquisition settings, or give the conversion.
 - Give a tuning procedure a new user can follow, or an automatic default,
-  plus a sensitivity plot for each key parameter.
+  plus a sensitivity check for the one or two parameters a headline result
+  depends on.
 - Report every acquisition parameter that affects the method (for a mass
   spectrometer, ramp time, mass range, cycle time) for every dataset.
 
@@ -197,10 +221,12 @@ used for reporting, was flagged as limiting every conclusion.
 An unexplained parameter list read as opacity, and unjustified search settings
 undermined the metrics built on them.
 
-- Give a table of every exposed parameter: purpose, default, range and
-  effect. Mark which parameters matter and which rarely need changing.
-- Justify the downstream software and its settings (tolerances, ranges,
-  filters). If a metric depends on them, they are part of the method.
+- Give a table of the parameters a user sets or that change a reported
+  result: purpose, default and effect. The rest can point to the software's
+  documentation. Mark which parameters matter and which rarely need changing.
+- Justify the downstream software settings that differ from its defaults or
+  from common practice, where a metric depends on them. A citation to the
+  convention is a justification.
 - Anything in an SI table must be discussed in the text or removed.
 - Say exactly what changes in the output files and what stays untouched.
 

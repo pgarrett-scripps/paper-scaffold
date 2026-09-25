@@ -115,44 +115,62 @@ earns no comment.
 - **A comparator other than the input.** Showing the output resembles what
   went in does not show the method is useful. Ask for an existing tool and
   a naive baseline (a fixed threshold, random removal at matched size); if
-  the baseline does as well, the method is not the contribution.
+  the baseline does as well, the method is not the contribution. A stated
+  reason there is no comparable tool can satisfy this.
 - **Generalisation.** Were parameters tuned on the data used to report
-  performance? Is there held-out data, and more than one instrument, lab or
-  setting? Why was the main dataset chosen?
-- **Parameters and settings.** Every exposed parameter with its purpose,
-  default, range and effect; downstream software settings justified when a
-  metric depends on them; parameters in physical units or with the
-  conversion; a sensitivity check for those that matter.
+  performance? Is there held-out data? Why was the main dataset chosen? A
+  single instrument or dataset is usually answered by a scope statement in
+  the Limitations; ask for new data only when a headline claim is general.
+- **Parameters and settings.** The parameters a user sets or that change a
+  reported result, with purpose, default and effect (a pointer to the
+  software's documentation is enough for the rest); downstream settings
+  justified when they differ from defaults or common practice and a metric
+  depends on them; parameters in physical units or with the conversion; a
+  sensitivity check only for the one or two a headline result depends on.
 - **Contribution versus plumbing.** What is new, in one sentence, with
   upstream libraries credited for the rest. The reviewer writes that
   sentence; if they cannot, that is a major point. Ask whether the core
   algorithm is reusable outside the file format or tool it ships in. Engineering others have already
   done is not a contribution; breadth of validation is.
-- **Every algorithm step questioned.** For each step of the method, ask
-  in turn: what instrument or physical assumption it makes (window edges,
-  overlap, calibration); what it does to near-duplicates, isomers or
-  neighbouring signals when it pools or merges data; which downstream
-  consumer used the data it removes, and what the user gains from removing
-  it. A step whose answers are not in the text is a point.
-- **Shown, not only described.** The method is drawn on a small annotated
-  toy example and given as pseudo-code, and every artifact or phenomenon the
-  text names is pictured. A method described only in prose is a major point
-  (principle 3).
+- **The steps that decide the result.** Pick the two or three steps that
+  most change the headline numbers and ask of each: what instrument or
+  physical assumption it makes (window edges, overlap, calibration); what it
+  does to near-duplicates, isomers or neighbouring signals when it pools or
+  merges data; which downstream consumer used the data it removes, and what
+  the user gains. Collect the unanswered questions in one point; the fix is
+  usually a sentence in the Methods or the Limitations.
+- **Shown, not only described.** One figure walks a small annotated
+  example through the method, or pseudo-code gives it (the SI or the code
+  repository is fine). A method described only in prose is one major point
+  (principle 3), never one point per step.
 - **Physical assumptions.** A rule that treats the instrument or sample as
   ideal needs evidence (a calibration, a measurement, a citation) or a
   margin shown not to matter. What the method discards permanently, and who
   would need it, is stated and scoped.
 - **Downstream benefit.** A gain users care about, not only the metric the
-  method optimises.
+  method optimises (for a size reduction: search time, I/O, cost). If it is
+  not measured, one sentence saying so answers the point.
+- **What is lost, and for whom.** Name who would need the data the method
+  removes (method development, re-searching, other analytes). For a tool
+  that rewrites a file, one sentence names what in the output changes
+  (tables, fields) and what stays untouched.
 - **Availability.** Code version, DOI and data accessions in the
-  Availability section. For a software or tool paper, the licence and the
-  archive DOI also belong in the abstract, where a reader deciding whether
-  to use the tool looks first.
+  Availability section. For a software or tool paper, suggest (minor) the
+  licence and archive DOI in the abstract too, where the journal allows it:
+  a reader deciding whether to use the tool looks there first.
 
 The careful non-specialist reader's brief adds one task: after the
 section that describes the study design, list the questions it leaves open
-(why this dataset, why these settings, what was held out). Each unanswered
-question is a point.
+(why this dataset, why these settings, what was held out). Collect the ones
+the text does not answer into one point, most important first.
+
+Every reviewer asks for the smallest change that answers the point, in this
+order: a sentence in the main text, a scope statement in the Limitations, a
+citation or pointer to documentation, citing an asset the paper already
+has, and only then a new figure, SI section or experiment. A request for new
+SI or new data names the headline claim that cannot stand without it. A
+paper that states its scope honestly is not expected to pre-empt every
+question.
 
 Reviewers judge the paper, not the pipeline: mechanical matters that
 `just verify` already enforces (spelling, formatting, uncited floats) are

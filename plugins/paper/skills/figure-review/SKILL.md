@@ -35,20 +35,28 @@ edits the manuscript.
 ## Find the figures that are missing
 
 Run this before the per-asset loop. Reviewers ask for missing figures more
-often than they fault the ones that are there.
+often than they fault the ones that are there, but the answer is almost
+always one figure, not one per step. Hold every request to the smallest fix
+(the "Proportion" section of `.paper/docs/reviewer-lessons.md`, `docs/` in
+the scaffold itself).
 
-1. Read the Methods (and any algorithm description in the SI). List every
-   algorithm step, and every phenomenon, artifact or structure the text
-   names (for example, an artifact the method removes, or a gap it bridges).
-2. For each one, find the asset that shows it: a schematic, a small
-   annotated toy example, or pseudo-code (a code listing or an algorithm
-   block counts). A step or phenomenon that is only described in words is a
-   **major** finding routed to `/paper:new-figure` (principle 3 of
-   `.paper/docs/reviewer-lessons.md`, `docs/` in the scaffold itself).
-3. List every id in `assets.json` that nothing cites. One that holds a
-   sensitivity analysis, a comparison with a baseline or another tool, or a
-   parameter sweep is **major**: the evidence exists and the reader never
-   sees it. Any other uncited asset is minor.
+1. Read the Methods. Does one schematic or small annotated toy example, in
+   the paper or the SI, show how the method works as a whole? Pseudo-code
+   helps but does not replace it: reviewers ask for the picture. If nothing
+   does, that is **one major** finding routed to `/paper:new-figure`: a
+   single figure that walks a small example through the steps and shows the
+   artifacts the text names (principle 3).
+2. Inside that finding, name what the panel should show: only the steps or
+   phenomena a reader could not picture from one sentence and that a
+   reported result depends on (an artifact the method removes, a gap it
+   bridges). Never raise one finding per step, and never ask for a picture
+   of a step one sentence already makes clear.
+3. List every id in `assets.json` that nothing cites. One that holds
+   evidence a claim needs (a sensitivity analysis, a parameter sweep, a
+   comparison with a baseline or another tool, per-run results) is
+   **major**; its fix is one citing sentence
+   where the claim is made, or deleting the asset if no claim needs it.
+   Any other uncited asset is minor: cite it or delete it.
 
 ## Gather, per asset
 
@@ -88,18 +96,19 @@ For each asset, answer each of these and record the evidence:
   value with trace; do not estimate it from pixels and call that a match.
 - **What the figure is for.** Each panel answers one question, and the
   caption states it and gives the answer as a number. A panel that explains
-  a mechanism starts from a small annotated toy example before real data.
-  Every phenomenon the text names (an artifact the method removes, say) is
-  pictured somewhere. The plot type suits the data: dense 2D data in a
-  heatmap, not an overplotted scatter; a structural gap not drawn as empty
-  space; a plot type that hides the data (dense 2D data as an
-  overplotted scatter, say) is **major**, not minor. Compared conditions
+  a mechanism starts from a small annotated toy example before real data
+  (the missing-figures pass covers phenomena with no picture). The plot type
+  suits the data: dense 2D data in a heatmap, not an overplotted scatter; a
+  structural gap not drawn as empty space. A plot type that hides what the
+  citing sentence claims is **major**, not minor. Compared conditions
   share axes and scales, and the baseline sits in
   the same panel. Where the text says "preserved" or "within", the tolerance
   band or pass/fail line is drawn. Replicates and spread are shown, not only
   means. The reasons are in the figure checklist of
   `.paper/docs/reviewer-lessons.md` (`docs/` in the scaffold itself); a
-  missing schematic or panel is routed to `/paper:new-figure`.
+  missing schematic or panel is routed to `/paper:new-figure`. Prefer
+  changing, merging or cutting a panel over adding one: every new panel
+  costs the reader.
 - **Journal profile.** Read `journal.toml` and its `journals/<profile>.toml`:
   figure count against `figures-max`, printed resolution against `min-dpi`
   for rasters, and the graphical abstract against its box. `just check-journal`

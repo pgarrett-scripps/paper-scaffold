@@ -64,6 +64,36 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 5.2.1
+
+The 5.2.0 review rules asked for too much. A second blind replay on d_noise
+caught 25 of the 41 reviewer points, against 17 for 5.1.1, but peer-review
+grew from 25 points to 84 and about 30 findings asked for a new figure, SI
+section or experiment. This release holds every request to the smallest fix
+that answers it. A third replay with this wording caught 23 of the 41 points
+with about 51 majors (5.1.1 had about 49) and about 4 requests for new work.
+
+- `docs/reviewer-lessons.md` gains a "Proportion" rule: a sentence, a scope
+  statement in the Limitations, a citation or pointer to documentation, or
+  citing an existing asset comes before any new figure, SI section or
+  experiment, and a request for new work names the headline claim that
+  needs it. The principles now ask for one method figure (not one per
+  step), a scope statement in place of a second dataset when the claim is
+  not general, and parameters a user sets rather than every one.
+- `/paper:figure-review` raises at most one "missing method figure" finding,
+  naming what it should show; an uncited sweep or comparison is fixed by one
+  citing sentence.
+- `/paper:peer-review` questions the two or three steps that decide the
+  headline numbers in one point, accepts a scope statement for
+  generalisation, asks what is lost and for whom, and makes the licence in
+  the abstract a minor suggestion.
+- `/paper:methods-vs-code` marks a parameter `incomplete` only when a reader
+  would have to guess, accepts a pointer to the software's documentation,
+  asks a reason only for non-default settings, and never routes to a new SI
+  section.
+
+Upgrade: `paper-plugin-update`. No pin move is needed; nothing new can fail.
+
 ## 5.2.0
 
 The review skills, tuned from a blind replay: each ran on the d_noise paper as

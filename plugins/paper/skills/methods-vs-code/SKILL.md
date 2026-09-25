@@ -99,17 +99,25 @@ Drift is not the only gap reviewers find. Read any parameter table (main
 text or SI) and the search or software configuration files the analysis
 uses (`evidence.toml` names them), and flag:
 
-- a table row with no purpose, default, range or effect stated;
+- a parameter a reader could not use without guessing: no default, or no
+  effect stated for one a user is expected to change. A row whose name makes
+  its meaning plain, or one the pinned software's documentation covers, is
+  fine;
 - a table row the Methods never mention, or a parameter used in only one
-  experiment where the text does not say so;
+  experiment where the text does not say so (the fix is a clause in the
+  caption or the Methods);
 - a configuration key that does not exist in the pinned software version
   (check it against the `[[software]]` docs at `ref`), or one set to a
   value the version rejects or ignores;
 - a downstream search or quantification setting (enzyme, missed cleavages,
-  modifications, tolerances, FDR level) given with no reason, where a
-  reported metric depends on it.
+  modifications, tolerances, FDR level) that differs from the software's
+  default or common practice, with no reason given, where a reported metric
+  depends on it. A citation to the convention is a reason.
 
-Each is an **incomplete** row in the comparison table.
+Each is an **incomplete** row in the comparison table, and minor unless a
+reported result depends on it. The fix is a column or a phrase in the
+existing table, or a pointer to documentation; never a new SI section. An
+ignored or rejected configuration key is drift, not incompleteness.
 
 ## Compare
 
