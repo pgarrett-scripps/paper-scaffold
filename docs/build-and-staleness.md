@@ -120,6 +120,12 @@ always present and almost never acted on.
   row. Prints open counts by severity. Open blockers are a WARNING, not a
   failure; a missing ledger passes silently. See
   [working-with-ai.md](working-with-ai.md#the-review-action-ledger).
+- **`just port-check`** -- multi-document projects only: each part with an
+  `upstream` in `manuscript.toml` against its source repository (HEAD moved,
+  copied figures stale, a chapter module that sets the page). Warnings only;
+  a repository not on this machine is skipped. The one check that reads git
+  history, and only another repository's. See
+  [multi-document.md](multi-document.md#ported-parts-upstream-port-check-port-diff).
 
 `just check` deliberately does not check the audiobooks, and there is no upstream
 figure copy to compare against any more. See HISTORY.md's "Decisions reversed"

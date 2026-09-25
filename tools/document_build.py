@@ -42,8 +42,10 @@ def fingerprint(project: Project, document: Document, dependencies=()) -> dict:
             files.add(bib)
     # Hash the selected configuration, so a chapter B-only manifest change
     # does not invalidate chapter A. The full project is validated on load.
+    # A part's upstream record (tools/port.py) does not change the PDF.
     config = {"document": vars(document),
-              "parts": [vars(project.parts[p]) for p in document.parts]}
+              "parts": [{k: v for k, v in vars(project.parts[p]).items() if k != "upstream"}
+                        for p in document.parts]}
     result = {"@document": hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()}
     # --root may point at another manuscript. Fingerprint the executing tools,
     # not just a possibly older copy installed in that manuscript.

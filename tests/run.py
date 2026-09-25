@@ -107,6 +107,7 @@ CASE_MODULES = (
     "package_cases",          # paper sync, sync --check, paper migrate
     "word_table_cases",       # [word.style] table_* keys and [word.tables]
     "layout_cases",           # the built PDF: margins, figures against the profile
+    "port_cases",             # manuscript.toml upstream: ported parts, port-diff
 )
 
 

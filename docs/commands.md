@@ -20,6 +20,8 @@ Every `just` recipe a manuscript uses, in one table.
 | `just toc-graphic` / `cover-letter` | The graphical abstract in the profile's format and box; `cover-letter.typ` as a PDF, with its words and pages held to the profile's `[cover-letter]` limits |
 | `just check-submission` | Fail if a file in `submission/` is behind its source, or the cover letter is over the profile's `[cover-letter]` limit; then `check-layout` on the upload set. Not in `verify`; in `preflight` |
 | `just check-layout` | Warn on text past the margins of `paper.pdf` and on figures outside the profile's `[figures]` limits (resolution as placed, width, height, smallest type, colour mode). `--strict` fails; `--submission` adds `submission/*.pdf`. Needs poppler |
+| `just port-check` | Multi-document projects: warn where a part with an `upstream` in `manuscript.toml` has fallen behind its source repository (HEAD moved, copied figures stale, a chapter module that sets the page). In `verify` when `manuscript.toml` exists; never fails without `--strict` |
+| `just port-diff PART` | The source repository's `stats.json` at the part's recorded commit against HEAD (`--to REV`): the numbers to re-copy. Also `uv run paper port-diff PART` |
 | `just slides [name]` | Build a slide deck from `slides/` -> `slides/<name>.pdf` (all decks with no name) |
 | `just slides-handout [name]` | Build the handout form, with every `#pause` reveal flattened |
 | `just slides-check [name]` | Deck staleness plus the four slide-only prose rules. Not in `verify` |

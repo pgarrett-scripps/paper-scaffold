@@ -45,12 +45,44 @@ def body_span(src: str, name: str) -> tuple[int, int]:
     return starts[0].end(), ends[0].start()
 
 
+COMMIT = re.compile(r"[0-9a-f]{7,40}")
+
+
+@dataclass(frozen=True)
+class Upstream:
+    """Where a ported part came from: a git repository (absolute, ~, or
+    relative to the project) and the commit it was last ported from.
+    `figures` is the project-relative directory holding the part's copies of
+    that repository's figures (default: figures/ beside the part source).
+    tools/port.py reads it; docs/multi-document.md."""
+    repo: str
+    commit: str
+    figures: str | None = None
+
+
 @dataclass(frozen=True)
 class Part:
     id: str
     source: str
     bibliography: str | None = None
     citation_prefix: str = ""
+    upstream: Upstream | None = None
+
+
+def upstream(root: Path, name: str, spec) -> Upstream | None:
+    if spec is None:
+        return None
+    keys(spec, {"repo", "commit", "figures"}, f"part {name} upstream")
+    repo, commit, figures = spec.get("repo"), spec.get("commit"), spec.get("figures")
+    if not isinstance(repo, str) or not repo.strip():
+        raise ValueError(f"{name}: upstream.repo must be a path to a git repository")
+    if not isinstance(commit, str) or not COMMIT.fullmatch(commit):
+        raise ValueError(f"{name}: upstream.commit must be a 7-40 character "
+                         f"lowercase hex commit, got {commit!r}")
+    if figures is not None:
+        if not local_path(root, figures, exists=False).is_dir():
+            raise ValueError(f"{name}: upstream.figures is not a directory: {figures}")
+    return Upstream(repo, commit, figures)
 
 
 @dataclass(frozen=True)
@@ -129,7 +161,8 @@ def load_project(root: Path) -> Project:
             if not ID.fullmatch(name) or name == "all":
                 raise ValueError(f"invalid {collection} id: {name!r}")
     for name, spec in data["parts"].items():
-        keys(spec, {"source", "bibliography", "citation_prefix"}, f"part {name}")
+        keys(spec, {"source", "bibliography", "citation_prefix", "upstream"},
+             f"part {name}")
         source = spec.get("source")
         path = local_path(root, source)
         if path.suffix != ".typ":
@@ -141,7 +174,8 @@ def load_project(root: Path) -> Project:
         prefix = spec.get("citation_prefix", "")
         if not isinstance(prefix, str):
             raise ValueError(f"{name}: citation_prefix must be a string")
-        parts[name] = Part(name, source, bib, prefix)
+        parts[name] = Part(name, source, bib, prefix,
+                           upstream(root, name, spec.get("upstream")))
     if len({p.source for p in parts.values()}) != len(parts):
         raise ValueError("each part must have a distinct source")
     for name, spec in data["documents"].items():

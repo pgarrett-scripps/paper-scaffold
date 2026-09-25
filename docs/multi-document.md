@@ -120,7 +120,7 @@ project needs no `-dissertation` or `chapter-` variants of them:
 | `just bib-audit` | every part's bibliography, keys reported with their `citation_prefix` |
 | `just check-build` | `documents check all`, plus the default document's Word export when `lib/template.typ` exists |
 | `just clean` | each document's PDF and its `.docx` sibling, as well as the stock outputs |
-| `just verify` | the stock stages over the above; word limits and the journal profile are skipped with a note |
+| `just verify` | the stock stages over the above, plus `just port-check` (ported parts, below); word limits and the journal profile are skipped with a note |
 
 Project checks with no stock counterpart (house prose rules, float lists)
 stay `[stages] verify` entries in `project.toml` (docs/hooks.md).
@@ -212,6 +212,55 @@ every part (table above); keep project-specific checks in `project.toml`'s
 Copied numbers and figures do not automatically gain analysis provenance.
 Migrating rendered paper text retains that limitation until declarations are
 deliberately adopted. Do not label an imported value as freshly recomputed.
+
+## Ported parts: `upstream`, `port-check`, `port-diff`
+
+A chapter carried over from a paper in its own repository (a dissertation
+chapter that is a published article) is a copy of that paper at one commit.
+Record the commit, so the project can tell when the paper has moved on:
+
+```toml
+[parts.methods]
+source = "chapters/methods/chapter.typ"
+
+[parts.methods.upstream]
+repo = "~/Repos/methods-paper"     # absolute, ~, or relative to this project
+commit = "57abc15"                 # the commit last ported from
+figures = "chapters/methods/figures"   # optional; default figures/ beside the source
+```
+
+(`source` already names the part's Typst file, hence `upstream`.) The key is
+optional and validated like the rest of the manifest; it does not enter the
+build fingerprint, so moving `commit` does not rebuild anything.
+
+`just port-check` (a `verify` stage in a multi-document project) warns when:
+
+- the upstream HEAD is past the recorded commit, with a count of the
+  `stats.json` ids that changed, were added or were removed since;
+- a file in the part's figure directory has the sha256 that the upstream
+  `assets.json` recorded for a figure at the recorded commit, and that figure
+  has since been regenerated or dropped (the copy is stale), or matches only
+  the newer `assets.json` (the recorded commit is behind the copy). Files that
+  match neither, such as drawings made for the chapter, are not reported;
+- a Typst file in the part's directory sets the page (`set page(`).
+
+That last one is the CeTZ rule: a figure module written as its own document,
+typically a CeTZ drawing with `#set page(width: auto, ...)`, does not compile
+inside a chapter, because a chapter cannot change the page in the middle of a
+document. Bring such figures across as exported images (PNG or SVG, generated
+upstream and listed in its `assets.json`, so the hash check covers them), or
+make the module page-agnostic: a function that returns the drawing, with the
+page set only by the upstream document that calls it.
+
+Every finding is a warning (`just port-check --strict` fails on them). A part
+whose repository is not on this machine is skipped with one note, so a build
+machine without the upstream checkouts is not failed. `just port-diff PART`
+prints the upstream `stats.json` values, rendered with their `fmt`, at the
+recorded commit against HEAD (or `--to REV`): the list of numbers to re-copy.
+After re-porting, move `commit` to the new hash.
+
+The check compares copies; it does not make them provenance. Numbers retyped
+into a chapter are still literals (see above).
 
 ## Build state and upgrades
 

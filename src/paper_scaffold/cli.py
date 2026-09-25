@@ -105,6 +105,8 @@ def main(argv: list[str] | None = None) -> int:
             print("usage: paper tool NAME [ARGS...]", file=sys.stderr)
             return 2
         return run_tool(argv[1], argv[2:])
+    if argv[:1] == ["port-diff"]:
+        return run_tool("port", ["diff", *argv[1:]])
     if argv[:1] == ["upgrade-notes"]:
         use_tools()
         import upgrade_plan
@@ -115,6 +117,8 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("tool", help="run a tool from the package")
     sub.add_parser("upgrade-notes", help="HISTORY Upgrade: lines since the lock")
+    sub.add_parser("port-diff", help="a ported part's upstream stats.json, "
+                                     "recorded commit vs HEAD (docs/multi-document.md)")
     t = sub.add_parser("test", help="the extractor fixture check")
     t.add_argument("--update", action="store_true")
     t.add_argument("--docx", action="store_true")

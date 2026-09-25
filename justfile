@@ -319,6 +319,9 @@ verify:
     stage "word limits (just check-words)" "" just check-words
     stage "journal (just check-journal)"   "" just check-journal
   fi
+  if [[ -f manuscript.toml ]]; then
+    stage "ported parts (just port-check)" "" just port-check
+  fi
   # One stage, because both answer the same question -- are the declarations
   # still consistent with what produced them -- and splitting them made verify
   # six blocks of output for a manuscript with one figure and five numbers.
@@ -989,6 +992,14 @@ check-submission:
 # Warn on text past the margins in paper.pdf and on figures outside the journal's [figures] limits (--strict fails)
 check-layout *args:
   @uv run --quiet paper tool layout_check {{args}}
+
+# Warn where a ported part (manuscript.toml upstream) has fallen behind its source repo
+port-check *args:
+  @uv run --quiet paper tool port check {{args}}
+
+# The source repo's stats.json at a part's recorded upstream commit against its HEAD
+port-diff part *args:
+  @uv run --quiet paper tool port diff {{part}} {{args}}
 
 # Test Word content, formatting, templates and chapter reference isolation
 test-docx:
