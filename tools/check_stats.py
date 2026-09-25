@@ -43,7 +43,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import hashcache  # noqa: E402
 import typst_prose  # noqa: E402
-from manifest_validation import load, ManifestError, guard_errors
+from manifest_validation import (load, ManifestError, guard_errors,
+                                 relation_errors, uncertainty_errors, UNCERTAINTY)
 from manuscript_sources import usages
 
 STATS = ROOT / "stats.json"
@@ -69,7 +70,14 @@ def _guard(id: str, rec: dict) -> list[Finding]:
     whatever is actually in the file.
     """
     return [Finding("error", id, message)
-            for message in guard_errors(rec.get("value"), rec.get("expect", {}))]
+            for message in guard_errors(rec.get("value"), rec.get("expect", {}))
+            + uncertainty_errors(rec)]
+
+
+def _relations(values: dict) -> list[Finding]:
+    """`expect` relations between ids (gt, ratio_to, ...), on the file as it is."""
+    return [Finding("error", id, message) for id, rec in sorted(values.items())
+            for message in relation_errors(id, rec, values)]
 
 
 def _origin(id: str, rec: dict) -> list[Finding]:
@@ -145,6 +153,11 @@ def _checksum(values: dict) -> list[Finding]:
                                  sort_keys=True, separators=(",", ":"))
         elif want.startswith("v2:"):
             payload = json.dumps(rec.get("value"),
+                                 sort_keys=True, separators=(",", ":"))
+        elif want.startswith("v3:"):
+            # 5.0.0: the value and its script-owned uncertainty fields.
+            payload = json.dumps({"value": rec.get("value"),
+                                  **{f: rec[f] for f in UNCERTAINTY if f in rec}},
                                  sort_keys=True, separators=(",", ":"))
         else:
             out.append(Finding("error", id,
@@ -259,7 +272,11 @@ def _unused(values: dict) -> list[Finding]:
     """
     # A slide deck counts as a reader: a number restated in a talk is still in
     # use, and `just slides-check` is what holds the slide to it.
-    called = {u["id"] for u in usages(ROOT) if u["helper"] in ("s", "n")}
+    called = {u["id"] for u in usages(ROOT) if u["helper"] in ("s", "n", "ci")}
+    # `#ci("x")` with no lo/hi of its own reads the sibling ids x.lo/x.hi or
+    # x_lo/x_hi, which are then in use too.
+    called |= {f"{base}{sep}{end}" for base in set(called)
+               for sep in (".", "_") for end in ("lo", "hi")}
     return [Finding("warn", id, "is declared but no .typ file reads it")
             for id in sorted(set(values) - called)]
 
@@ -359,7 +376,8 @@ def _rederive(values: dict) -> tuple[list[Finding], str]:
                 "is recorded as generated but the generator no longer produces "
                 "it. Re-run `just assets` to drop it, or take it over by hand."))
         elif (fresh[id].get("value") != rec.get("value")
-              or type(fresh[id].get("value")) is not type(rec.get("value"))):
+              or type(fresh[id].get("value")) is not type(rec.get("value"))
+              or any(fresh[id].get(f) != rec.get(f) for f in UNCERTAINTY)):
             out.append(Finding("error", id,
                 f"is {rec.get('value')!r} in stats.json but the analysis now "
                 f"produces {fresh[id].get('value')!r} -- run: just assets"))
@@ -389,6 +407,7 @@ def main() -> int:
         found += _origin(id, rec)
         found += _guard(id, rec)
     found += _display(values)
+    found += _relations(values)
     found += _checksum(values)
     found += _sources(doc)
     found += _pinned(doc)

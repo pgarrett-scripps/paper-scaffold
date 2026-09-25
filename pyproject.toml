@@ -60,6 +60,7 @@ exclude = ["__pycache__", "*.pyc"]
 "journals" = "paper_scaffold/data/journals"
 "word" = "paper_scaffold/data/word"
 "docs" = "paper_scaffold/data/docs"
+"vocab" = "paper_scaffold/data/vocab"
 "justfile" = "paper_scaffold/data/justfile"
 "HISTORY.md" = "paper_scaffold/data/HISTORY.md"
 "stats.typ" = "paper_scaffold/data/stats.typ"

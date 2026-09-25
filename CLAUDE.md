@@ -72,8 +72,10 @@ Details: [docs/numbers.md](docs/numbers.md), [docs/assets.md](docs/assets.md).
   `#s("id")`; one no script can compute but worth an audit trail is a hand
   entry in `stats.json` with a note; a deliberate prose literal ("40 °C") is
   vouched in place with `#lit("40")`; a global value-level exception goes in
-  `prose-check.toml` with a written reason. `lit()` never silences
-  `derivable-number`.
+  `prose-check.toml` with a written reason. A plain `lit()` never silences
+  `derivable-number`; `#lit("2.07", unlike: "id")` clears only the named
+  collision. Intervals are `#ci("id")` from `st.add(lo=, hi=, level=)`;
+  "A exceeds B" goes in `expect` as `gt`/`ratio_to`, not a derived id.
 - **`stats.json` you MAY edit, by field.** The script owns `value`,
   `checksum` and `origin`; `fmt`, `unit`, `desc` and `expect` are yours and
   survive `just assets` (`gen_stats.py` arguments only seed a NEW entry). To

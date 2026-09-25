@@ -39,6 +39,7 @@ FILE = "project.toml"
 #   submission -- after the upload set, in `just submission` and `just all`
 GATES = ("verify", "check", "preflight", "submission")
 STAGE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _.:/+-]*")
+VOCAB_NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
 
 
 @dataclass(frozen=True)
@@ -196,6 +197,14 @@ class Project:
     # [slides] theme: the paper's own deck theme. `paper sync` then never
     # writes slides/theme.typ and lists this file under the lock's overrides.
     slides_theme: str | None = None
+    # [prose] (5.0.0): shared vocabularies merged into prose-check.toml, and
+    # how the prose rules treat cover-letter.typ ("warn" caps every finding
+    # there at a warning, "error" keeps each rule's severity, "off" skips it).
+    prose_vocab: tuple[str, ...] = ()
+    cover_letter: str = "warn"
+    # [[software]] (5.0.0): a pinned release whose documentation the methods
+    # describe; /paper:methods-vs-code reads the docs at that ref.
+    software: tuple[dict, ...] = ()
     declared: bool = False
 
 
@@ -239,7 +248,7 @@ def load(root: Path = ROOT) -> Project:
     except tomllib.TOMLDecodeError as exc:
         raise ValueError(f"{FILE}: {exc}") from None
     keys(data, {"schema_version", "stages", "preflight", "sources", "word",
-                "bibliography", "slides"}, FILE)
+                "bibliography", "slides", "prose", "software"}, FILE)
     if type(data.get("schema_version")) is not int or data["schema_version"] != 1:
         raise ValueError(f"{FILE}: schema_version must be 1")
 
@@ -295,9 +304,64 @@ def load(root: Path = ROOT) -> Project:
             raise ValueError(f"{FILE} [slides]: theme must be a file under "
                              f"slides/, got {theme!r}")
 
+    vocab, cover_letter = _prose(data.get("prose", {}))
+    software = _software(data.get("software", []))
+
     return Project(stages=stages, bib_audit_require_complete=complete,
                    typst_sources=typst, word=word, single_bibliography=single,
-                   slides_theme=theme, declared=True)
+                   slides_theme=theme, prose_vocab=vocab, cover_letter=cover_letter,
+                   software=software, declared=True)
+
+
+def _prose(table) -> tuple[tuple[str, ...], str]:
+    """[prose]: vocab = ["proteomics", "prose/lab.toml"], cover_letter = "warn".
+
+    A bare name is a vocabulary the scaffold ships (vocab/<name>.toml); a
+    project-relative .toml path is the project's own, in the same shape.
+    """
+    keys(table, {"vocab", "cover_letter"}, f"{FILE} [prose]")
+    vocab = table.get("vocab", [])
+    if not isinstance(vocab, list) or any(
+            not isinstance(v, str) or not (VOCAB_NAME.fullmatch(v) or v.endswith(".toml"))
+            for v in vocab):
+        raise ValueError(f"{FILE} [prose]: vocab must be a list of shipped names "
+                         "(\"proteomics\") or project-relative .toml paths")
+    for v in vocab:
+        if v.endswith(".toml"):
+            _paths([v], f"{FILE} prose.vocab", (".toml",))
+    mode = table.get("cover_letter", "warn")
+    if mode not in ("warn", "error", "off"):
+        raise ValueError(f"{FILE} [prose]: cover_letter must be \"warn\", "
+                         f"\"error\" or \"off\", got {mode!r}")
+    return tuple(dict.fromkeys(vocab)), mode
+
+
+def _software(value) -> tuple[dict, ...]:
+    """[[software]]: name, repo, ref, docs = [paths inside that repo], note."""
+    if not isinstance(value, list):
+        raise ValueError(f"{FILE} [[software]]: expected an array of tables")
+    out, seen = [], set()
+    for i, item in enumerate(value):
+        here = f"{FILE} software[{i}]"
+        keys(item, {"name", "repo", "ref", "docs", "note"}, here)
+        for field in ("name", "repo", "ref"):
+            if not isinstance(item.get(field), str) or not item[field].strip():
+                raise ValueError(f"{here}: {field} is required (a nonempty string); "
+                                 "ref is the tag or commit the paper describes")
+        if item["name"] in seen:
+            raise ValueError(f"{here}: {item['name']!r} is declared twice")
+        seen.add(item["name"])
+        docs = item.get("docs", [])
+        if (not isinstance(docs, list) or not docs
+                or any(not isinstance(d, str) or not d or d.startswith("/")
+                       or ".." in Path(d).parts for d in docs)):
+            raise ValueError(f"{here}: docs must list paths inside the repository "
+                             "(README.md, docs/spec.md)")
+        if "note" in item and not isinstance(item["note"], str):
+            raise ValueError(f"{here}: note must be a string")
+        out.append({"name": item["name"], "repo": item["repo"], "ref": item["ref"],
+                    "docs": tuple(docs), "note": item.get("note", "")})
+    return tuple(out)
 
 
 def _paths(value, where: str, suffixes: tuple[str, ...] | None) -> tuple[str, ...]:
@@ -427,6 +491,13 @@ def describe(project: Project) -> list[str]:
                      "(the paper's own; paper sync writes no slides/theme.typ)")
     if not project.bib_audit_require_complete:
         lines.append("preflight  bib-audit runs without --require-complete")
+    for name in project.prose_vocab:
+        lines.append(f"prose      vocab             {name}")
+    if project.cover_letter != "warn":
+        lines.append(f"prose      cover_letter      {project.cover_letter}")
+    for sw in project.software:
+        lines.append(f"software   {sw['name']:<17} {sw['repo']}@{sw['ref']}: "
+                     + ", ".join(sw["docs"]))
     return lines or [f"{FILE} declares no hooks"]
 
 

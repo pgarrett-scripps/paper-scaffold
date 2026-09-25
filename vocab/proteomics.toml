@@ -1,0 +1,26 @@
+# A shared prose-check vocabulary for mass-spectrometry proteomics papers.
+#
+# Include it from project.toml:
+#
+#     [prose]
+#     vocab = ["proteomics"]
+#
+# It only ADDS allowances: your prose-check.toml's own [allow] lists and
+# [vocabulary.*] `remove` entries still apply on top, and nothing here can
+# disable a rule or change a severity. Collected from the acronyms that five
+# proteomics manuscripts on this scaffold each allowed by hand. Keep it to
+# terms a reader in the field never sees expanded; anything a journal would
+# expect spelled out once (PSM, DIA, TMT) is left for the paper to define.
+about = "Mass-spectrometry notation and file formats; see docs/prose-checks.md"
+
+[allow]
+unexpanded-acronym = [
+  "MS1", "MS2", "MS3", "MSN",   # scan-level notation, like "MS" itself
+  "LC-MS",                      # the technique's name, expanded as "LC" once
+  "FASTA", "MZML", "MGF",       # file formats
+  "PRIDE", "PXD",               # the repository and its accession prefix
+  "PSI-MS",                     # the controlled vocabulary's published name
+]
+misspelling = [
+  "averagine",                  # the averagine model, not "averaging"
+]

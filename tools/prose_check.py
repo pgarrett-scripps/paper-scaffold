@@ -35,6 +35,7 @@ import readability
 import typst_prose
 from manuscript_sources import mask, si_bibliography
 from prose_rules import Config, Finding, list_rules, load_config, report
+import claim_rules
 
 # The manuscript root, one level up: this file lives in tools/.
 from paths import ROOT  # the manuscript (tools/paths.py)
@@ -1139,28 +1140,18 @@ def check_derivable_numbers(sources: dict[str, str],
     if not p.is_file():
         return []
     values = json.loads(p.read_text()).get("values", {})
-
-    wanted = {}
-    for id, rec in values.items():
-        # Rendered here rather than read from the file: stats.json stores the
-        # value and the format spec, and the display string is produced at build
-        # time by the same function tools/render_stats.py uses.
-        try:
-            d = typst_prose.display_of(rec).strip()
-        except (TypeError, ValueError):
-            continue
-        if not re.fullmatch(r"[+-]?[\d,]*\.?\d+", d):
-            continue                      # not a number: a label, a flag
-        bare = d.lstrip("+-")
-        if not ("." in bare or "," in bare or len(bare) >= 4):
-            continue                      # too common to match on
-        wanted.setdefault(bare, []).append(id)
+    # Rendered, not read from the file, by the function render_stats uses.
+    wanted = claim_rules.derivable_index(values)
 
     out: list[Finding] = []
     for name, src in sources.items():
         # Drop the derived calls first, then inline code (a parameter value is
-        # not a result), then everything else that is not prose.
+        # not a result), then everything else that is not prose. A lit() that
+        # names every stat it collides with (`unlike:`) is vouched at this
+        # site; a plain one is not (claim_rules.drop_named_vouches).
         stripped = re.sub(typst_prose.STATS, " ", src)
+        stripped = re.sub(typst_prose.CI, " ", stripped)
+        stripped = claim_rules.drop_named_vouches(stripped, wanted)
         prose = readability.clean(no_code(stripped))
         for bare, ids in sorted(wanted.items()):
             for m in re.finditer(rf"(?<![\d.,]){re.escape(bare)}(?![\d.,])", prose):
@@ -1229,12 +1220,14 @@ def check_unaccounted_numbers(sources: dict[str, str],
     for name, src in sources.items():
         stripped = re.sub(typst_prose.STATS, " ", src)
         stripped = re.sub(typst_prose.STATS_N, " ", stripped)
+        stripped = re.sub(typst_prose.CI, " ", stripped)
         # #lit("...") is the author vouching for the literal AT THIS SPOT, so
         # the wrapped occurrence is removed before the scan -- the fourth way
         # out, and the only inline one. A bare occurrence of the same value
-        # elsewhere is still unvouched and still reports. Deliberately NOT
-        # done in check_derivable_numbers: a value the analysis computes must
-        # be #s(), and wrapping it in lit() must not silence that rule.
+        # elsewhere is still unvouched and still reports. check_derivable_numbers
+        # drops only a lit() that names every stat it collides with (unlike:):
+        # a value the analysis computes must be #s(), and a plain lit() must
+        # not silence that rule.
         stripped = re.sub(typst_prose.LIT, " ", stripped)
         prose = readability.clean(no_code(stripped))
         hits: list[Finding] = []
@@ -1423,6 +1416,36 @@ def project_sources(root: Path | None = None) -> tuple[dict[str, str], list[Find
     return {name: (r / name).read_text() for name in names}, []
 
 
+def claim_checks(root: Path, cfg: Config, sources: dict[str, str]
+                 ) -> tuple[list[Finding], frozenset[str]]:
+    """Wording held to the numbers, the claim registry, the cover letter (5.0.0).
+
+    The letter restates the paper's results to an editor and drifted from them
+    in practice (spectrl 96c13b8), so it gets the sentence and number rules
+    too. Its findings are capped at warnings unless project.toml's [prose]
+    cover_letter says "error" (or "off"); the second value names what to cap.
+    """
+    from project_hooks import load as load_project
+    stats = root / "stats.json"
+    found = claim_rules.claim_findings(sources, stats)
+    found += claim_rules.check_retired_claims(root)
+    try:
+        mode = load_project(root).cover_letter
+    except (OSError, ValueError):
+        mode = "warn"            # project.toml's own error is reported elsewhere
+    letter = root / claim_rules.COVER
+    if mode == "off" or not letter.is_file():
+        return found, frozenset()
+    src = claim_rules.cover_letter_prose(letter.read_text())
+    label = claim_rules.COVER
+    found += check(label, readability.clean(src), readability.clean(no_code(src)),
+                   readability.clean(src, gap=GAP), cfg)
+    found += check_derivable_numbers({label: src}, stats_path=stats)
+    found += check_unaccounted_numbers({label: src}, stats_path=stats)
+    found += claim_rules.claim_findings({label: src}, stats)
+    return found, frozenset({label}) if mode == "warn" else frozenset()
+
+
 def main_documents() -> int:
     """A manuscript.toml project (docs/multi-document.md): every declared part.
 
@@ -1446,9 +1469,11 @@ def main_documents() -> int:
     # A paper.typ + si-body.typ pair kept under manuscript.toml still gets
     # the SI routing rule; with neither file this finds nothing.
     findings += check_si_bibliography(cfg=cfg)
+    claims, cap = claim_checks(ROOT, cfg, extra)
+    findings += claims
     return report(list(dict.fromkeys(findings)), cfg,
                   show_suppressed="--show-suppressed" in sys.argv,
-                  strict="--strict" in sys.argv)
+                  strict="--strict" in sys.argv, cap_warn=cap)
 
 
 def main() -> int:
@@ -1482,17 +1507,22 @@ def main() -> int:
     findings += check_table_size(cfg=cfg)
     findings += check_bibliography(cfg=cfg)
     findings += check_si_bibliography(cfg=cfg)
+    claims, cap = claim_checks(ROOT, cfg, {**targets, **extra})
+    findings += claims
 
     rc = report(findings, cfg,
                 show_suppressed="--show-suppressed" in sys.argv,
-                strict="--strict" in sys.argv)
+                strict="--strict" in sys.argv, cap_warn=cap)
     # Inline vouches carry no written reason, so at least the COUNT stays
     # visible: a number that quietly grows here is the same smell as a
-    # suppression list nobody re-reads.
-    lit_n = sum(len(re.findall(typst_prose.LIT, src))
-                for src in targets.values())
-    if lit_n:
-        print(f'  {lit_n} numeral(s) vouched inline with #lit("...")')
+    # suppression list nobody re-reads. A vouch that names the stats it is
+    # not (`unlike:`) silences derivable-number there, so it is counted apart.
+    plain, named = claim_rules.vouch_counts(targets)
+    if plain:
+        print(f'  {plain} numeral(s) vouched inline with #lit("...")')
+    if named:
+        print(f'  {named} numeral(s) vouched against named stats with '
+              f'#lit("...", unlike: ...)')
     return rc
 
 

@@ -51,6 +51,15 @@ edits the manuscript.
    or estimator, the units, and whether the number is a point estimate, a
    mean, a median, or a count.
 
+   Also read `claims.toml` if present: its `retired` wordings were wrong
+   once, so a paraphrase of one is a finding even where `retired-claim`
+   (exact match) is silent. Read `cover-letter.typ` too when it exists; its
+   claims must not outrun the paper's.
+4. Note what the entry records beyond the value: `lo`/`hi`/`level`, `n`,
+   `measurement`, and relations in `expect` (`gt`, `ratio_to`, ...). An
+   interval claim with no `lo`/`hi`, or a timing claim on a `single-run`
+   value, is at best **unguarded**.
+
 ## Judge each claim
 
 Give each row one verdict:
@@ -59,7 +68,8 @@ Give each row one verdict:
   computes and the value's `expect` guard already encodes the assumption.
 - **unguarded**: supported today, but the prose assumes something the guard
   does not check (a sign, a bound, a ranking). Propose the exact `expect`
-  to add. Existing guards are edited in stats.json, not in gen_stats.py.
+  to add; a claim relating two ids is a relation (`{"gt": "other.id"}`,
+  `{"ratio_to": {"id": "other.id", "min": 3}}`). Existing guards are edited in stats.json, not in gen_stats.py.
 - **overstated**: the evidence is weaker than the wording. Typical cases:
   "significantly" with no test, or a test on a different quantity;
   "increased" for a near-tie whose interval includes the null; a mean
@@ -94,6 +104,8 @@ the author's to commit or ignore). Shape:
 2. The ledger as a table: severity (blocker / major / minor), location,
    claim, id(s), what the code computes, verdict, and the routed fix.
 3. Proposed guards as a ready-to-apply list of stats.json `expect` edits.
+4. Wordings the author retired or should retire, as ready-to-paste
+   `claims.toml` `[[claim]]` entries (`id`, `phrase`, `retired`, `note`).
 
 Route every fix to an existing owner: wording to `/paper:copy-edit`, a number with
 no declaration to `/paper:declare-number`, a guard or checksum problem to

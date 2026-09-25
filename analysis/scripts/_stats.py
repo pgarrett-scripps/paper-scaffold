@@ -71,7 +71,8 @@ from pathlib import Path
 
 from _provenance import PAPER, caller_script, code_inputs, declared_inputs
 
-from manifest_validation import guard_errors, validate, ManifestError
+from manifest_validation import (guard_errors, validate, ManifestError,
+                                 relation_errors, uncertainty_errors, UNCERTAINTY)
 from atomic_io import write_text
 
 # At the manuscript root, not under si/, because this is no longer purely
@@ -88,6 +89,9 @@ ABOUT = ("Numbers the manuscript states in prose, read as #s(\"<id>\"). Scripts 
 # Fields the author owns once an entry exists. The script's arguments seed them
 # on first write and are ignored afterwards.
 AUTHOR_FIELDS = ("fmt", "unit", "desc", "expect")
+# Author-owned too, but written only when set: an entry without one says nothing
+# about how it was measured, and an empty string would not be a valid class.
+AUTHOR_OPTIONAL = ("measurement",)
 
 
 class StatError(Exception):
@@ -103,7 +107,7 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _checksum(value) -> str:
+def _checksum(value, uncertainty: dict | None = None) -> str:
     """A short digest of the value, the one field only the generator may write.
 
     Catches a generated value edited by hand in stats.json. Re-deriving would
@@ -120,8 +124,31 @@ def _checksum(value) -> str:
     updates both is indistinguishable from the generator, and no scheme that
     keeps the record next to the value can do better.
     """
+    if uncertainty:
+        # v3 (5.0.0): the value AND its script-owned uncertainty (lo, hi,
+        # level, n, sd, se), which a hand-edit could narrow just as easily.
+        # Only when there is some, so an entry without it keeps its v2 digest
+        # and upgrading rewrites nothing.
+        payload = json.dumps({"value": value, **uncertainty},
+                             sort_keys=True, separators=(",", ":"))
+        return "v3:" + hashlib.sha256(payload.encode()).hexdigest()[:16]
     payload = json.dumps(value, sort_keys=True, separators=(",", ":"))
     return "v2:" + hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def _relation_seed(key: str, arg) -> list[dict]:
+    """ratio_to=("other.id", 2, 5) or a dict, or a list of either, as expect data."""
+    items = arg if isinstance(arg, list) else [arg]
+    out = []
+    for item in items:
+        if isinstance(item, tuple):
+            if len(item) != 3:
+                raise StatError(f"{key} takes (id, min, max); pass None for an open end")
+            item = {"id": item[0], "min": item[1], "max": item[2]}
+        if not isinstance(item, dict):
+            raise StatError(f"{key} takes (id, min, max) or {{'id', 'min', 'max'}}")
+        out.append({k: v for k, v in item.items() if v is not None})
+    return out
 
 
 class Stats:
@@ -136,7 +163,13 @@ class Stats:
             sign: str | None = None,
             between: tuple[float, float] | None = None,
             minimum: float | None = None,
-            maximum: float | None = None) -> None:
+            maximum: float | None = None,
+            lo: float | None = None, hi: float | None = None,
+            level: float | None = None, n: int | None = None,
+            sd: float | None = None, se: float | None = None,
+            measurement: str | None = None,
+            gt=None, ge=None, lt=None, le=None,
+            ratio_to=None, diff_to=None) -> None:
         """Declare one number.
 
         `value`   the raw value. A str is allowed for things that are not
@@ -155,6 +188,19 @@ class Stats:
                   ceiling (a count is at least zero) or floor. Either, or both;
                   not together with `between`, which already says both.
         `desc`    what the number is, for someone auditing the file later.
+        `measurement`
+                  "single-run", "replicated" or "exclusive": how the number was
+                  measured. A timing claim on a single-run value warns.
+        `gt`, `ge`, `lt`, `le`
+                  another id (or a list): the prose says this value is above or
+                  below it. Checked on every write and by `just check-stats`.
+        `ratio_to`, `diff_to`
+                  (id, min, max): "3- to 5-fold faster than B" is
+                  ratio_to=("B", 3, 5). None leaves an end open.
+
+        Written on EVERY run, like the value, because they are facts about the
+        data: `lo`, `hi` (an interval's ends), `level` (its coverage, 0.95),
+        `n`, `sd`, `se`. `#ci("id")` renders lo-hi with the entry's fmt.
 
         Guards are enforced in `write()`, against the file's `expect` for an
         existing entry and against these seeds for a new one -- the file's guard
@@ -166,8 +212,15 @@ class Stats:
             raise StatError(f"{id!r} is not a usable id (no spaces, not empty)")
 
         numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
+        relations = {k: v for k, v in (("gt", gt), ("ge", ge), ("lt", lt),
+                                       ("le", le)) if v is not None}
+        for key, arg in (("ratio_to", ratio_to), ("diff_to", diff_to)):
+            if arg is not None:
+                relations[key] = _relation_seed(key, arg)
+                if len(relations[key]) == 1:
+                    relations[key] = relations[key][0]
         guarded = (sign is not None or between is not None
-                   or minimum is not None or maximum is not None)
+                   or minimum is not None or maximum is not None or bool(relations))
         if not numeric and guarded:
             raise StatError(
                 f"{id!r} has a guard but its value {value!r} is not numeric. "
@@ -189,6 +242,19 @@ class Stats:
             expect["min"] = minimum
         if maximum is not None:
             expect["max"] = maximum
+        expect.update(relations)
+        shape = [e for e in guard_errors(value, expect)
+                 if e.startswith("expect.")] if relations else []
+        if shape:
+            raise StatError(f"{id!r}: " + "; ".join(shape))
+
+        uncertainty = {k: v for k, v in (("lo", lo), ("hi", hi), ("level", level),
+                                         ("n", n), ("sd", sd), ("se", se))
+                       if v is not None}
+        problems = uncertainty_errors({**uncertainty, **(
+            {"measurement": measurement} if measurement is not None else {})})
+        if problems:
+            raise StatError(f"{id!r}: " + "; ".join(problems))
 
         # The seed fmt must at least apply to the value it arrives with. This
         # raises HERE, next to the analysis that chose it, rather than at render
@@ -207,12 +273,16 @@ class Stats:
                             if v is not None}
         if guarded:
             self._passed[id].add("expect")
+        if measurement is not None:
+            self._passed[id].add("measurement")
         self._values[id] = {
             "value": value,
             "fmt": fmt or "",
             "unit": unit or "",
             "desc": desc or "",
             "expect": expect,
+            **({"measurement": measurement} if measurement is not None else {}),
+            **uncertainty,
         }
 
     @staticmethod
@@ -351,10 +421,14 @@ class Stats:
                 entry = {"value": seed["value"]}
                 for f in AUTHOR_FIELDS:
                     entry[f] = old[f] if f in old else empty[f]
+                for f in AUTHOR_OPTIONAL:
+                    if f in old:
+                        entry[f] = old[f]
+                entry.update({f: seed[f] for f in UNCERTAINTY if f in seed})
                 # A seed the script still passes, that the file has moved away
                 # from: dead code in the generator, collected for one note below.
                 overridden += [(id, f) for f in self._passed.get(id, ())
-                               if seed[f] != entry[f]]
+                               if seed.get(f) != entry.get(f)]
                 # `at` is when the value last CHANGED, not when the script last
                 # ran -- a re-run that reproduces the number leaves it alone, so
                 # the timestamps in the file carry information. The type check
@@ -362,13 +436,17 @@ class Stats:
                 # so a dtype change is a change and the date must say so.
                 old_v = old.get("value")
                 unchanged = (old_v == seed["value"]
-                             and type(old_v) is type(seed["value"]))
+                             and type(old_v) is type(seed["value"])
+                             and all(old.get(f) == seed.get(f) for f in UNCERTAINTY))
                 at = ((old.get("origin") or {}).get("at") or _now()) if unchanged \
                     else _now()
 
             # Enforced against the guard that governs this entry NOW -- the
             # file's for an existing one, the seed's for a new one.
             self._enforce(id, entry["value"], entry.get("expect", {}))
+            problems = uncertainty_errors(entry)
+            if problems:
+                raise StatError(f"{id!r}: " + "; ".join(problems))
             if entry.get("fmt"):
                 try:
                     format(entry["value"], entry["fmt"])
@@ -378,11 +456,20 @@ class Stats:
                         f"with fmt {entry['fmt']!r} (from stats.json): {e}. "
                         f"Fix the fmt there, or the analysis.") from None
 
-            entry["checksum"] = _checksum(entry["value"])
+            entry["checksum"] = _checksum(
+                entry["value"], {f: entry[f] for f in UNCERTAINTY if f in entry})
             entry["origin"] = {"by": mine, "at": at}
             final[id] = entry
 
         merged = {**kept, **final}
+
+        # Relations name other ids, so they are judged once everything is
+        # merged. An id another generator has not written yet is not an error
+        # here; `just check-stats` insists on it.
+        for id, entry in final.items():
+            broken = relation_errors(id, entry, merged, missing_ok=True)
+            if broken:
+                raise StatError(f"{id!r}: " + "; ".join(broken))
 
         # Recorded once per generator, not per entry: one script writes the whole
         # file by contract, and 1000 values do not need 1000 copies of the same

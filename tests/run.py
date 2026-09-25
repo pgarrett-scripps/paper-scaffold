@@ -108,6 +108,7 @@ CASE_MODULES = (
     "word_table_cases",       # [word.style] table_* keys and [word.tables]
     "layout_cases",           # the built PDF: margins, figures against the profile
     "port_cases",             # manuscript.toml upstream: ported parts, port-diff
+    "claims_cases",           # claims held to the numbers: ci, relations, wording
 )
 
 

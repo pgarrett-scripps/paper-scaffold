@@ -160,6 +160,46 @@ With `all`, each target gets its own total, so shared parts in alternative expor
 are not added into one inflated total. Abstracts in this mode are counted only
 when they are included in a declared part's body.
 
+## Claims held to the numbers
+
+Four rules read the sentence around a `#s()`/`#ci()` against `stats.json`
+(all warnings; the fix is usually a fmt edit or a softer word):
+
+| Rule | Fires on |
+|---|---|
+| `bound-rounding` | "below #s(x)" / "#s(x)% or less" where rounding moved the shown number to the wrong side of the value (2.13 shown as "below 2.1"). Negation ("no error exceeded") flips the side; an exact value is silent. |
+| `interval-wording` | "excludes zero" / "includes zero" / "a lower bound of zero" that the interval's ends contradict. |
+| `single-run-timing` | A timing or speed-up sentence reading a value marked `measurement = "single-run"`. |
+| `stale-vouch` | `#lit(v, unlike: "id")` naming an id that is gone or no longer renders as `v`. |
+
+**Retired wording: `claims.toml`.** When a claim is reworded because the old
+wording was wrong, list the old wording so it cannot come back in a later
+edit, the abstract, the SI or the cover letter:
+
+```toml
+[[claim]]
+id = "speed"
+phrase = "about twice as fast"            # the current wording (optional)
+retired = ["an order of magnitude faster"]
+note = "single-run timing, review round 1"
+```
+
+`retired-claim` is an **error**, matched case- and whitespace-insensitively
+across paper, config, SI, cover letter, `[sources] typst` and manuscript.toml
+parts; comments are ignored. No `claims.toml`, no check.
+
+**The cover letter.** `cover-letter.typ`, when present, gets the sentence
+rules, `derivable-number`, `unaccounted-number` and the claim rules above, with
+its letterhead stripped. Its findings are capped at warnings; project.toml
+`[prose] cover_letter = "error"` makes them count fully, `"off"` skips it.
+
+**Shared vocabularies.** A field's acronyms need not be copied into each
+paper's `prose-check.toml`: `[prose] vocab = ["proteomics"]` in project.toml
+merges the shipped `vocab/proteomics.toml`, and a path (`"prose/lab.toml"`)
+merges a project file. A vocabulary only adds `[allow]` lists and
+`[vocabulary.*] add` entries; it cannot disable a rule or change a severity,
+and the paper's own `remove` still applies on top.
+
 ## Suppressing a finding: `prose-check.toml`
 
 Every finding carries a stable rule id and, where the rule is about a particular

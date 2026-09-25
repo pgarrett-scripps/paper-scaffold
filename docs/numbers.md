@@ -33,8 +33,12 @@ Three things make it hold:
   recorded. Four ways out, each leaving a trail: compute it (`#s()`), declare
   it by hand with a note, vouch for it in place with `#lit("40")` when it is
   genuinely just prose, or suppress the value in `prose-check.toml` with a
-  written reason. `lit()` deliberately does not silence the first rule — a
-  computed value wrapped in it is still flagged. Years and short counts are
+  written reason. A plain `lit()` deliberately does not silence the first
+  rule — a computed value wrapped in it is still flagged. When a prose number
+  only happens to render like a stat ("2.07 mL" next to a 2.07-fold change),
+  name the stats it is not: `#lit("2.07", unlike: "effect.fold")` (or a
+  tuple of ids). That silences the collision with exactly those ids, and
+  `stale-vouch` warns once a named id is gone or no longer renders that way. Years and short counts are
   skipped, and prose-check reports how many literals are vouched inline, so
   the count cannot grow silently.
 - **`just check-stats` re-checks the committed file, without running anything.**
@@ -98,6 +102,39 @@ run prints which. Without the argument nothing hand-entered is ever deleted.
 That is also why `stats.json` sits at the manuscript root rather than under
 `si/`: a file you are invited to edit is not generated output, and cannot be
 guarded by "did anything change".
+
+## Intervals, uncertainty and relations
+
+A number rarely stands alone: it has an interval, a replicate count, or a claim
+tying it to another number. `st.add` records them next to the value, and like
+the value they are the script's (rewritten on every run, covered by the
+checksum, which becomes `v3:` for an entry that has any of them):
+
+```python
+st.add("effect.fold", fold, fmt=".2f", lo=ci[0], hi=ci[1], level=0.95,
+       n=len(reps), sd=sd, measurement="replicated",
+       gt="effect.baseline", ratio_to=("effect.baseline", 3, None))
+```
+
+- **`lo`, `hi`, `level`, `n`, `sd`, `se`.** Checked for consistency (`lo ≤ hi`,
+  both ends together, `level` a fraction, `n` a positive integer).
+  `#ci("effect.fold")` prints `1.71–2.49` with the entry's own fmt;
+  `#ci("effect.fold", level: true)` prints `95% CI 1.71–2.49`. A manuscript that
+  already declares ends as sibling ids (`x.lo`/`x.hi` or `x_lo`/`x_hi`) gets
+  `#ci("x")` from those, each end in its own fmt.
+- **`measurement`** (author-owned, like fmt): `"single-run"`, `"replicated"` or
+  `"exclusive"` (timed alone on the machine). A timing sentence that reads a
+  `single-run` value gets a `single-run-timing` warning.
+- **Relations in `expect`.** `gt`, `ge`, `lt`, `le` name another id (or a
+  list); `ratio_to` and `diff_to` take `{"id", "min", "max"}` with at least one
+  bound (seeded from a tuple `(id, min, max)`). "At least threefold the
+  baseline" becomes one line instead of a hand-derived ratio id. `just assets`
+  and `just check-stats` fail when a relation stops holding, or names an id
+  the file lacks.
+
+The wording rules in [prose-checks.md](prose-checks.md#claims-held-to-the-numbers)
+read these fields: a bound that rounding broke, an interval described as
+excluding zero when it does not.
 
 ## Pinned files: watching what no script reads
 

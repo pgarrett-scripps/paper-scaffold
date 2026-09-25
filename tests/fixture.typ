@@ -140,7 +140,15 @@ A vouched literal resolves to exactly what was typed: the column ran at
 #lit("40") degrees with a pooled mean of #lit("2.2"), and the exploded form
 survives a reflow the same way the stats calls do: #lit(
   "12,345",
-) events in total.
+) events in total. A literal may name the stat it only looks like,
+#lit("2.07", unlike: "effect.treated_fold") mL, and still resolves to what was
+typed.
+
+An interval resolves to its two ends from the entry's own fmt: the fold change
+spanned #ci("effect.treated_fold"), or #ci("effect.treated_fold", level: true)
+with its level, and the exploded form #ci(
+  "effect.treated_fold",
+) survives a reflow.
 
 = Figures and tables
 

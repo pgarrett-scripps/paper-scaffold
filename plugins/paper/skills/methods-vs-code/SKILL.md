@@ -61,6 +61,36 @@ operations. Note a parameter the code sets that the prose never mentions.
 Do not run the analysis. Do not treat a comment or docstring in the code as
 what the code does; read the call.
 
+## Pinned software: compare against the release the paper describes
+
+When the methods describe software outside `analysis/` (a search engine, a
+toolkit the lab publishes), `project.toml` may pin it (`just hooks` lists the
+pins):
+
+```toml
+[[software]]
+name = "searchtool"
+repo = "https://github.com/example/searchtool"   # URL or local path
+ref = "v0.4.1"
+docs = ["README.md", "docs/parameters.md"]
+```
+
+For each pin, read that software AT `ref`, never at its newest commit:
+
+- A local `repo`: `git -C <repo> show <ref>:<path>` for each `docs` path and
+  for the source files the methods' rows point at (`git -C <repo> ls-tree -r
+  --name-only <ref>` to find them).
+- A URL: fetch the files at the ref (for GitHub,
+  `https://raw.githubusercontent.com/<owner>/<name>/<ref>/<path>`), or
+  `git clone --depth 1 --branch <ref>` into a scratch directory outside the
+  manuscript. Never clone into the paper.
+
+Add the pinned software's settings and defaults to the code table, citing
+`<name>@<ref>:<path>:<line>`. A version the prose states that differs from
+`ref` is **drift**. A pin whose ref no longer exists, or a repo you cannot
+reach, makes its rows **unverifiable**; say which. With no `[[software]]`,
+such rows stay **unverifiable** as before, and recommend a pin.
+
 ## Compare
 
 One verdict per row:
@@ -74,7 +104,7 @@ One verdict per row:
 - **unstated**: the code makes a choice the methods do not mention that a
   reader would need to reproduce the result (a filter, a seed, a version).
 - **unverifiable**: the data or a dependency is absent, or the step lives in
-  code outside `analysis/`. Say where.
+  code outside `analysis/` that no `[[software]]` pin reaches. Say where.
 
 Where a row's value also appears as a `#s()` id, prefer the id in the prose
 and say so; a typed threshold that the code also holds is a `/paper:declare-number`

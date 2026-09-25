@@ -86,7 +86,18 @@ def render(SRC: Path, OUT: Path) -> int:
         # nothing in the document reads it, so it is not rendered.
         out[id] = {"display": shown, "value": rec.get("value")}
 
-    write_text(OUT, json.dumps({"_about": ABOUT, "values": out}, indent=2) + "\n")
+    # `#ci("id")` reads this table: an entry's own lo/hi, or a sibling pair
+    # (id.lo/id.hi, id_lo/id_hi). Written only when there is one, so a paper
+    # without intervals renders the same file as before.
+    try:
+        intervals = {id: {"display": r["display"], "with_level": r["with_level"]}
+                     for id, r in sorted(typst_prose.intervals_of(values).items())}
+    except (TypeError, ValueError) as e:
+        print(f"cannot format an interval: {e}", file=sys.stderr)
+        return 1
+    write_text(OUT, json.dumps({"_about": ABOUT, "values": out,
+                                **({"intervals": intervals} if intervals else {})},
+                               indent=2) + "\n")
     print(f"rendered {len(out)} value(s) -> {OUT.name}")
     return 0
 

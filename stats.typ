@@ -109,13 +109,43 @@
 //
 // Takes a STRING ("2.2"), not a bare number: Typst's str() rounds floats its
 // own way, and the digits a reader sees should be exactly the digits typed.
-#let lit(v) = {
+//
+// The one exception to the rule above (5.0.0): `#lit("24.0", unlike:
+// "panels.outside_percent")` says "this 24.0 is a version number, not that
+// stat". It silences derivable-number HERE, and only for a collision with the
+// named id(s) (a string or an array of strings); a collision with any other
+// stat still fires. `unlike` rather than `not`, which is a Typst keyword.
+#let lit(v, unlike: none) = {
   if type(v) != str {
     panic("lit() takes a string, e.g. lit(\"2.2\"): Typst renders bare "
       + "numbers with its own rounding, and a vouched literal should read "
       + "exactly as typed.")
   }
+  if unlike != none and type(unlike) != str and type(unlike) != array {
+    panic("lit(unlike:) takes a stats id or an array of ids")
+  }
   v
+}
+
+// An interval from stats.json (5.0.0): "lo–hi", each end rounded with the
+// entry's fmt. The entry's own lo/hi (Stats.add(lo=, hi=)) come first; a pair
+// of sibling ids, `id.lo`/`id.hi` or `id_lo`/`id_hi`, works too. With
+// `level: true` the coverage leads: "95% CI 1.2–3.4".
+#let ci(id, level: false) = {
+  let table = paper-stats.at("intervals", default: (:))
+  if id not in table {
+    if draft-mode {
+      box(fill: yellow, inset: (x: 2pt), text(fill: red, weight: "bold", "?" + id + " interval?"))
+    } else {
+      panic("stats.json has no interval for '" + id + "'. Give the entry lo "
+        + "and hi (Stats.add(..., lo=, hi=)), or declare " + id + ".lo and "
+        + id + ".hi. To keep writing with it unresolved: just draft")
+    }
+  } else if level {
+    table.at(id).with_level
+  } else {
+    table.at(id).display
+  }
 }
 
 // A note to self that CANNOT ship. In draft mode it renders as a loud inline

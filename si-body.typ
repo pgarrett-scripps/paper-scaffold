@@ -22,7 +22,7 @@
 //
 // Delete this import along with stats.typ, stats.json and analysis/scripts/
 // gen_stats.py if the project states no computed numbers in its prose.
-#import "stats.typ": lit, n, s, todo
+#import "stats.typ": ci, lit, n, s, todo
 #import "assets.typ": fig, tbl
 
 // The SI's own reference list. Cite in this file as @si-key, never @key: the

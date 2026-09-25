@@ -4,7 +4,7 @@
     "cohort.n_conditions": {"value": 3, "fmt": ","},
     "cohort.total_n": {"value": 35, "fmt": ","},
     "effect.best_condition": {"value": "Treated", "fmt": ""},
-    "effect.treated_fold": {"value": 2.068627450980392, "fmt": ".2f"},
+    "effect.treated_fold": {"value": 2.068627450980392, "fmt": ".2f", "lo": 1.71, "hi": 2.49, "level": 0.95},
     "effect.treated_over_control": {"value": 1.0899999999999999, "fmt": "+.2f"}
   }
 }

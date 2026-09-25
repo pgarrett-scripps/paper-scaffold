@@ -191,8 +191,9 @@ Four tiers, weakest claim to strongest: a number the analysis computes is
 hand entry in `stats.json` with a note; a deliberate prose literal ("40 °C")
 is vouched in place with `#lit("40")`, which silences only the
 unaccounted-number warning at that spot; a global value-level exception goes
-in `prose-check.toml` with a written reason. `lit()` never silences
-`derivable-number` — a computed value wrapped in it still gets flagged.
+in `prose-check.toml` with a written reason. A plain `lit()` never silences
+`derivable-number` — a computed value wrapped in it still gets flagged;
+`#lit(v, unlike: "id")` clears only the collision with the ids it names.
 
 **A stale slide deck is not a `verify` failure.** Decks live in `slides/`, are
 built by name (`just slides talk`), and sit outside the gate on purpose: `just

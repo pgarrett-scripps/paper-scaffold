@@ -58,7 +58,7 @@ def inspect(id: str, root: Path = ROOT, kind: str | None = None) -> dict:
                 checks.append({"rule": "stats.provenance_missing", "status": "incomplete",
                                "subject": id, "message": "generated entry lacks checksum or source hashes",
                                "command": "just assets"})
-            helpers = ("s", "n")
+            helpers = ("s", "n", "ci")
         else:
             add("assets.integrity", check_assets._entry(id, declaration),
                 None if (declaration.get("origin") or {}).get("by") == "adopted" else "just assets")

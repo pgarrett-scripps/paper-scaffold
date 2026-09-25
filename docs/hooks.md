@@ -242,6 +242,33 @@ The recipes run with the scaffold's settings (`positional-arguments`). Keep
 `set` lines out of `project.just`: `just` applies settings to the whole
 justfile, so one there would change every scaffold recipe too.
 
+## Prose vocabularies and the cover letter
+
+```toml
+[prose]
+vocab = ["proteomics", "prose/lab.toml"]   # shipped name, or a path in the paper
+cover_letter = "warn"                       # warn (default), error, off
+```
+
+What each does: [prose-checks.md](prose-checks.md#claims-held-to-the-numbers).
+
+## Pinned software
+
+A methods paper describes software it did not write in this repository. Pin the
+release it describes, so `/paper:methods-vs-code` compares the Methods with
+that release's code and documentation rather than with whatever is newest:
+
+```toml
+[[software]]
+name = "searchtool"
+repo = "https://github.com/example/searchtool"   # a URL or a local path
+ref = "v0.4.1"                                # tag or commit the paper describes
+docs = ["README.md", "docs/parameters.md"]    # paths inside that repo
+note = "search engine; parameters in Methods 2.3"
+```
+
+`name`, `repo` and `ref` are required. `just hooks` lists the pins.
+
 ## What is not hooked
 
 - **Replacing a built-in recipe.** See [project recipes](#project-recipes).
