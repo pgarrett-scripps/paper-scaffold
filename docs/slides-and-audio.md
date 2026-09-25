@@ -42,7 +42,10 @@ and `paper sync` then leaves the stock one out ([hooks.md](hooks.md)).
 `fmt-check` runs inside `verify`). A talk falls behind the moment a sentence
 changes, the fix costs one recompile, and a nag that is almost always present
 is one people learn to scroll past — the same reasoning that keeps `just viz`
-and the audiobooks out. Ask deliberately, with `just slides-check`.
+and the audiobooks out. Ask deliberately, with `just slides-check`, and for a
+judgment of the talk itself (assertion titles, readability when projected,
+claims against the paper, fit to the slot, speaker notes and backup slides),
+with `/paper:slide-review`.
 
 What a deck *is* held to, every time:
 

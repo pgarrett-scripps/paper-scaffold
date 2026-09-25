@@ -89,6 +89,12 @@ findings were trivia). Each change targets the misses.
 - `/paper:intro-review` asks for the unit of data the method acts on and how
   it relates to the physical object; `/paper:literature-check` flags a
   citation cluster that mixes the data source with background references.
+- New `/paper:slide-review`, read-only: renders a deck and judges it as the
+  audience sees it. One message per slide with the takeaway as the title,
+  text and figures readable when projected, numbers and claims no stronger
+  than the paper's, slide count against the time slot and a problem, method,
+  result arc, and speaker notes plus backup slides for the questions a peer
+  review raised. Run on request; `/paper:review-all` does not include it.
 
 Upgrade: `paper-plugin-update`. No pin move is needed; nothing new can fail.
 

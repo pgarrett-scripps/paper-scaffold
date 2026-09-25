@@ -353,7 +353,7 @@ class Hardening(unittest.TestCase):
                     "cover-letter", "reviewer-response",
                     "claim-audit", "methods-vs-code", "figure-review", "peer-review",
                     "review-all", "prose-review", "intro-review",
-                    "literature-check", "story-review"}
+                    "literature-check", "story-review", "slide-review"}
         self.assertEqual({p.name for p in shared.iterdir()}, expected)
         for name in expected:
             skill = shared / name / "SKILL.md"

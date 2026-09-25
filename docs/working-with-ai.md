@@ -49,13 +49,13 @@ and specific rendering defects. Copy-editing records its initial metrics with
 `just verify`. The writing review also checks defined terminology and concrete,
 supported claims using [STYLE.md](../STYLE.md#scientific-terms-and-concrete-claims).
 
-Fifteen workflows ship as skills: six that edit (`copy-edit`, `fix-verify`,
-`declare-number`, `new-figure`, `cover-letter`, `reviewer-response`) and eight read-only reviews (`claim-audit`,
+Sixteen workflows ship as skills: six that edit (`copy-edit`, `fix-verify`,
+`declare-number`, `new-figure`, `cover-letter`, `reviewer-response`) and nine read-only reviews (`claim-audit`,
 `methods-vs-code`, `figure-review`, `prose-review`, `intro-review`, `literature-check`,
-`story-review`, `peer-review`) that write findings under `reviews/`, plus
+`story-review`, `peer-review`, `slide-review`) that write findings under `reviews/`, plus
 `review-all`, which runs the fix-list reviews in parallel (the network-bound
 literature check only on request; the story review is a plan to discuss and
-stays out) and merges them. Their maintained files live in `plugins/paper/skills/`
+stays out, and a talk is reviewed on its own with `slide-review`) and merges them. Their maintained files live in `plugins/paper/skills/`
 in the scaffold and reach every paper as the `paper` Claude Code plugin
 (`.claude/settings.json` enables it; the `paper-scaffold` marketplace serves it).
 `.agents/skills` is a symlink into the scaffold checkout so Codex discovers the
@@ -115,7 +115,8 @@ markdown table for the life of the paper:
   reviews read the ledger but not write it, and merges all of them into it
   once at the end, in place of a separate ranked list; its ship verdict is
   decided by every open row. `story-review` writes nothing to the ledger:
-  its plan becomes rows only for the items the author accepts.
+  its plan becomes rows only for the items the author accepts. `slide-review`
+  writes to it only when asked: a talk is revised on its own schedule.
 - **Editing skills** start with `just check-actions --open` and name the open
   rows that bear on the task, and close each row they fix.
 - The ledger is plain markdown so an author can edit it by hand (write a
