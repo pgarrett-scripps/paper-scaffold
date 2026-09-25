@@ -126,6 +126,88 @@ def _entry(id: str, rec: dict) -> list[Finding]:
     return out
 
 
+def _checked_against(id: str, rec: dict) -> list[Finding]:
+    """Files a hand or adopted table was checked against by a person (5.0.0).
+
+    A table typed by hand (the software versions used, the commands run)
+    has no generator to go stale, and so goes quietly wrong when the thing
+    it describes moves: a lock file bumps a version, a script gains a flag.
+    `checked_against` names those files; `just adopt-checked ID` records
+    their hashes once the table has been re-read. A warning, not an error:
+    the table may still be right, and only a person can say.
+    """
+    out: list[Finding] = []
+    for src, want in sorted((rec.get("checked_against") or {}).items()):
+        p = ROOT / src
+        if not want:
+            out.append(Finding("warn", id,
+                f"is checked against {src}, which has no recorded hash -- "
+                f"re-read the table, then: just adopt-checked {id}"))
+        elif not p.is_file():
+            out.append(Finding("note", id,
+                f"checked-against file {src} is not present, so it could not "
+                f"be verified"))
+        elif _sha(p) != want:
+            out.append(Finding("warn", id,
+                f"{src} has changed since {rec.get('path')} was last checked "
+                f"against it. Re-read the table; if it still holds: "
+                f"just adopt-checked {id}"))
+    return out
+
+
+def _generators(values: dict) -> list[Finding]:
+    """Recorded generators the last `just assets` did not execute (5.0.0).
+
+    A generator the recipe chain never reaches (a script renamed out of the
+    gen_*_figure.py glob, a step analysis/justfile no longer calls) leaves
+    its figure frozen at the last manual run, with every hash still
+    matching. `just assets` logs which generators executed
+    (.build-state/assets-run.json); an asset whose generator is absent from
+    the last complete run warns. No run log (a fresh clone) is silent, and
+    a static note fires for a generator nothing in the analysis recipes
+    names at all.
+    """
+    import evidence
+    produced = {i: (r.get("origin") or {}).get("by") for i, r in values.items()}
+    try:
+        stats = json.loads((ROOT / "stats.json").read_text()).get("values", {})
+        produced.update({i: (r.get("origin") or {}).get("by")
+                         for i, r in stats.items() if isinstance(r, dict)})
+    except (OSError, ValueError, AttributeError):
+        pass
+    owners = sorted({b for b in produced.values() if isinstance(b, str)}
+                    - {"adopted", "hand"})
+    run = evidence.last_run(ROOT)
+    out: list[Finding] = []
+    recipes = ""
+    for pattern in ("analysis/justfile", "analysis/*.just", "project.just",
+                    "analysis/Makefile", "analysis/Snakefile", "analysis/*.sh",
+                    "analysis/scripts/*.sh", "analysis/workflow/*"):
+        for f in ROOT.glob(pattern):
+            if f.is_file():
+                try:
+                    recipes += f.read_text(errors="replace")
+                except OSError:
+                    pass
+    stock = re.compile(r"gen_[\w-]+_(?:table|figure)\.py$|gen_stats\.py$")
+    for by in owners:
+        name = Path(by).name
+        ids = sorted(i for i, b in produced.items() if b == by)
+        shown = ", ".join(ids[:3]) + (" ..." if len(ids) > 3 else "")
+        if run is not None and by not in run.get("ran", []):
+            out.append(Finding("warn", by,
+                f"did not run in the last `just assets` ({run.get('ended', '?')}), "
+                f"so {shown} may be older than the analysis. Wire it into "
+                f"analysis/justfile, or run it and re-check"))
+        elif (run is None and recipes and not stock.search(name)
+              and name not in recipes and Path(by).stem not in recipes):
+            out.append(Finding("note", by,
+                f"is named by no analysis recipe and misses the gen_*_figure.py "
+                f"/ gen_*_table.py glob, so `just assets` may never run it "
+                f"({shown})"))
+    return out
+
+
 def _references(values: dict) -> list[Finding]:
     """Ids the manuscript calls but does not declare, and the reverse.
 
@@ -201,6 +283,8 @@ def main() -> int:
     found: list[Finding] = []
     for id, rec in sorted(values.items()):
         found += _entry(id, rec)
+        found += _checked_against(id, rec)
+    found += _generators(values)
     try:
         found += _references(values)
     except (OSError, ValueError) as exc:

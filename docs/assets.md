@@ -63,6 +63,28 @@ record("fig.yourname", str(OUT.relative_to(PAPER)), kind="figure",
 
 `inputs` is the DATA it read; the script and its imports are recorded
 automatically. Paths are relative to the manuscript root, not to `analysis/`.
+An absolute path inside the repository is stored relative, and a symlinked
+data directory is kept as its in-repo path, so `assets.json` holds no host
+paths. Data from an `evidence.toml` set is best opened as `evidence("name")`
+(`from _assets import record, evidence`); `record(..., evidence="name")`
+names a set the inputs do not reveal. The set's software versions are then
+recorded in the entry ([evidence.md](evidence.md)).
+
+`just check-evidence` warns about declared inputs git does not track or
+ignores: a clone cannot rebuild from them. Commit them, or declare the data
+as an evidence set.
+
+`just assets` logs which generators it ran (`.build-state/assets-run.json`),
+and `just check-assets` warns about a recorded generator the last run did not
+reach: a script renamed out of the `gen_*` glob, or a step the analysis
+recipe no longer calls, whose figure would otherwise stay frozen with every
+hash still matching.
+
+A hand-made or adopted table that describes something else (software
+versions from a lock file, the commands in a script) can name those files
+under `checked_against` in its `assets.json` entry, `{"uv.lock": null}`.
+After re-reading the table, `just adopt-checked ID` records their hashes;
+`just check-assets` warns when one changes afterwards.
 
 Then `just assets && git add figures si assets.json stats.json`, because all
 of those are tracked.

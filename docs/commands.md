@@ -40,6 +40,10 @@ Every `just` recipe a manuscript uses, in one table.
 | `just trace <id> --json` | Inspect a statistic or asset, its uses, provenance, and checks as structured data |
 | `just check-actions [--open\|--init]` | Validate `reviews/ACTIONS.md` and count open review actions; `--open` lists them, `--init` creates it. In `verify` |
 | `just pin` | Record hashes for the files listed under `pinned` in `stats.json` |
+| `just check-evidence [--strict]` | `evidence.toml`, the versions behind each number and figure, `pending` declarations, untracked inputs ([evidence](evidence.md)). In `verify`; `--strict` in `preflight` |
+| `just evidence-stamp [set...]` | Record each evidence set's verification file, config inputs, software and (frozen) file tree in `evidence.lock.json` |
+| `just impact TOOL[@VER]` | Every evidence set, number and figure a tool version touches, and the prose lines that use them |
+| `just adopt-checked <id>` | Record the hashes of the files a hand or adopted table lists under `checked_against` |
 | `just text-baseline` / `text-diff` | Snapshot the PDF's words; word-level diff after a structural refactor |
 | `just review-baseline <name>` | Save a resolved manuscript version, including its figures and bibliography |
 | `just review <name> [new-name]` | Highlight changes against the current manuscript or another saved version |

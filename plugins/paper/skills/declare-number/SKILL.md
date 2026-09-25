@@ -40,8 +40,11 @@ task to clear the list.
    `diff_to=`, not a hand-derived ratio id. Run `just assets`. Never turn a prose literal into a
    generator constant and call that a reproducible calculation.
 2. **Externally sourced number:** when no project script computes it, add a
-   hand entry to stats.json with value, fmt, origin.by = "hand", and an
-   origin.note identifying the actual source and location. Include unit,
+   hand entry to stats.json with value, fmt, origin.by = "hand", an
+   origin.note identifying the actual source and location, and an
+   origin.source a reader can re-open: a repo-relative path (`#anchor`
+   allowed), URL, DOI, commit, or `evidence:SET`. Never a host path. A new
+   hand entry without a source fails check-stats. Include unit,
    desc, and expect where useful. Reference it with `#s("id")`.
 3. **Deliberate prose literal:** use `#lit("40")` with the original digits.
    This vouches only for that occurrence and only suppresses unaccounted-number.

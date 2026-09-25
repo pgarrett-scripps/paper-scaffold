@@ -69,7 +69,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from _provenance import PAPER, caller_script, code_inputs, declared_inputs
+from _provenance import (PAPER, caller_script, code_inputs, declared_inputs,
+                         evidence, evidence_of, note_run)  # noqa: F401 (evidence: re-exported)
+import evidence as _evidence
 
 from manifest_validation import (guard_errors, validate, ManifestError,
                                  relation_errors, uncertainty_errors, UNCERTAINTY)
@@ -459,6 +461,14 @@ class Stats:
             entry["checksum"] = _checksum(
                 entry["value"], {f: entry[f] for f in UNCERTAINTY if f in entry})
             entry["origin"] = {"by": mine, "at": at}
+            # The evidence.toml sets that name this id, with their software
+            # versions: what `just check-evidence` compares with the manifest.
+            try:
+                sets = evidence_of(id, "stats")
+            except ValueError as e:
+                raise StatError(str(e)) from None
+            if sets:
+                entry["evidence"] = sets
             final[id] = entry
 
         merged = {**kept, **final}
@@ -489,6 +499,14 @@ class Stats:
         # adds -- is the author's, and passes through untouched.
         extra = {k: v for k, v in existing_doc.items()
                  if k not in ("_about", "sources", "values")}
+        # Which evidence sets this generator resolved through evidence(), per
+        # generator like `sources` (docs/evidence.md).
+        used = {k: v for k, v in (extra.get("evidence") or {}).items() if k != mine}
+        if _evidence.USED and self._values:
+            used[mine] = dict(sorted(_evidence.USED.items()))
+        extra.pop("evidence", None)
+        if used:
+            extra["evidence"] = dict(sorted(used.items()))
 
         write_text(p, json.dumps(
             {"_about": ABOUT,
@@ -496,6 +514,8 @@ class Stats:
              "sources": dict(sorted(sources.items())),
              "values": dict(sorted(merged.items()))},
             indent=2, sort_keys=False) + "\n")
+        if not os.environ.get("PAPER_STATS_OUT"):
+            note_run(mine)
         receipt = os.environ.get("PAPER_STATS_RECEIPT")
         if receipt:
             write_text(Path(receipt), json.dumps({"token": os.environ.get("PAPER_STATS_TOKEN"),

@@ -15,6 +15,7 @@ the reasons behind them.
 | Connect results to the text | [Numbers in prose](numbers.md) |
 | Add a figure or table | [Generated figures and tables](assets.md) |
 | Inspect a result's source | [Tracing numbers and assets](numbers.md#tracing-numbers-and-assets) |
+| Declare where results come from: data sets, software versions, pending results | [Evidence](evidence.md) |
 | Understand the gates and staleness | [Builds, staleness and the gates](build-and-staleness.md) |
 | Compare manuscript versions | [Reviewing changes](build-and-staleness.md#reviewing-changes-between-versions) |
 | Work with an AI editor | [AI editing and review](working-with-ai.md) |

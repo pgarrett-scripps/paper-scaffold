@@ -364,6 +364,9 @@ preflight: submission
   rc=0
   just verify || rc=1
   echo ""
+  echo "=== evidence, strict (just check-evidence --strict) ==="
+  just check-evidence --strict || rc=1
+  echo ""
   echo "=== upload set (just check-submission) ==="
   just check-submission || rc=1
   echo ""
@@ -445,6 +448,7 @@ check-declared:
   rc=0
   just check-stats  || rc=1
   just check-assets || rc=1
+  just check-evidence || rc=1
   exit $rc
 
 # Reads files only -- guards, provenance, checksums, and a hash comparison of the
@@ -496,6 +500,35 @@ check-actions *args:
 # Adopt committed figures/tables no generator can rebuild (migration aid)
 adopt note="":
   @uv run --quiet paper tool adopt_assets --note="{{note}}"
+
+# A hand-made or adopted table checked against source files: list them under
+# the entry's `checked_against` in assets.json (path: null), then run this.
+# check-assets warns when one of them changes afterwards (docs/assets.md).
+# Record the hashes of the files an adopted/hand asset was checked against
+adopt-checked id:
+  @uv run --quiet paper tool adopt_assets --checked="{{id}}"
+
+# evidence.toml names each body of evidence (a result directory, the software
+# version that produced it, the config it read, whether it is frozen). This
+# checks the manifest, the versions each number and figure was built from,
+# pending declarations, and whether git holds the declared inputs. Files only;
+# nothing is rebuilt. docs/evidence.md has the contract.
+# Check evidence.toml, the versions behind each result, pending, and inputs
+check-evidence *args:
+  @uv run --quiet paper tool check_evidence "$@"
+
+# Record what check-evidence compares against: each set's verification file,
+# config inputs, software and (frozen sets) file tree. Run it after checking a
+# run by eye; no names stamps every set.
+# Stamp evidence sets into evidence.lock.json after checking them
+evidence-stamp *names:
+  @uv run --quiet paper tool check_evidence --stamp {{names}}
+
+# Every evidence set, number and figure a tool version touches, and the prose
+# lines that use them: `just impact searchtool@0.7.0` (or just the tool name).
+# List what a software version touches, down to the sentences
+impact spec:
+  @uv run --quiet paper tool check_evidence --impact "{{spec}}"
 
 # assets.json is the same contract for figures and tables: declared by the script
 # that writes them, referenced from the prose by id. Because the compile resolves
@@ -1028,7 +1061,12 @@ assets:
     echo "no analysis/ directory: this manuscript has no generated assets."
     exit 0
   fi
+  # The run log (.build-state/assets-run.json) records which generators this
+  # run executed, so check-assets can name one no recipe reaches.
+  token=$(uv run --quiet paper tool evidence run-start)
+  export PAPER_ASSETS_RUN="$token"
   (cd analysis && just assets)
+  uv run --quiet paper tool evidence run-end "$token"
   # No stamp is written any more. assets.json records a hash per generated file
   # and per input its generator declared, so "has the analysis moved on since
   # these were made" is answered per entry by `just check-assets`, with the file

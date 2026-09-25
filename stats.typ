@@ -68,11 +68,32 @@
   }
 }
 
+// PENDING (stats.json `pending`, docs/evidence.md): an id, or a "prefix*",
+// whose evidence is not in yet. It renders as a visible placeholder in EVERY
+// build, value or not, so the paper compiles while the run is outstanding;
+// `just verify` and `just preflight` fail until the declaration is removed.
+#let _pending-reason(id) = {
+  let found = none
+  for (key, reason) in paper-stats.at("pending", default: (:)) {
+    if found == none and (key == id or (key.ends-with("*")
+        and id.starts-with(key.slice(0, key.len() - 1)))) {
+      found = reason
+    }
+  }
+  found
+}
+
+#let pending-box(id) = box(
+  fill: rgb("#fff1c2"), stroke: 0.5pt + rgb("#b36b00"), inset: (x: 2pt),
+  text(fill: rgb("#8a4b00"), weight: "bold", "[pending: " + id + "]"),
+)
+
 // The display string: already rounded, by the rule set next to the analysis.
 //
 // In draft mode an unknown id becomes a placeholder that is hard to overlook and
 // trivial to grep for.
 #let s(id) = {
+  if _pending-reason(id) != none { return pending-box(id) }
   let e = _entry(id)
   if e == none {
     box(fill: yellow, inset: (x: 2pt), text(fill: red, weight: "bold", "?" + id + "?"))

@@ -84,12 +84,20 @@ same number leaves it alone, so the date means something.
 "cohort.sites": {
   "value": 4, "fmt": "",
   "expect": {"sign": "+"},
-  "origin": {"by": "hand", "note": "study protocol v3, Table 1"}
+  "origin": {"by": "hand", "note": "study protocol v3, Table 1",
+             "source": "docs/protocol-v3.pdf#table-1"}
 }
 ```
 
-A hand entry must carry `origin.note` saying where the number came from, and it
-is guarded exactly as tightly as a derived one. What it cannot get is
+A hand entry must carry `origin.note` saying where the number came from and,
+since 5.0.0, `origin.source` naming something a reader can go back to: a
+repo-relative path (`#anchor` allowed), a URL, a DOI (`doi:10.x/...` or
+`10.x/...`), a commit (`abc1234` or `repo@abc1234`), or an evidence set
+(`evidence:SET`, [evidence.md](evidence.md)). A host path (`/home/...`) is an
+error, as is a missing source on a new entry. Entries that already lacked one
+when the paper moved to 5.0.0 are listed by `paper sync` in
+`.paper/grandfathered.json` and warn instead; adding a source retires the
+warning. A hand entry is guarded exactly as tightly as a derived one. What it cannot get is
 re-derivation: `check-stats-deep` recomputes generated values from the data and
 compares, and nothing can do that for a number that came off a printout. The
 note is the audit trail instead.
@@ -98,6 +106,23 @@ Hand entries outlive every generator run. A manuscript that drops a whole
 branch of its argument can prune the ones it no longer states with
 `st.write(keep_hand_ids={...})`: every hand entry not named is removed, and the
 run prints which. Without the argument nothing hand-entered is ever deleted.
+
+### Pending: results not in yet
+
+A number or figure whose evidence is still running can be declared pending, so
+the draft compiles and the gap is visible rather than a stale value:
+
+```json
+"pending": {"bench.orbitrap.*": "rerun at 0.10.0 in progress"}
+```
+
+The top-level `pending` block (in `stats.json` for numbers, `assets.json` for
+figures and tables; keys are an exact id or a prefix ending in `*`) makes
+`#s()` print a boxed `[pending: id]` and `fig()`/`tbl()` a placeholder block,
+even for an id not yet declared. `#n()` still needs a real value. Nothing
+else relaxes: `just check-evidence`, and so `just verify` and
+`just preflight`, fail while any pending entry remains. Remove the entry when
+the result is in.
 
 That is also why `stats.json` sits at the manuscript root rather than under
 `si/`: a file you are invited to edit is not generated output, and cannot be
@@ -229,7 +254,9 @@ just trace fig.example --json
 `schema_version` (currently 1), `id`, `status`, `exit_code`, and `findings`.
 A completed inspection also returns the declaration, display value for a
 statistic, declared input hashes, usage locations (`path`, `line`, `context`),
-and suggested commands. Findings carry stable rule IDs. Suggestions are never
+`evidence` (each evidence set behind the entry: the versions it was
+`recorded` with, what evidence.toml `declared` now, its paths, status and
+verification file; [evidence.md](evidence.md)), and suggested commands. Findings carry stable rule IDs. Suggestions are never
 executed automatically, and some findings require an author decision instead
 of a command.
 

@@ -35,7 +35,7 @@ ALWAYS = ("justfile", "stats.typ", "assets.typ", "code.typ", "wordcount.typ",
 ANALYSIS_HELPERS = ("analysis/scripts/_stats.py", "analysis/scripts/_assets.py",
                     "analysis/scripts/_provenance.py")
 ANALYSIS_TOOLCHAIN = ("atomic_io.py", "manifest_validation.py", "hashcache.py",
-                      "paths.py")
+                      "paths.py", "evidence.py")
 TOOLCHAIN_DIR = "analysis/scripts/_toolchain"
 # Written when audio/config.py exists (the paper's own narration settings).
 AUDIO = ("audio/extract_prose.py", "audio/make_audiobook.py", "audio/make_cover.py")
@@ -188,6 +188,50 @@ class Result:
     unchanged: list[str]
     removed: list[str]
     overrides: dict[str, str]
+    grandfathered: list[str] = None  # type: ignore[assignment]
+
+
+GRANDFATHERED = ".paper/grandfathered.json"
+
+
+def _before_5(release: str | None) -> bool:
+    """A lock from before 5.0.0, or no lock at all (a migration)."""
+    if not release:
+        return True
+    m = re.match(r"(\d+)", release)
+    return bool(m) and int(m.group(1)) < 5
+
+
+def grandfather(root: Path, old: str | None) -> list[str]:
+    """Record the hand entries that predate 5.0.0's origin.source rule.
+
+    5.0.0 requires a hand-entered number to name its source (a path, URL,
+    DOI, commit or evidence set). New entries fail without one; entries that
+    already existed when the paper moved to 5.0.0 are listed here and only
+    warn, so the upgrade fails nothing. Written once, on the move; adding a
+    source to an entry is what retires its warning.
+    """
+    stats, path = root / "stats.json", root / GRANDFATHERED
+    if not _before_5(old) or not stats.is_file():
+        return []
+    try:
+        values = json.loads(stats.read_text()).get("values", {})
+        have = json.loads(path.read_text()) if path.is_file() else {}
+    except (ValueError, AttributeError):
+        return []
+    ids = sorted(id for id, rec in values.items()
+                 if isinstance(rec, dict)
+                 and (rec.get("origin") or {}).get("by") == "hand"
+                 and not (rec.get("origin") or {}).get("source"))
+    if not ids:
+        return []
+    have["hand-source"] = sorted({*have.get("hand-source", []), *ids})
+    have["_about"] = ("Written by `paper sync` on the move to 5.0.0: hand entries "
+                      "that predate the origin.source rule, which warn instead "
+                      "of failing. Add a source to retire one.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(dict(sorted(have.items())), indent=2) + "\n")
+    return ids
 
 
 def sync(root: Path, force: bool = False, replace: tuple[str, ...] = ()) -> Result:
@@ -248,9 +292,10 @@ def sync(root: Path, force: bool = False, replace: tuple[str, ...] = ()) -> Resu
         "overrides": found,
     }
     (root / LOCK).parent.mkdir(parents=True, exist_ok=True)
+    old_release = lock.get("scaffold", {}).get("version")
     (root / LOCK).write_text(json.dumps(new_lock, indent=2) + "\n")
     mirror_docs(root)
-    return Result(written, unchanged, removed, found)
+    return Result(written, unchanged, removed, found, grandfather(root, old_release))
 
 
 def check(root: Path) -> list[str]:
@@ -348,4 +393,10 @@ def main_sync(root: Path, check_only: bool, force: bool) -> int:
         print(f"  removed {t}")
     for t in result.overrides:
         print(f"  override (the paper's own) {t}")
+    if result.grandfathered:
+        print(f"  {len(result.grandfathered)} hand entr"
+              f"{'y' if len(result.grandfathered) == 1 else 'ies'} with no "
+              f"origin.source, recorded in {GRANDFATHERED} (they warn; new ones "
+              f"fail): {', '.join(result.grandfathered[:6])}"
+              f"{' ...' if len(result.grandfathered) > 6 else ''}")
     return 0

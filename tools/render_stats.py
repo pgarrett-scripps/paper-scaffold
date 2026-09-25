@@ -95,9 +95,14 @@ def render(SRC: Path, OUT: Path) -> int:
     except (TypeError, ValueError) as e:
         print(f"cannot format an interval: {e}", file=sys.stderr)
         return 1
-    write_text(OUT, json.dumps({"_about": ABOUT, "values": out,
-                                **({"intervals": intervals} if intervals else {})},
-                               indent=2) + "\n")
+    rendered = {"_about": ABOUT, "values": out}
+    if intervals:
+        rendered["intervals"] = intervals
+    # Ids declared pending (stats.json `pending`, docs/evidence.md) render as
+    # a visible placeholder in every build; only verify and preflight fail.
+    if doc.get("pending"):
+        rendered["pending"] = doc["pending"]
+    write_text(OUT, json.dumps(rendered, indent=2) + "\n")
     print(f"rendered {len(out)} value(s) -> {OUT.name}")
     return 0
 

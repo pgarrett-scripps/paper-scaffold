@@ -109,6 +109,7 @@ CASE_MODULES = (
     "layout_cases",           # the built PDF: margins, figures against the profile
     "port_cases",             # manuscript.toml upstream: ported parts, port-diff
     "claims_cases",           # claims held to the numbers: ci, relations, wording
+    "evidence_cases",         # evidence.toml, versions, inputs, pending
 )
 
 
