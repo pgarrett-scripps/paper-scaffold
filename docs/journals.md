@@ -61,10 +61,16 @@ by `analysis/scripts/gen_toc_figure.py` at exactly the ACS box, 975 x 525 px;
 a graphic drawn by hand goes under `figures/`, is declared with `just adopt`,
 and is referenced the same way.
 
-What is deliberately not checked: figure widths against the journal's column
-sizes. The PDF here is the arkheion layout, not the journal's, so a physical
-width check would be noise until production; the resolution floor covers the
-part that actually bites.
+**Figure limits.** A profile's `[figures]` may also set `single-column-in`,
+`double-column-min-in` and `double-column-max-in`, `max-height-in`,
+`min-type-pt` and `color-modes` (some of `"rgb"`, `"cmyk"`, `"gray"`). The
+JASMS profiles set the widths and type floor their guidelines quote.
+`just check-layout` (and `just check-submission`, so `preflight`) reads them
+against each figure's own file, the size `record()` wrote to assets.json's
+`print` field, not against where the preprint layout happens to place it:
+the file is what the journal receives and resizes. The same check reads the
+effective resolution of every raster as the PDF places it (`pdfimages`), and
+warns on text set past the margins. All of it warns; `--strict` fails.
 
 ## Word-count scopes and limits
 

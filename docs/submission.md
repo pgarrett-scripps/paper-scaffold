@@ -45,7 +45,11 @@ The split files refuse to build while the source differs from the last
 `just paper` capture. Each output is recorded in `.build-state/submission.json`.
 The set is outside `verify` for the audiobooks' reason: `just check` notes a
 stale set, `just check-submission` fails on it, and `just preflight` rebuilds
-and checks it.
+and checks it. `just check-submission` then runs `just check-layout
+--submission` over `paper.pdf` and the set's PDFs: text past the margins,
+and each figure's resolution as placed, size, smallest type and colour mode
+against the profile's `[figures]` limits ([journals.md](journals.md)). Those
+are warnings; the journal's production office has the last word on layout.
 
 ## The cover letter
 

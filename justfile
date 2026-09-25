@@ -981,9 +981,14 @@ submission: paper
   uv run --quiet paper tool submission all
   uv run --quiet paper tool project_hooks stages submission
 
-# Fail if any file in submission/ no longer matches the source it was built from
+# Fail if any file in submission/ no longer matches the source it was built from; warn on its layout and figures
 check-submission:
   @uv run --quiet paper tool submission check
+  @uv run --quiet paper tool layout_check --submission
+
+# Warn on text past the margins in paper.pdf and on figures outside the journal's [figures] limits (--strict fails)
+check-layout *args:
+  @uv run --quiet paper tool layout_check {{args}}
 
 # Test Word content, formatting, templates and chapter reference isolation
 test-docx:

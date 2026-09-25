@@ -66,7 +66,10 @@ PROFILE_KEYS = {"schema_version", "label", "journal", "type", "source",
                 "graphical-abstract", "cover-letter", "notes"}
 WORD_KEYS = {"main-max", "counts", "excludes", "abstract-max", "keywords-max"}
 FLOAT_KEYS = {"figures-max", "tables-max", "figures-and-tables-max"}
-FIGURE_KEYS = {"min-dpi"}
+FIGURE_KEYS = {"min-dpi", "single-column-in", "double-column-min-in",
+               "double-column-max-in", "max-height-in", "min-type-pt", "color-modes"}
+# Colour modes a profile may allow, as tools/layout_check.py names a raster's.
+COLOR_MODES = ("rgb", "cmyk", "gray")
 GRAPHIC_KEYS = {"required", "width-in", "height-in", "min-dpi", "label",
                 "file-format", "source", "guidelines-dated"}
 # The standalone graphical-abstract file `just toc-graphic` can write. The
@@ -209,6 +212,18 @@ def load_profile(root: Path, id: str) -> Profile:
     figures = data.get("figures", {})
     keys(figures, FIGURE_KEYS, f"{where} [figures]")
     _positive(figures, "min-dpi", where)
+    for k in ("single-column-in", "double-column-min-in", "double-column-max-in",
+              "max-height-in", "min-type-pt"):
+        _positive(figures, k, where, number=True)
+    if ("double-column-min-in" in figures) != ("double-column-max-in" in figures) or \
+            figures.get("double-column-min-in", 0) > figures.get("double-column-max-in", 0):
+        raise JournalError(f"{where}: [figures] double-column-min-in and "
+                           "double-column-max-in go together, min no larger than max")
+    modes = figures.get("color-modes")
+    if modes is not None and (not isinstance(modes, list) or not modes
+                              or any(m not in COLOR_MODES for m in modes)):
+        raise JournalError(f"{where}: [figures].color-modes must list some of "
+                           f"{', '.join(COLOR_MODES)}")
 
     graphic = data.get("graphical-abstract", {})
     keys(graphic, GRAPHIC_KEYS, f"{where} [graphical-abstract]")

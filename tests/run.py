@@ -106,6 +106,7 @@ CASE_MODULES = (
     "hooks_cases",            # project.toml: the paper's extension hooks
     "package_cases",          # paper sync, sync --check, paper migrate
     "word_table_cases",       # [word.style] table_* keys and [word.tables]
+    "layout_cases",           # the built PDF: margins, figures against the profile
 )
 
 

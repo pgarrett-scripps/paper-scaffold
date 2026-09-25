@@ -28,6 +28,13 @@ figures-and-tables-max = 3   # "up to three single-column figures or tables (up 
 
 [figures]
 min-dpi = 300   # color art; line art 1200 dpi, grayscale 600 dpi
+# From the quoted [notes].figures: "up to 240 points wide (3.33 in.)",
+# "between 300 and 504 points (4.167 in. and 7 in.)", "no smaller than 4.5
+# points". `just check-layout` reads them against assets.json's print sizes.
+single-column-in = 3.33
+double-column-min-in = 4.167
+double-column-max-in = 7.0
+min-type-pt = 4.5
 
 [graphical-abstract]
 required = true
