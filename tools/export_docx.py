@@ -296,18 +296,24 @@ def paginate(root: ET.Element) -> ET.Element:
     return root
 
 
-def postprocess(path: Path) -> None:
-    """Apply paginate() to a written .docx."""
+def postprocess(path: Path, style: dict | None = None, tables: dict | None = None,
+                width_in: float = TEXT_WIDTH_IN) -> set[str]:
+    """Apply paginate() to a written .docx, then the [word.style] table_*
+    keys and [word.tables] (tools/word_tables.py) when any is set. Returns
+    the [word.tables] labels no table in the file carries."""
     with zipfile.ZipFile(path) as archive:
         parts = [(info, archive.read(info)) for info in archive.infolist()]
     xml = next(data for info, data in parts if info.filename == "word/document.xml")
     for _, (prefix, uri) in ET.iterparse(io.BytesIO(xml), events=("start-ns",)):
         ET.register_namespace(prefix, uri)
-    rendered = ET.tostring(paginate(ET.fromstring(xml)), encoding="utf-8",
-                           xml_declaration=True)
+    tree = paginate(ET.fromstring(xml))
+    from word_tables import apply as style_tables
+    unmatched = style_tables(tree, style or {}, tables or {}, round(width_in * 1440))
+    rendered = ET.tostring(tree, encoding="utf-8", xml_declaration=True)
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
         for info, data in parts:
             archive.writestr(info, rendered if info.filename == "word/document.xml" else data)
+    return unmatched
 
 
 def reorder(path: Path) -> None:
@@ -552,19 +558,25 @@ def main() -> int:
             return 1
     else:
         from paper_word_reference import reference_for
-        reference = reference_for(ROOT, word.style)
+        from project_hooks import TABLE_STYLE_KEYS
+        reference = reference_for(ROOT, {k: v for k, v in word.style.items()
+                                         if k not in TABLE_STYLE_KEYS})
     args = ["--fail-if-warnings", "--resource-path", str(ROOT),
             "--reference-doc", str(reference)]
     for lua in word.lua_filters:
         args += ["--lua-filter", str(ROOT / lua)]
-    adapt_tree(tree, text_width(reference))
+    width_in = text_width(reference)
+    adapt_tree(tree, width_in)
     import pypandoc
     pypandoc.convert_text(json.dumps(tree), "docx", format="json",
                           outputfile=str(OUT), extra_args=args)
     tools = Path(__file__).resolve().parent
     try:
         run_word_steps(word.before_pagination, OUT, ROOT, tools)
-        postprocess(OUT)
+        unmatched = postprocess(OUT, word.style, word.tables, width_in)
+        if unmatched and not MAIN_ONLY:
+            print(f"note: [word.tables] names no table in the export: "
+                  f"{', '.join(sorted(unmatched))}")
         if word.after_pagination:
             run_word_steps(word.after_pagination, OUT, ROOT, tools)
             reorder(OUT)

@@ -119,10 +119,11 @@ Decks import the declared file.
 
 ## Word post-processing
 
-A paper that needs its tables sized or a footer added to `paper.docx`
-declares the step instead of editing `tools/export_docx.py`. Fonts, sizes,
-spacing, margins and title or heading colours need no step: they are
-settings in `[word.style]`, or a hand-made reference document in
+A paper that needs its own change to `paper.docx` declares the step instead
+of editing `tools/export_docx.py`. Fonts, sizes, spacing, margins, title and
+heading styling, page numbers and table styling (type size, borders, header
+rows, fixed column widths per table) need no step: they are settings in
+`[word.style]` and `[word.tables]`, or a hand-made reference document in
 `[word] reference` (docs/word-export.md).
 
 ```toml

@@ -36,7 +36,7 @@ BUILD_TOOLS = ("render_stats.py", "typst_prose.py", "journal.py",
                "atomic_io.py", "build_state.py", "bibliography.py",
                "manuscript_snapshot.py", "review.py", "paper_report.py",
                "wordcount.sh", "wordcount.py", "report.py", "project_hooks.py",
-               "paths.py", "document_project.py")
+               "paths.py", "document_project.py", "word_tables.py")
 INTERMEDIATES = {"stats-rendered.json", "paper.resolved.typ"}
 
 

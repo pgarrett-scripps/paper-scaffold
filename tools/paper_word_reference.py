@@ -113,6 +113,13 @@ def apply_style(styles, document, style: dict) -> bool:
             child(props, "szCs").set(tag("val"), half)
         if "title_align" in settings:
             child(child(title, "pPr"), "jc").set(tag("val"), settings["title_align"])
+        if "title_bold" in settings:
+            props = child(title, "rPr")
+            for name in ("b", "bCs"):
+                element = child(props, name)
+                element.attrib.clear()
+                if not settings["title_bold"]:
+                    element.set(tag("val"), "0")
     for name in ("Title", "Subtitle"):
         if name in by_id:
             set_color(child(by_id[name], "rPr"), settings["title_color"])
@@ -137,6 +144,42 @@ def apply_style(styles, document, style: dict) -> bool:
     return True
 
 
+FOOTER = "footer-page-number.xml"
+REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
+
+def page_numbers(files: dict, document) -> None:
+    """A centred PAGE field in the footer of every section. pandoc carries
+    the reference document's section, footer included, into paper.docx."""
+    footer = ET.Element(tag("ftr"))
+    p = ET.SubElement(footer, tag("p"))
+    child(child(p, "pPr"), "jc").set(tag("val"), "center")
+    field = ET.SubElement(p, tag("fldSimple"), {tag("instr"): " PAGE "})
+    ET.SubElement(ET.SubElement(field, tag("r")), tag("t")).text = "1"
+    files[f"word/{FOOTER}"] = ET.tostring(footer, encoding="utf-8", xml_declaration=True)
+    pkg = "http://schemas.openxmlformats.org/package/2006/relationships"
+    rels = parse(files["word/_rels/document.xml.rels"])
+    ids = {r.get("Id") for r in rels}
+    rid = next(f"rIdPageFooter{i}" for i in range(1, 100) if f"rIdPageFooter{i}" not in ids)
+    ET.SubElement(rels, "{" + pkg + "}Relationship",
+                  {"Id": rid, "Type": REL + "/footer", "Target": FOOTER})
+    files["word/_rels/document.xml.rels"] = ET.tostring(rels, encoding="utf-8",
+                                                        xml_declaration=True)
+    ct = "http://schemas.openxmlformats.org/package/2006/content-types"
+    types = parse(files["[Content_Types].xml"])
+    ET.SubElement(types, "{" + ct + "}Override", {
+        "PartName": f"/word/{FOOTER}",
+        "ContentType": "application/vnd.openxmlformats-officedocument."
+                       "wordprocessingml.footer+xml"})
+    files["[Content_Types].xml"] = ET.tostring(types, encoding="utf-8", xml_declaration=True)
+    for section in document.iter(tag("sectPr")):
+        for old in section.findall(tag("footerReference")):
+            section.remove(old)
+        ref = ET.SubElement(section, tag("footerReference"))
+        ref.set(tag("type"), "default")
+        ref.set("{" + REL + "}id", rid)
+
+
 def generate(target: Path, style: dict) -> Path:
     """Write the reference document for `style` to `target`."""
     import pypandoc
@@ -154,6 +197,9 @@ def generate(target: Path, style: dict) -> Path:
             spacing.set(tag("line"), "240")
             spacing.set(tag("lineRule"), "auto")
     page_changed = apply_style(styles, document, style)
+    if style.get("page_numbers"):
+        page_numbers(files, document)
+        page_changed = True
     # Concrete choices must win over theme attributes in Word and Writer alike.
     for element in styles.iter():
         if element.tag == tag("color") and element.get(tag("val")) not in (None, "auto"):

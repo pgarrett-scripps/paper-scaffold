@@ -21,6 +21,8 @@ title_size = 20            # the Title style, pt
 title_align = "left"       # the Title style: "left" or "center"
 title_color = "000000"     # Title and Subtitle, six hex digits
 heading_color = "000000"   # Heading 1-9
+title_bold = true          # the Title style in bold (false: regular)
+page_numbers = true        # a centred page number in every footer
 ```
 
 Every key is optional; one left out keeps the stock value. Headings keep
@@ -34,12 +36,53 @@ settings, the tool and the pandoc version. `project.toml` is a build input,
 so changing a setting makes `paper.docx` stale. To look at the file:
 `uv run python tools/paper_word_reference.py` prints its path.
 
+### Tables
+
+pandoc writes every table auto-fit, in the reference document's Table style
+at body size, so Word and LibreOffice choose different column widths and a
+dense SI table can wrap an identifier mid-word. The `table_*` keys restyle
+every table in the written file (`tools/word_tables.py`, after the
+pagination pass); `[word.tables]` adjusts one table, named by its label:
+
+```toml
+[word.style]
+table_font_size = 9            # pt, every table cell (5-14)
+table_header_bold = true       # header rows in bold
+table_header_shading = "F2F2F2"  # header-row fill
+table_borders = "booktabs"     # "booktabs", "grid" or "none"
+table_layout = "fixed"         # full text width, fixed columns; "auto" = pandoc's
+table_cell_margin = "0.04in"   # left and right cell padding, up to 0.5in
+table_compact = true           # single-spaced cells, no space around, kept whole
+table_valign = "center"        # "top", "center" or "bottom"
+table_unnest = true            # a figure of several tables: one table after another
+
+[word.tables."tbl:runtime"]    # the label, or the assets.json id tbl.runtime
+widths = [3, 1, 1, 1]          # relative; implies the fixed layout for this table
+font_size = 8
+header_rows = 2                # rows that repeat and take the header styling
+```
+
+Header rows are the rows of the source's `table.header` (pandoc repeats
+them) plus the first row, which the pagination pass always repeats; set
+`header_rows` where that is wrong, `0` for a table with no header. With no
+`widths`, the fixed layout keeps pandoc's column proportions, which follow
+the source's `columns:`. A widths list whose length differs from the table's
+columns stops the export; a `[word.tables]` label no table carries prints a
+note. None of these keys touch the reference document, so they also work
+beside a hand-made `reference`, and a paper that sets none converts to the
+same bytes as before.
+
+What stays a paper's own Word step: content rewrites (a glyph Word's fonts
+lack), stacking a code listing's lines inside a table cell, and widths
+chosen by matching header text, which `[word.tables]` replaces with the
+label.
+
 A paper that needs more than these settings keeps its own reference
 document, made in Word, and declares it instead:
 
 ```toml
 [word]
-reference = "word/custom.docx"   # exclusive with [word.style]
+reference = "word/custom.docx"   # exclusive with [word.style], table_* keys aside
 ```
 
 That file is used as it is, with no stock adjustments. It is a build input

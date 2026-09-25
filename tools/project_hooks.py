@@ -60,7 +60,10 @@ class Word:
     inputs             other files those steps read (a helper module, a
                        table of widths), so they are hashed and captured too
     style              [word.style]: the generated reference document's
-                       settings (tools/paper_word_reference.py)
+                       settings (tools/paper_word_reference.py) and the
+                       table_* keys tools/word_tables.py applies
+    tables             [word.tables."tbl:x"]: one table's column widths,
+                       type size and header rows (tools/word_tables.py)
     reference          a hand-made reference .docx used instead; exclusive
                        with `style`
     """
@@ -70,6 +73,7 @@ class Word:
     inputs: tuple[str, ...] = ()
     style: dict = field(default_factory=dict)
     reference: str | None = None
+    tables: dict = field(default_factory=dict)
 
     def files(self) -> tuple[str, ...]:
         return (self.lua_filters + self.before_pagination
@@ -114,7 +118,37 @@ STYLE_KEYS = {
                     'six hex digits, such as "000000"'),
     "heading_color": (lambda v: isinstance(v, str) and HEX.fullmatch(v) is not None,
                       'six hex digits, such as "000000"'),
+    "title_bold": (lambda v: type(v) is bool, "true or false"),
+    "page_numbers": (lambda v: type(v) is bool, "true or false"),
+    # Tables: applied to the written .docx (tools/word_tables.py), not the
+    # reference, so they also work beside a hand-made `reference`.
+    "table_font_size": _number(5, 14, 0.5),
+    "table_header_bold": (lambda v: type(v) is bool, "true or false"),
+    "table_header_shading": (lambda v: isinstance(v, str) and HEX.fullmatch(v) is not None,
+                             'six hex digits, such as "F2F2F2"'),
+    "table_borders": (lambda v: v in ("booktabs", "grid", "none"),
+                      '"booktabs", "grid" or "none"'),
+    "table_layout": (lambda v: v in ("auto", "fixed"), '"auto" or "fixed"'),
+    "table_cell_margin": (lambda v: isinstance(v, str) and LENGTH.fullmatch(v.strip()) is not None
+                          and length_twips(v) <= 720,
+                          'a length up to 0.5in, such as "0.04in" or "3pt"'),
+    "table_compact": (lambda v: type(v) is bool, "true or false"),
+    "table_valign": (lambda v: v in ("top", "center", "bottom"),
+                     '"top", "center" or "bottom"'),
+    "table_unnest": (lambda v: type(v) is bool, "true or false"),
 }
+# The keys word_tables.py applies after conversion; the rest shape the
+# generated reference document.
+TABLE_STYLE_KEYS = frozenset(k for k in STYLE_KEYS if k.startswith("table_"))
+HEX_KEYS = ("title_color", "heading_color", "table_header_shading")
+TABLE_KEYS = {
+    "widths": (lambda v: isinstance(v, list) and 0 < len(v) <= 40
+               and all(type(x) in (int, float) and x > 0 for x in v),
+               "a list of positive relative column widths, such as [3, 1, 1]"),
+    "font_size": _number(5, 14, 0.5),
+    "header_rows": (lambda v: type(v) is int and 0 <= v <= 10, "a whole number from 0 to 10"),
+}
+TABLE_LABEL = re.compile(r"(tbl|tab)[:.][A-Za-z0-9_.:-]+")
 
 
 def _style(value, where: str) -> dict:
@@ -122,10 +156,32 @@ def _style(value, where: str) -> dict:
     out = {}
     for key, v in value.items():
         check, expected = STYLE_KEYS[key]
-        if isinstance(v, bool) or not check(v):
+        if (isinstance(v, bool) and expected != "true or false") or not check(v):
             raise ValueError(f"{where}: {key} must be {expected}, got {v!r}")
-        out[key] = v.strip().upper() if key.endswith("_color") else (
+        out[key] = v.strip().upper() if key in HEX_KEYS else (
             v.strip() if isinstance(v, str) else v)
+    return out
+
+
+def _tables(value, where: str) -> dict:
+    """[word.tables."tbl:x"]: one table's widths, font_size, header_rows.
+    A label written tbl.x (the assets.json id) is the same table."""
+    if not isinstance(value, dict):
+        raise ValueError(f"{where}: expected tables keyed by label, such as [word.tables.\"tbl:x\"]")
+    out = {}
+    for label, spec in value.items():
+        if not TABLE_LABEL.fullmatch(label):
+            raise ValueError(f"{where}: {label!r} is not a table label such as \"tbl:x\"")
+        here = f"{where}.{label}"
+        keys(spec, set(TABLE_KEYS), here)
+        for key, v in spec.items():
+            check, expected = TABLE_KEYS[key]
+            if isinstance(v, bool) or not check(v):
+                raise ValueError(f"{here}: {key} must be {expected}, got {v!r}")
+        name = label[:3] + ":" + label[4:]
+        if name in out:
+            raise ValueError(f"{where}: {name} is declared twice")
+        out[name] = dict(spec)
     return out
 
 
@@ -205,13 +261,15 @@ def load(root: Path = ROOT) -> Project:
 
     table = data.get("word", {})
     keys(table, {"lua_filters", "before_pagination", "after_pagination", "inputs",
-                 "style", "reference"}, f"{FILE} [word]")
+                 "style", "reference", "tables"}, f"{FILE} [word]")
     style = _style(table.get("style", {}), f"{FILE} [word.style]")
+    tables = _tables(table.get("tables", {}), f"{FILE} [word.tables]")
     reference = None
     if "reference" in table:
-        if "style" in table:
+        if set(style) - TABLE_STYLE_KEYS:
             raise ValueError(f"{FILE} [word]: reference and [word.style] are "
-                             "exclusive; a hand-made reference carries its own styles")
+                             "exclusive (the table_* keys aside); a hand-made reference "
+                             "carries its own styles")
         reference = _paths([table["reference"]], f"{FILE} word.reference", (".docx",))[0]
     word = Word(
         lua_filters=_paths(table.get("lua_filters", []), f"{FILE} word.lua_filters", (".lua",)),
@@ -220,7 +278,7 @@ def load(root: Path = ROOT) -> Project:
         after_pagination=_paths(table.get("after_pagination", []),
                                 f"{FILE} word.after_pagination", (".py",)),
         inputs=_paths(table.get("inputs", []), f"{FILE} word.inputs", None),
-        style=style, reference=reference)
+        style=style, reference=reference, tables=tables)
 
     table = data.get("bibliography", {})
     keys(table, {"single"}, f"{FILE} [bibliography]")
@@ -358,6 +416,8 @@ def describe(project: Project) -> list[str]:
             lines.append(f"word       {kind:<17} {path}")
     for key, value in project.word.style.items():
         lines.append(f"word       style.{key:<11} {value!r}")
+    for label, spec in project.word.tables.items():
+        lines.append(f"word       tables.{label} {spec!r}")
     if project.word.reference:
         lines.append(f"word       reference         {project.word.reference}")
     if project.single_bibliography:
