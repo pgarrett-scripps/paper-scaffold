@@ -64,6 +64,14 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 5.1.1
+
+- `/paper:claim-audit` reads the SI by default, not only the abstract and
+  main text, and flags a claim whose number, direction or scope differs
+  between the main text and the SI. Pass a narrower scope to skip the SI.
+
+Upgrade: `paper-plugin-update`. No pin move is needed; nothing new can fail.
+
 ## 5.1.0
 
 - `/paper:intro-review`, a read-only review of the Introduction as a reviewer

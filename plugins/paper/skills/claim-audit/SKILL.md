@@ -1,6 +1,6 @@
 ---
 name: claim-audit
-description: Check every quantitative claim in the manuscript against the computation behind it, using stats.json, trace, and the analysis code. Use to find overstated, unguarded, or unsupported claims before review or submission. Read-only.
+description: Check every quantitative claim in the manuscript and its SI against the computation behind it, using stats.json, trace, and the analysis code. Use to find overstated, unguarded, or unsupported claims before review or submission. Read-only.
 context: fork
 agent: general-purpose
 model: opus
@@ -13,9 +13,12 @@ Work from the manuscript root and follow AGENTS.md/CLAUDE.md and STYLE.md
 it never edits prose, stats.json, or the analysis. It writes one findings
 file and routes each fix to the skill that owns it.
 
-Scope defaults to the abstract (config.typ) and every section between the
-BODY markers in paper.typ. The user may narrow it to a section, a file such
-as si-body.typ, or a list of statistic ids.
+Scope defaults to the abstract (config.typ), every section between the
+BODY markers in paper.typ, and the SI (si-body.typ and any file it includes;
+in a `manuscript.toml` project, every part of the default document and of
+the SI document). Reviewers check SI numbers too, and a main-text claim is
+often supported, or contradicted, only there. The user may narrow the scope
+to the main text, a section, a file, or a list of statistic ids.
 
 ## Read the action ledger first
 
@@ -37,7 +40,7 @@ edits the manuscript.
    `just check-build` reports the build current, also read paper.resolved.typ
    for the sentences with numbers filled in; otherwise use
    `just trace <id> --json` for each displayed value. Do not rebuild in order
-   to read a sentence.
+   to read a sentence. Read si-body.typ the same way.
 2. Extract every sentence that makes a claim a reader could test: a number,
    a direction ("increased", "fell", "improved"), a comparison ("higher
    than", "comparable to", "no difference"), a strength word
@@ -55,7 +58,11 @@ edits the manuscript.
    once, so a paraphrase of one is a finding even where `retired-claim`
    (exact match) is silent. Read `cover-letter.typ` too when it exists; its
    claims must not outrun the paper's.
-4. Note what the entry records beyond the value: `lo`/`hi`/`level`, `n`,
+4. Match the main text against the SI. A claim stated in both must give
+   the same number, direction and scope; one that disagrees is **mismatched**
+   and major. A main-text claim that says "see SI" or cites an SI table must
+   find its support there.
+5. Note what the entry records beyond the value: `lo`/`hi`/`level`, `n`,
    `measurement`, and relations in `expect` (`gt`, `ratio_to`, ...). An
    interval claim with no `lo`/`hi`, or a timing claim on a `single-run`
    value, is at best **unguarded**.
@@ -99,8 +106,9 @@ often a scope phrase, not a deletion.
 Write `reviews/<YYYY-MM-DD>-claim-audit.md` (create the directory; it is
 the author's to commit or ignore). Shape:
 
-1. A one-paragraph verdict: how many claims, how many in each category,
-   and the two or three findings that matter most.
+1. A one-paragraph verdict: how many claims in the main text and in the
+   SI, how many in each category, and the two or three findings that matter
+   most.
 2. The ledger as a table: severity (blocker / major / minor), location,
    claim, id(s), what the code computes, verdict, and the routed fix.
 3. Proposed guards as a ready-to-apply list of stats.json `expect` edits.

@@ -6,7 +6,7 @@
       "name": "paper",
       "source": "./plugins/paper",
       "description": "Manuscript skills for paper-scaffold repositories: reviews, copy-edit, figures, numbers. Each skill drives the repo's just recipes.",
-      "version": "5.1.0"
+      "version": "5.1.1"
     }
   ]
 }
