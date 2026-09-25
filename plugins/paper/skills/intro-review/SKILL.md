@@ -90,6 +90,10 @@ the current text is reopened, not duplicated.
 3. **Terms, formats and design choices defined.**
    - List every term, acronym, file format, instrument mode or data type
      that the Results depend on.
+   - Include the unit of data the method acts on (a point, a spectrum, a
+     read, a pixel) and how it relates to the physical object a reader
+     thinks in (a peak, a feature, a molecule). A reviewer who takes one
+     for the other misreads every result.
    - Each must be defined in one sentence at or before its first use in the
      Introduction.
    - If the paper rests on a design choice (keeping a native format, a

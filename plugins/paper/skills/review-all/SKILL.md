@@ -91,7 +91,11 @@ list of work, and it outlives this run.
    finding on a sentence `claim-audit` calls overstated is one action owned
    by `claim-audit`. A `peer-review` complaint about the Introduction and an
    `intro-review` finding on the same paragraph are one action owned by
-   `intro-review`, whose fix is the more specific one.
+   `intro-review`, whose fix is the more specific one. More generally, when
+   several reviews raise the same problem on the same passage (a paragraph,
+   a figure, a table), even in different words, merge them into one action:
+   the owner is the review whose fix is most specific, and `source` cites
+   every file.
 2. Deduplicate against the ledger: a finding that matches an `open` or
    `wontfix` row adds nothing. One that matches a `done` row whose problem is
    back reopens that row in place: `status` to `open`, `closed` to

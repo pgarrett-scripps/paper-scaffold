@@ -124,16 +124,35 @@ earns no comment.
   metric depends on them; parameters in physical units or with the
   conversion; a sensitivity check for those that matter.
 - **Contribution versus plumbing.** What is new, in one sentence, with
-  upstream libraries credited for the rest. Engineering others have already
+  upstream libraries credited for the rest. The reviewer writes that
+  sentence; if they cannot, that is a major point. Ask whether the core
+  algorithm is reusable outside the file format or tool it ships in. Engineering others have already
   done is not a contribution; breadth of validation is.
+- **Every algorithm step questioned.** For each step of the method, ask
+  in turn: what instrument or physical assumption it makes (window edges,
+  overlap, calibration); what it does to near-duplicates, isomers or
+  neighbouring signals when it pools or merges data; which downstream
+  consumer used the data it removes, and what the user gains from removing
+  it. A step whose answers are not in the text is a point.
+- **Shown, not only described.** The method is drawn on a small annotated
+  toy example and given as pseudo-code, and every artifact or phenomenon the
+  text names is pictured. A method described only in prose is a major point
+  (principle 3).
 - **Physical assumptions.** A rule that treats the instrument or sample as
   ideal needs evidence (a calibration, a measurement, a citation) or a
   margin shown not to matter. What the method discards permanently, and who
   would need it, is stated and scoped.
 - **Downstream benefit.** A gain users care about, not only the metric the
   method optimises.
-- **Availability.** Licence, code version and DOI, and data accessions,
-  stated where a reader looks (the abstract or the Availability section).
+- **Availability.** Code version, DOI and data accessions in the
+  Availability section. For a software or tool paper, the licence and the
+  archive DOI also belong in the abstract, where a reader deciding whether
+  to use the tool looks first.
+
+The careful non-specialist reader's brief adds one task: after the
+section that describes the study design, list the questions it leaves open
+(why this dataset, why these settings, what was held out). Each unanswered
+question is a point.
 
 Reviewers judge the paper, not the pipeline: mechanical matters that
 `just verify` already enforces (spelling, formatting, uncited floats) are

@@ -105,7 +105,8 @@ with the resolved reference attached, not a verdict.
 From the rows above and viz/report.json, note: a preprint cited where the
 published version exists (resolve it); a claim supported only by
 self-citation; a citation cluster of more than three keys on one
-sentence; a reference cited only in the SI or only once in a list; a
+sentence; a cluster that mixes the source of the data or software used
+with background references, so a reader cannot tell which is which; a reference cited only in the SI or only once in a list; a
 reference whose entry lacks a DOI that exists; and whether the age
 profile or self-citation share would draw a reviewer's comment for this
 venue.

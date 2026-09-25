@@ -64,6 +64,34 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 5.2.0
+
+The review skills, tuned from a blind replay: each ran on the d_noise paper as
+submitted to JASMS, and the findings were scored against the reviewers' real
+comments (17 of 41 points caught, 12 partly, 11 missed; about 30% of the
+findings were trivia). Each change targets the misses.
+
+- `/paper:figure-review` first lists the Methods' algorithm steps and named
+  phenomena that no schematic, toy example or pseudo-code shows, and uncited
+  assets that hold a sensitivity or comparison analysis; both are major. A
+  plot type that hides the data is major.
+- `/paper:peer-review` questions each algorithm step (assumptions, effect on
+  near-duplicates, who used the removed data), asks for the method on a toy
+  example and in pseudo-code, has the reviewer write the one-sentence
+  contribution, puts a software paper's licence and DOI in the abstract, and
+  has the non-specialist list the questions the design leaves open.
+- `/paper:methods-vs-code` checks the parameter table and software configs
+  for completeness (purpose, range, effect, a reason for search settings, keys
+  the pinned version accepts): the new verdict `incomplete`.
+- `/paper:prose-review` lists at most 10 minor findings and counts the rest
+  by habit. `/paper:review-all` merges the same problem raised on the same
+  passage by several reviews into one action.
+- `/paper:intro-review` asks for the unit of data the method acts on and how
+  it relates to the physical object; `/paper:literature-check` flags a
+  citation cluster that mixes the data source with background references.
+
+Upgrade: `paper-plugin-update`. No pin move is needed; nothing new can fail.
+
 ## 5.1.1
 
 - `/paper:claim-audit` reads the SI by default, not only the abstract and

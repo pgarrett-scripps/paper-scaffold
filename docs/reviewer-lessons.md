@@ -29,10 +29,11 @@ cite, not a list they run.
 
 | Skill | What it takes from here |
 |---|---|
-| `/paper:peer-review` | The methods-and-statistics reviewer's concerns: undefined tolerances, comparators, held-out data and settings, parameters, contribution versus plumbing, physical assumptions, downstream benefit, availability (principles 2, 4 to 6, 8 to 10) |
+| `/paper:peer-review` | The methods-and-statistics reviewer's concerns: undefined tolerances, comparators, held-out data and settings, parameters, contribution versus plumbing, each algorithm step questioned, the method shown on a toy example and in pseudo-code, physical assumptions, downstream benefit, availability (principles 2 to 6, 8 to 10) |
 | `/paper:story-review` | Goal, user and scope up front; Introduction and Limitations agree (principle 1) |
 | `/paper:claim-audit` | "Preserved", "negligible", "comparable" with no tolerance and no number (principle 2) |
-| `/paper:figure-review`, `/paper:new-figure` | The figure checklist below |
+| `/paper:figure-review`, `/paper:new-figure` | The figure checklist below; figure-review also lists the algorithm steps and named phenomena that no figure shows (principle 3) |
+| `/paper:methods-vs-code` | Every parameter with its purpose, range and effect; search settings with a reason; config keys that exist in the pinned version (principle 6) |
 | `/paper:prose-review` | Promotional headings, informal verbs, adjectives where a number exists (principle 10) |
 | `/paper:intro-review` | The Introduction on its own: problem sized from the literature, each existing approach with its gap, terms and formats defined, aim, scope and design with reasons, no results before the Results (principles 1 and 7) |
 | `/paper:literature-check` | The Introduction surveys existing approaches before it states the gap (principle 7) |

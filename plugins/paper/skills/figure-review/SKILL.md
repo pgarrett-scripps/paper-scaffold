@@ -14,7 +14,9 @@ read-only: it never edits prose, generators, or files under `figures/` or
 the question is whether the picture shows what the text says it shows.
 
 Scope defaults to every `#fig()` and `#tbl()` id in `assets.json` that the
-main text or SI cites. The user may name one or more ids.
+main text or SI cites, plus the figures the paper lacks (below). The user
+may name one or more ids; the missing-figures pass then runs only on
+request.
 
 ## Read the action ledger first
 
@@ -30,6 +32,24 @@ back in the current text is reopened, not duplicated. Appending to the ledger
 is the only write this skill makes outside its findings file; it still never
 edits the manuscript.
 
+## Find the figures that are missing
+
+Run this before the per-asset loop. Reviewers ask for missing figures more
+often than they fault the ones that are there.
+
+1. Read the Methods (and any algorithm description in the SI). List every
+   algorithm step, and every phenomenon, artifact or structure the text
+   names (for example, an artifact the method removes, or a gap it bridges).
+2. For each one, find the asset that shows it: a schematic, a small
+   annotated toy example, or pseudo-code (a code listing or an algorithm
+   block counts). A step or phenomenon that is only described in words is a
+   **major** finding routed to `/paper:new-figure` (principle 3 of
+   `.paper/docs/reviewer-lessons.md`, `docs/` in the scaffold itself).
+3. List every id in `assets.json` that nothing cites. One that holds a
+   sensitivity analysis, a comparison with a baseline or another tool, or a
+   parameter sweep is **major**: the evidence exists and the reader never
+   sees it. Any other uncited asset is minor.
+
 ## Gather, per asset
 
 1. `just trace <id> --json` for the path, generator, declared inputs, and
@@ -40,10 +60,10 @@ edits the manuscript.
    assets instead of a source read per `#figure(...)` block. Use the trace
    `uses` for the `file:line` of each citing sentence; open paper.typ or
    si-body.typ only when a finding needs the exact source line quoted.
-4. The rendered file. For a figure, view the PNG or SVG directly. For a
+3. The rendered file. For a figure, view the PNG or SVG directly. For a
    generated table, read the `si/*.typ` file; do not rasterize the PDF for
    this unless a layout defect is the question.
-5. The generator script, to know what the plot actually encodes: which
+4. The generator script, to know what the plot actually encodes: which
    column is on which axis, what the error bars are, what was filtered out,
    and whether the RNG is seeded.
 
@@ -72,7 +92,9 @@ For each asset, answer each of these and record the evidence:
   Every phenomenon the text names (an artifact the method removes, say) is
   pictured somewhere. The plot type suits the data: dense 2D data in a
   heatmap, not an overplotted scatter; a structural gap not drawn as empty
-  space. Compared conditions share axes and scales, and the baseline sits in
+  space; a plot type that hides the data (dense 2D data as an
+  overplotted scatter, say) is **major**, not minor. Compared conditions
+  share axes and scales, and the baseline sits in
   the same panel. Where the text says "preserved" or "within", the tolerance
   band or pass/fail line is drawn. Replicates and spread are shown, not only
   means. The reasons are in the figure checklist of
@@ -91,9 +113,11 @@ Write `reviews/<YYYY-MM-DD>-figure-review.md` (create the directory). Shape:
 
 1. A one-paragraph verdict: assets reviewed, how many clean, and the
    findings that would mislead a reader.
-2. One block per asset with a finding: id, severity (blocker / major /
+2. The missing figures: each step or phenomenon with no picture, and each
+   uncited asset, with its severity and routed fix.
+3. One block per asset with a finding: id, severity (blocker / major /
    minor), what the text says, what the figure shows, evidence, routed fix.
-3. Assets with no findings as a single list.
+4. Assets with no findings as a single list.
 
 Route fixes to `/paper:copy-edit` (caption or citing sentence), `/paper:new-figure` or
 "generator change" (the plot itself), `/paper:declare-number` (a value in a
@@ -105,7 +129,8 @@ edited, so do not run `just paper` or `just verify`.
 
 After writing the findings file, and before the final print:
 
-1. Every finding in the per-asset blocks becomes one action.
+1. Every missing figure and every finding in the per-asset blocks
+   becomes one action.
    Clean assets add nothing.
 2. Skip a finding that matches an `open` or `wontfix` row. Reopen a matching
    `done` row whose problem is back: `status` to `open`, `closed` to

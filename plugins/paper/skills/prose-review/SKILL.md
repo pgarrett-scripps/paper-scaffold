@@ -103,6 +103,10 @@ replacement that would change a scientific claim is routed to
 `/paper:claim-audit`, not written here.
 
 Group a phrase that recurs into one finding with its count and locations.
+List at most 10 minor findings, choosing those in the places ranked below;
+count the rest by habit in the verdict paragraph ("14 more minor: 6
+throat-clearing, 5 fake precision, 3 register"). A reviewer does not
+comment on every sentence, and a long list of minors buries the majors.
 Rank by where a reader forms their impression: the abstract, the first
 paragraph of the introduction, the first paragraph of the discussion, and
 the conclusions before anything else.

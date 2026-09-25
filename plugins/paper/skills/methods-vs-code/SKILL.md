@@ -93,6 +93,24 @@ Add the pinned software's settings and defaults to the code table, citing
 reach, makes its rows **unverifiable**; say which. With no `[[software]]`,
 such rows stay **unverifiable** as before, and recommend a pin.
 
+## Check the parameter table for completeness
+
+Drift is not the only gap reviewers find. Read any parameter table (main
+text or SI) and the search or software configuration files the analysis
+uses (`evidence.toml` names them), and flag:
+
+- a table row with no purpose, default, range or effect stated;
+- a table row the Methods never mention, or a parameter used in only one
+  experiment where the text does not say so;
+- a configuration key that does not exist in the pinned software version
+  (check it against the `[[software]]` docs at `ref`), or one set to a
+  value the version rejects or ignores;
+- a downstream search or quantification setting (enzyme, missed cleavages,
+  modifications, tolerances, FDR level) given with no reason, where a
+  reported metric depends on it.
+
+Each is an **incomplete** row in the comparison table.
+
 ## Compare
 
 One verdict per row:
@@ -105,6 +123,8 @@ One verdict per row:
   library default happens to match or not. Name the library and the default.
 - **unstated**: the code makes a choice the methods do not mention that a
   reader would need to reproduce the result (a filter, a seed, a version).
+- **incomplete**: the value matches, but the documentation a reader needs
+  is missing (see the completeness check above).
 - **unverifiable**: the data or a dependency is absent, or the step lives in
   code outside `analysis/` that no `[[software]]` pin reaches. Say where.
 
