@@ -151,6 +151,30 @@ def _relation_seed(key: str, arg) -> list[dict]:
             raise StatError(f"{key} takes (id, min, max) or {{'id', 'min', 'max'}}")
         out.append({k: v for k, v in item.items() if v is not None})
     return out
+def _prune_allowed() -> bool:
+    return (os.environ.get("PAPER_STATS_PRUNE", "").lower() in ("1", "true", "yes")
+            or "--prune" in sys.argv[1:])
+
+
+def _record_failures(target: Path, failed: dict[str, str], entries: dict,
+                     values: dict) -> None:
+    """The guard failures of this run, for `just assets --explain`.
+
+    Written beside the build state, never under PAPER_STATS_OUT's scratch
+    target (a --deep re-derivation is not the author's run). Removed when a
+    run passes, so a stale list never outlives its failure.
+    """
+    if os.environ.get("PAPER_STATS_OUT"):
+        return
+    path = target.parent / ".build-state" / "stats-guard-failures.json"
+    if not failed:
+        path.unlink(missing_ok=True)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_text(path, json.dumps({id: {
+        "message": msg, "value": values[id],
+        "expect": (entries[id] or {}).get("expect", {})}
+        for id, msg in sorted(failed.items())}, indent=1, default=str) + "\n")
 
 
 class Stats:
@@ -412,7 +436,21 @@ class Stats:
         # from an add() call nobody remembered was still passing it.
         empty = {"fmt": "", "unit": "", "desc": "", "expect": {}}
 
+        # An id this script wrote last time and no longer declares would be
+        # removed below. A deleted `st.add` retires a value, but so does a
+        # branch of the analysis that did not run, and the prose reading the id
+        # then fails at compile. So removal is opt-in: `just stats --prune`.
+        retired = sorted(set(prior) - set(self._values))
+        if retired and not _prune_allowed():
+            raise StatError(
+                f"this run no longer declares {len(retired)} id(s) {mine} wrote "
+                f"before: {', '.join(retired[:12])}"
+                f"{' ...' if len(retired) > 12 else ''}. Nothing was written. "
+                f"If they are retired, re-run with --prune (just stats --prune, "
+                f"or PAPER_STATS_PRUNE=1); otherwise restore their add() calls.")
+
         overridden: list[tuple[str, str]] = []
+        failed: dict[str, str] = {}
         final: dict[str, dict] = {}
         for id, seed in self._values.items():
             old = prior.get(id)
@@ -445,7 +483,14 @@ class Stats:
 
             # Enforced against the guard that governs this entry NOW -- the
             # file's for an existing one, the seed's for a new one.
-            self._enforce(id, entry["value"], entry.get("expect", {}))
+            # Every failing guard is collected, not just the first, so one
+            # re-run names them all (`just assets --explain` maps each to the
+            # sentences that read it).
+            try:
+                self._enforce(id, entry["value"], entry.get("expect", {}))
+            except StatError as exc:
+                failed[id] = str(exc)
+                continue
             problems = uncertainty_errors(entry)
             if problems:
                 raise StatError(f"{id!r}: " + "; ".join(problems))
@@ -470,6 +515,14 @@ class Stats:
             if sets:
                 entry["evidence"] = sets
             final[id] = entry
+
+        _record_failures(p, failed, {id: prior.get(id, self._values[id]) for id in failed},
+                         {id: self._values[id]["value"] for id in failed})
+        if failed:
+            raise StatError("\n".join(failed[id] for id in sorted(failed)))
+        if retired:
+            print(f"  note: pruned {len(retired)} id(s) this run no longer "
+                  f"declares: {', '.join(retired)}")
 
         merged = {**kept, **final}
 

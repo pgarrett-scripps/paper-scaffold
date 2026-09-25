@@ -125,6 +125,19 @@ markdown table for the life of the paper:
   `just check-actions --init` creates it from `tools/actions-template.md`,
   whose header repeats these rules for the agent reading the file;
   `new-paper.sh` seeds it for a new paper.
+- **Writing rows.** `just actions-add <severity> <source> <summary> <fix>`
+  appends one row under `.build-state/actions.lock` and prints its id. The
+  id is past both the table's highest and `.build-state/actions-next-id`,
+  so two sessions reviewing at once never hand out the same one; `just
+  actions-reserve N` hands out ids without rows. Every review skill takes
+  `no-ledger` to write its findings file only.
+- **Closing rows.** A fixing commit carries `Closes: A-0012` (or `Closes:
+  A-0012, A-0013`) in its message. `just close-actions` marks each named
+  open row done with that commit's short hash, replacing an `uncommitted:`
+  note; a row already closed with a different hash is reported, not
+  rewritten. `just check-actions` then fails when a done row's hash is not
+  the commit carrying its trailer, and warns when a hash names no commit
+  (a rebase rewrote it).
 
 ## Project scope
 

@@ -283,6 +283,9 @@ verify:
   #!/usr/bin/env bash
   set -uo pipefail
   rc=0
+  # The tree as verify found it: a pass is recorded against this fingerprint
+  # (.build-state/verify-pass.json), which the optional pre-commit hook reads.
+  fp=$(uv run --quiet paper tool gate fingerprint 2>/dev/null || echo none)
   # <label> <message-on-success> <command...>. The success message exists because
   # a passing gate that prints nothing (fmt-check) is indistinguishable from one
   # that did not run.
@@ -328,6 +331,10 @@ verify:
   stage "declarations (stats + assets)"  "" just check-declared
   stage "staleness (just check)"         "" just check
   stage "review actions (just check-actions)" "" just check-actions
+  # Only in a revision round: the response letter exists (just response-init).
+  if [[ -f reviewer-response.typ ]] || grep -qs '^\[response\]' project.toml; then
+    stage "response letter (just check-response)" "" just check-response
+  fi
   # The paper's own stages ([stages] verify in project.toml, docs/hooks.md).
   # Each prints its own header; nothing prints when none are declared.
   uv run --quiet paper tool project_hooks stages verify || rc=1
@@ -338,7 +345,42 @@ verify:
   else
     echo "VERIFY FAILED -- see the stages above. Nothing was rebuilt."
   fi
+  uv run --quiet paper tool gate stamp "$fp" "$rc" || true
   exit $rc
+
+# fmt, then `just assets` only when check-stats or check-assets name it, then
+# the build (target: paper or all), then verify. Stops at the first failing
+# step; the exit status is the verdict even when piped (`just gate | tail`).
+# The whole edit loop in one command: fmt, assets if stale, build, verify
+gate target="paper":
+  #!/usr/bin/env bash
+  set -uo pipefail
+  case "$1" in paper|all) ;; *) echo "gate: target must be paper or all"; exit 2 ;; esac
+  step() { echo ""; echo "=== gate: $1 ==="; }
+  if command -v typstyle >/dev/null 2>&1; then
+    step "just fmt"; just fmt || { echo "GATE FAILED at fmt"; exit 1; }
+  fi
+  step "declarations (assets only if stale)"
+  declared=$(just check-declared 2>&1); drc=$?
+  if [ $drc -ne 0 ] && grep -q 'just assets' <<<"$declared"; then
+    echo "stale generated values or assets: running just assets"
+    just assets || { echo "GATE FAILED at assets (just assets --explain maps a failing guard to its sentences)"; exit 1; }
+  else
+    echo "generated values and assets are current"
+  fi
+  step "just $1"; just "$1" || { echo "GATE FAILED at build (just $1)"; exit 1; }
+  step "just verify"; just verify; rc=$?
+  [ $rc -eq 0 ] && echo "GATE OK" || echo "GATE FAILED at verify"
+  exit $rc
+
+# `just verify` records a pass for the exact files it checked; this compares.
+# Exit 0 when the last verify pass matches the working tree now
+check-verify-stamp:
+  @uv run --quiet paper tool gate check-stamp
+
+# Optional: git refuses a commit touching this directory without a current verify pass
+install-hooks:
+  @uv run --quiet paper tool gate install-hook
 
 # The day-of-submission gate. `verify` answers "is this done" cheaply and
 # constantly; this answers "is this safe to SUBMIT", and pays for it. The
@@ -457,6 +499,25 @@ check-declared:
 # The first version of this re-derived every time, which on the scaffold cost
 # 0.02s and looked free, and on a real analysis would make the gate cost the
 # analysis.
+# It refuses to remove an id it wrote before and no longer declares, and lists
+# them; --prune removes them.
+# Re-run gen_stats.py alone (--prune to retire ids it no longer declares)
+stats *args:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  for a in {{args}}; do
+    case "$a" in
+      --prune) export PAPER_STATS_PRUNE=1 ;;
+      *) echo "unknown option $a (expected --prune)"; exit 2 ;;
+    esac
+  done
+  [ -f analysis/scripts/gen_stats.py ] || { echo "no analysis/scripts/gen_stats.py"; exit 0; }
+  cd analysis && uv run --quiet scripts/gen_stats.py
+
+# Show each failing expect guard from the last stats run beside the sentences that read it
+explain-guards:
+  @uv run --quiet paper tool guard_explain
+
 # Check stats.json: guards, provenance, checksums, and the hashes behind them
 check-stats *args:
   @uv run --quiet paper tool check_stats "$@"
@@ -489,6 +550,20 @@ pin:
 # Validate reviews/ACTIONS.md and count open review actions by severity
 check-actions *args:
   @uv run --quiet paper tool check_actions "$@"
+
+# Takes the ledger lock and the next free id, so two sessions never write the same id.
+# Append one open row to reviews/ACTIONS.md; prints its id
+actions-add severity source summary fix:
+  @uv run --quiet paper tool actions add "$1" "$2" "$3" "$4"
+
+# Hand out N ledger ids without writing rows (review-all writes the rows itself)
+actions-reserve n:
+  @uv run --quiet paper tool actions reserve "$1"
+
+# A commit message line `Closes: A-0012` (or `Closes: A-0012, A-0013`) names the rows.
+# Mark rows named by `Closes:` commit trailers done with that commit's hash
+close-actions:
+  @uv run --quiet paper tool actions close
 
 # For a manuscript migrating onto this scaffold with figures whose analysis is
 # gone or unrunnable: every unclaimed file under figures/ and si/ is declared
@@ -579,8 +654,15 @@ draft: render-stats
 # gate" -- and on a real manuscript its nine-column table plus the per-section
 # outlier list tripled the build output into a wall nobody read. The two
 # numbers a build should surface (how long, how readable) fit on nine lines.
+# One lock for the whole build (tools/gate.py locked): a second session's
+# build waits for this one (PAPER_BUILD_WAIT seconds, default 900), and a
+# nearly full disk (PAPER_MIN_FREE_MB, default 500) stops it before it starts.
 # Build PDF, Word and plain-text review exports, with word counts and readability
 paper:
+  @uv run --quiet paper tool gate locked -- just _paper-build
+
+[private]
+_paper-build:
   #!/usr/bin/env bash
   set -euo pipefail
   if [[ -f manuscript.toml ]]; then
@@ -690,13 +772,36 @@ review-versions:
 review baseline new="current":
   @uv run --quiet paper tool review compare "$1" "$2"
 
+# Start the response to reviewers from the template (never overwrites)
+response-init:
+  @uv run --quiet paper tool response init
+
+# Compile the response letter to PDF beside it
+response:
+  @uv run --quiet paper tool response build
+
+# Every done point cites ledger rows closed with a commit; every cited row exists
+check-response:
+  @uv run --quiet paper tool response check
+
+# Needs a clean tree and a current paper.pdf; saves review version NAME too.
+# Record a submission: annotated tag submitted/NAME with the PDF hash
+tag-submission name:
+  @uv run --quiet paper tool response tag "$1"
+
+# pdftotext of both PDFs, words aligned with difflib: see tools/response.py.
+# Text-level diff against submission NAME: .review/diff-NAME.pdf and .html
+diff-pdf name:
+  @uv run --quiet paper tool response diff "$1"
+
 # Snapshot the manuscript's numbers/refs/floats/headings before an editing pass
 edit-baseline tag="default":
   @uv run --quiet paper tool prose_edit_guard snapshot "$1"
 
+# `--revision`: new ids, citations, floats and headings are notes; a typed numeral still fails.
 # Prove an editing pass changed only wording: nothing invented, nothing lost
-edit-check tag="default":
-  @uv run --quiet paper tool prose_edit_guard check "$1"
+edit-check *args:
+  @uv run --quiet paper tool prose_edit_guard check "$@"
 
 # Snapshot the current paper.pdf's extracted text as the baseline for text-diff
 text-baseline:
@@ -1017,7 +1122,8 @@ submission: paper
   uv run --quiet paper tool submission all
   uv run --quiet paper tool project_hooks stages submission
 
-# Fail if any file in submission/ no longer matches the source it was built from; warn on its layout and figures
+# The availability part is tools/availability.py (just availability).
+# Fail if a file in submission/ is behind its source, or the availability statement has a gap; warn on its layout and figures
 check-submission:
   @uv run --quiet paper tool submission check
   @uv run --quiet paper tool layout_check --submission
@@ -1033,6 +1139,10 @@ port-check *args:
 # The source repo's stats.json at a part's recorded upstream commit against its HEAD
 port-diff part *args:
   @uv run --quiet paper tool port diff {{part}} {{args}}
+
+# Every accession the text cites is in the availability statement, no placeholder, archived code
+availability:
+  @uv run --quiet paper tool availability
 
 # Test Word content, formatting, templates and chapter reference isolation
 test-docx:
@@ -1053,19 +1163,32 @@ test-docx:
 # that takes -- one script or sixty, minutes or hours -- is analysis/'s business.
 # ---------------------------------------------------------------------------
 
+# --prune lets gen_stats.py remove ids it no longer declares; --explain maps a
+# failing expect guard to the sentences that read it (just explain-guards).
 # Regenerate every figure and table the manuscript includes (delegates to analysis/)
-assets:
+assets *args:
   #!/usr/bin/env bash
   set -euo pipefail
   if [ ! -d analysis ]; then
     echo "no analysis/ directory: this manuscript has no generated assets."
     exit 0
   fi
+  explain=0
+  for a in {{args}}; do
+    case "$a" in
+      --prune) export PAPER_STATS_PRUNE=1 ;;
+      --explain) explain=1 ;;
+      *) echo "unknown option $a (expected --prune or --explain)"; exit 2 ;;
+    esac
+  done
   # The run log (.build-state/assets-run.json) records which generators this
   # run executed, so check-assets can name one no recipe reaches.
   token=$(uv run --quiet paper tool evidence run-start)
   export PAPER_ASSETS_RUN="$token"
-  (cd analysis && just assets)
+  if ! (cd analysis && just assets); then
+    [ $explain -eq 1 ] && uv run --quiet paper tool guard_explain || true
+    exit 1
+  fi
   uv run --quiet paper tool evidence run-end "$token"
   # No stamp is written any more. assets.json records a hash per generated file
   # and per input its generator declared, so "has the analysis moved on since

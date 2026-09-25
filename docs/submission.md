@@ -109,3 +109,72 @@ What is checked where:
   `/paper:cover-letter` drafts the letter from the manuscript and the
   profile, and goes through the list item by item; anything only the author
   knows is left as a `#todo`, which stops `just cover-letter` until filled.
+
+## Data and code availability
+
+`just check-submission` (and so `just preflight`) checks the availability
+statement; `just availability` runs the check alone
+(`tools/availability.py`). It is an error by default, because a statement
+that names no deposit is a gap a reader cannot work around. It fails on:
+
+- **missing**: an accession the text cites (PXD, MSV, JPST, PDB, EMD, EMPIAR,
+  GEO, SRA/ENA, BioProject, ArrayExpress, MetaboLights, a Zenodo, figshare,
+  Dryad or OSF DOI, a Software Heritage id) that the availability section
+  does not list;
+- **placeholder**: `PXDXXXXXX`, "currently private", "to be deposited",
+  `[AUTHOR ACTION ...]` or TBD inside the section;
+- **no-section**: no heading or bold run-in whose title mentions data or
+  code availability;
+- **no-archive**: no archived code DOI (Zenodo, figshare, Software Heritage)
+  in the section. A GitHub URL is not an archive: it can move or vanish.
+
+The section is a heading's whole span (its bold run-ins included) or a bold
+run-in (`*Data and Code Availability*`) up to the next heading or run-in,
+stopping at `#bibliography`. Configure or opt out in `project.toml`:
+
+```toml
+[availability]
+enabled = true                  # false: skip the check entirely
+require_code_archive = true     # false: a paper with no code to archive
+disable = ["GEO"]               # pattern names to ignore
+patterns = { Internal = 'LAB-\d{6}' }  # extra accession regexes
+placeholders = ['pending']      # extra placeholder regexes
+section = 'Data Availability'   # a regex for the section title
+```
+
+## A revision round
+
+The loop from a decision letter to a resubmission, driven by
+`/paper:reviewer-response`:
+
+1. **Record each submission.** `just tag-submission v1` refuses a dirty
+   tree or a stale `paper.pdf`, saves review version `v1`
+   (`.review/versions/v1`, the resolved manuscript and its PDF), and makes
+   the annotated tag `submitted/v1` whose message carries the PDF's sha256
+   and the tree fingerprint. Push the tag; `.review/` is local.
+2. **Start the letter.** `just response-init` copies the template to
+   `reviewer-response.typ` (`[response] file` in `project.toml` moves it).
+   Each reviewer comment is a `#point(id, comment, response, status:,
+   actions:, change:)`; `actions` name `reviews/ACTIONS.md` rows, added with
+   `just actions-add`. Statuses: `done`, `partly`, `rebut`, `todo`,
+   `decide`.
+3. **Check it.** `just check-response` (a `verify` stage while the letter
+   exists) queries the points with `typst query` and fails on a duplicate
+   id, a cited row that does not exist, and a `done` point that cites no
+   row or cites one not closed with a commit hash (`uncommitted:` is not
+   enough). `just response` builds `reviewer-response.pdf`.
+4. **Guard the edits.** `just edit-check <tag> --revision` turns new `#s()`
+   ids, citations, labels, floats, headings and declarations into notes, and
+   still fails on a numeral the baseline did not have.
+5. **Show what changed.** `just diff-pdf v1` writes `.review/diff-v1.pdf`
+   and `.html`.
+
+The diff method: both PDFs (the saved version's and a fresh capture of the
+current manuscript) are reduced to text with `pdftotext`, so numbers, table
+cells and reference numbers are compared as printed; whitespace is
+normalized and the words aligned with difflib's SequenceMatcher (autojunk
+off). Insertions are underlined in blue, deletions struck in red. Layout,
+figure pixels and equation typesetting are not compared; `just review v1`
+is the structural comparison. Without the saved version (a fresh clone) but
+with the tag, it diffs the tagged source of `paper.typ` and `si-body.typ`
+instead, where numbers appear as `#s()` ids, and says so.

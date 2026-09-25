@@ -119,29 +119,110 @@ def dependency_list(root: Path, output: str) -> list[str]:
     return data
 
 
+def free_space_error(root: Path) -> str | None:
+    """Why a build should not start for lack of disk, or None.
+
+    A full disk fails a build halfway, after the temporary capture is written
+    and before the output is, and the error Typst or pandoc gives names neither
+    the disk nor the fix. PAPER_MIN_FREE_MB sets the floor (default 500; 0
+    disables).
+    """
+    try:
+        floor = float(os.environ.get("PAPER_MIN_FREE_MB", "500"))
+    except ValueError:
+        floor = 500.0
+    if floor <= 0:
+        return None
+    import shutil
+    free = shutil.disk_usage(root).free / 2**20
+    if free < floor:
+        return (f"only {free:,.0f} MB free on the disk holding {root}; builds need "
+                f"{floor:,.0f} MB (PAPER_MIN_FREE_MB). Free space, then rebuild.")
+    return None
+
+
+def _try_lock(stream) -> bool:
+    try:
+        if os.name == "nt":
+            import msvcrt
+            stream.seek(0); stream.write(b"0"); stream.flush(); stream.seek(0)
+            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+
+
+def _unlock(stream) -> None:
+    if os.name == "nt":
+        import msvcrt
+        stream.seek(0)
+        msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(stream, fcntl.LOCK_UN)
+
+
+HELD = "PAPER_BUILD_LOCK_HELD"
+
+
 @contextmanager
-def build_lock(root: Path):
+def build_lock(root: Path, wait: float | None = None, owner: str = ""):
+    """One manuscript build at a time, per manuscript directory.
+
+    `wait` seconds (PAPER_BUILD_WAIT, default 0) are spent waiting for another
+    build before giving up, naming it from build.lock.owner. `just paper`
+    takes the lock once for the whole build (tools/gate.py locked) and marks
+    it held in the environment, so the steps inside it re-enter here instead
+    of refusing their own parent.
+    """
     folder = root / ".build-state"
     folder.mkdir(exist_ok=True)
-    with (folder / "build.lock").open("a+b") as stream:
+    lock = folder / "build.lock"
+    if os.environ.get(HELD) == str(lock.resolve()):
+        yield
+        return
+    problem = free_space_error(root)
+    if problem:
+        raise ValueError(problem)
+    if wait is None:
         try:
-            if os.name == "nt":
-                import msvcrt
-                stream.seek(0); stream.write(b"0"); stream.flush(); stream.seek(0)
-                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            raise ValueError("another manuscript build is running; retry after it finishes") from None
+            wait = float(os.environ.get("PAPER_BUILD_WAIT", "0"))
+        except ValueError:
+            wait = 0.0
+    import time
+    deadline, told = time.monotonic() + wait, False
+    with lock.open("a+b") as stream:
+        while not _try_lock(stream):
+            try:
+                who = (folder / "build.lock.owner").read_text().strip()
+            except OSError:
+                who = ""
+            if time.monotonic() >= deadline:
+                raise ValueError("another manuscript build is running"
+                                 + (f" ({who})" if who else "")
+                                 + "; retry after it finishes") from None
+            if not told:
+                print(f"waiting for another manuscript build{f' ({who})' if who else ''} "
+                      f"to finish, up to {wait:.0f} s", file=sys.stderr, flush=True)
+                told = True
+            time.sleep(0.5)
         try:
+            if owner:
+                (folder / "build.lock.owner").write_text(owner + "\n")
             yield
         finally:
-            if os.name == "nt":
-                stream.seek(0)
-                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                fcntl.flock(stream, fcntl.LOCK_UN)
+            if owner:
+                (folder / "build.lock.owner").unlink(missing_ok=True)
+            _unlock(stream)
+
+
+def changed_sources(root: Path, recorded: dict, dependencies=()) -> list[str]:
+    """The recorded source paths whose hash moved (or appeared, or vanished)."""
+    now = snapshot(root, dependencies)
+    return sorted(k for k in set(now) | set(recorded) if now.get(k) != recorded.get(k))
 
 
 def prepare_snapshot(root: Path, folder: Path, sources: dict, dependencies: list, *,
@@ -236,6 +317,7 @@ def check(root: Path = ROOT, outputs=("paper.pdf", "paper.docx")) -> list[dict]:
     recipes = {"paper.pdf": "just paper", "paper.docx": "just docx"}
     for output, recipe in ((o, recipes[o]) for o in outputs):
         status = "current"
+        changed: list[str] = []
         try:
             if not (root / output).is_file():
                 status = "missing"
@@ -247,12 +329,22 @@ def check(root: Path = ROOT, outputs=("paper.pdf", "paper.docx")) -> list[dict]:
                     status = "unknown"
                 elif snapshot(root, state["dependencies"]) != state["sources"]:
                     status = "stale"
+                    changed = changed_sources(root, state["sources"], state["dependencies"])
                 elif digest(root / output) != state["output_hash"]:
                     status = "replaced"
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             status = "unknown"
-        out.append({"output": output, "status": status, "command": recipe})
+        out.append({"output": output, "status": status, "command": recipe,
+                    "changed": changed})
     return out
+
+
+def changed_note(changed: list[str], limit: int = 5) -> str:
+    """ "  (changed: paper.typ, stats.json and 3 more)", or "" for none."""
+    if not changed:
+        return ""
+    more = f" and {len(changed) - limit} more" if len(changed) > limit else ""
+    return f"  (changed: {', '.join(changed[:limit])}{more})"
 
 
 def main() -> int:
@@ -272,7 +364,8 @@ def main() -> int:
         rows = check(outputs=args.output or ("paper.pdf", "paper.docx"))
         for row in rows:
             if row["status"] != "current":
-                print(f"{row['status'].upper()}: {row['output']} -- rebuild: {row['command']}")
+                print(f"{row['status'].upper()}: {row['output']} -- rebuild: {row['command']}"
+                      + changed_note(row.get("changed", [])))
         if all(row["status"] == "current" for row in rows):
             print(" and ".join(r["output"] for r in rows) + " "
                   + ("is" if len(rows) == 1 else "are") + " current with the source")

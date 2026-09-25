@@ -327,8 +327,24 @@ def _unused(values: dict) -> list[Finding]:
     # x_lo/x_hi, which are then in use too.
     called |= {f"{base}{sep}{end}" for base in set(called)
                for sep in (".", "_") for end in ("lo", "hi")}
-    return [Finding("warn", id, "is declared but no .typ file reads it")
-            for id in sorted(set(values) - called)]
+    # project.toml [stats] si-only / evidence-only: id globs declared on
+    # purpose without a sentence (a supplementary data file's numbers, the
+    # evidence behind a claim an audit reads). Not unused; a glob that
+    # matches nothing is the stale declaration instead.
+    from fnmatch import fnmatchcase
+    from project_hooks import load
+    exempt, found = set(), []
+    for scope, globs in load(ROOT).stats_scopes.items():
+        for glob in globs:
+            hit = {id for id in values if fnmatchcase(id, glob)}
+            if not hit:
+                found.append(Finding("warn", glob, f"project.toml [stats] {scope} "
+                                     "matches no declared id"))
+            exempt |= hit
+    return found + [Finding("warn", id, "is declared but no .typ file reads it "
+                            "(mark it in project.toml [stats] si-only or "
+                            "evidence-only if that is deliberate)")
+                    for id in sorted(set(values) - called - exempt)]
 
 
 def _rederive(values: dict) -> tuple[list[Finding], str]:

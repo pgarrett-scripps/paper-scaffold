@@ -110,6 +110,7 @@ CASE_MODULES = (
     "port_cases",             # manuscript.toml upstream: ported parts, port-diff
     "claims_cases",           # claims held to the numbers: ci, relations, wording
     "evidence_cases",         # evidence.toml, versions, inputs, pending
+    "gates_cases",            # availability, stats safety, the agent loop, revision, ledger writer
 )
 
 

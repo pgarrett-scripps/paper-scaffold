@@ -149,6 +149,13 @@ file.
 The Supporting Information is appended to this document and is available free of
 charge.
 
+*Data and Code Availability*
+
+Name each dataset's repository and accession here, and the DOI of the archived
+code (a Zenodo, figshare or Software Heritage record, not only a Git URL).
+`just check-submission` fails on an accession the text cites but this statement
+omits.
+
 *Author Contributions*
 
 Describe each author's contribution here. Replace this sentence.

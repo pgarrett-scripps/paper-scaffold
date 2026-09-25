@@ -179,7 +179,13 @@ def display_of(rec: dict) -> str:
     that cannot express it.
     """
     v, fmt = rec.get("value"), rec.get("fmt", "")
-    return format(v, fmt) if fmt else str(v)
+    if fmt:
+        return format(v, fmt)
+    # A count computed as a float (a pandas sum, a mean of integers) has no
+    # business printing as "14.0": with no fmt, a whole float prints as one.
+    if isinstance(v, float) and v.is_integer() and abs(v) < 1e15:
+        return str(int(v))
+    return str(v)
 
 
 def intervals_of(values: dict) -> dict:

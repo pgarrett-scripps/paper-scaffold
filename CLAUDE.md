@@ -138,18 +138,24 @@ Details: [docs/numbers.md](docs/numbers.md), [docs/assets.md](docs/assets.md).
 ```bash
 just paper      # rebuild; prints word count and readability
 just verify     # the gate: formatting, extractors, prose rules, staleness
+just gate       # both, with fmt and `just assets` when stale, in one command
 ```
 
 - Quote the word count and readability `just paper` prints; never estimate.
   Read the edited passages in the refreshed `paper.resolved.typ` for meaning.
 - A wording-only pass is bracketed by `just edit-baseline` and
   `just edit-check` (numbers may be dropped, never invented; references,
-  floats and headings survive). Still read the edited sentences.
+  floats and headings survive). Still read the edited sentences. In a
+  revision round, `just edit-check <tag> --revision` allows new ids and refs.
+- A guard failure in `just assets`: `just assets --explain` prints each
+  failing `expect` beside the sentences that read the id. `just assets`
+  refuses to drop an id gen_stats.py stopped declaring; `--prune` does it.
 - `verify` rebuilds nothing and names the recipe that clears each stale
   item. What each stage checks:
   [docs/build-and-staleness.md](docs/build-and-staleness.md).
 - A concurrent build or a source edit during compilation is a failed build,
-  not permission to weaken the check.
+  not permission to weaken the check. `just paper` waits for another
+  session's build (`PAPER_BUILD_WAIT` seconds) instead of colliding.
 - Do not change word limits or exclusions just to clear `check-words`. Do not
   silence a prose-check finding by editing `tools/prose_check.py`: add it to
   `prose-check.toml` with a comment saying why.
@@ -164,13 +170,14 @@ just verify     # the gate: formatting, extractors, prose rules, staleness
 
 ## Skills
 
-Thirteen workflows ship as the `paper` plugin (from the scaffold's
+Fourteen workflows ship as the `paper` plugin (from the scaffold's
 `plugins/paper/skills/`, enabled by `.claude/settings.json`; Codex reads the
 same files through the `.agents/skills` symlink as `$copy-edit` and so on).
 Prefer a skill over improvising its steps.
 
 - Edit: `/paper:copy-edit`, `/paper:fix-verify`, `/paper:declare-number`,
-  `/paper:new-figure`, `/paper:cover-letter`.
+  `/paper:new-figure`, `/paper:cover-letter`, `/paper:reviewer-response`
+  (a revision round).
 - Review, read-only, findings under `reviews/`: `/paper:claim-audit`,
   `/paper:methods-vs-code`, `/paper:figure-review`, `/paper:prose-review`,
   `/paper:literature-check` (network), `/paper:story-review`,
@@ -180,6 +187,9 @@ Prefer a skill over improvising its steps.
 - `reviews/ACTIONS.md` is the action ledger: reviews read it first and append
   new findings, editing skills close the rows they fix with the commit hash;
   `just check-actions --open` lists what is open.
+- Write ledger rows with `just actions-add` (locked, collision-free ids),
+  never by hand. A fixing commit carries `Closes: A-0012`; `just
+  close-actions` records its hash. Review skills take `no-ledger`.
 
 What each does: [docs/working-with-ai.md](docs/working-with-ai.md).
 

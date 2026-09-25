@@ -77,7 +77,7 @@ from paths import ROOT, locate, tool  # the manuscript (tools/paths.py)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from atomic_io import write_text
-from build_state import build_lock, digest, snapshot, stats_digest
+from build_state import build_lock, changed_note, digest, snapshot, stats_digest
 
 OUT_DIR = "submission"
 RECORD = Path(".build-state") / "submission.json"
@@ -703,7 +703,15 @@ def letter_limits(root: Path) -> list[str]:
 def check(root: Path) -> list[dict]:
     rows = []
     for name, record in sorted(load_records(root).items()):
-        rows.append({"output": f"{OUT_DIR}/{name}", "status": status(root, name, record)})
+        row = {"output": f"{OUT_DIR}/{name}", "status": status(root, name, record)}
+        if row["status"] == "stale":
+            try:
+                now = current_sources(root, record)
+                row["changed"] = sorted(k for k in set(now) | set(record["sources"])
+                                        if now.get(k) != record["sources"].get(k))
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
+        rows.append(row)
     return rows
 
 
@@ -723,7 +731,8 @@ def main(argv=None) -> int:
             bad = [r for r in rows if r["status"] != "current"]
             label = "note" if args.note else "STALE"
             for r in bad:
-                print(f"{label}: {r['output']} is {r['status']} -- rebuild: just submission")
+                print(f"{label}: {r['output']} is {r['status']} -- rebuild: just submission"
+                      + changed_note(r.get("changed", [])))
             try:
                 limits = letter_limits(root)
             except ValueError as exc:
@@ -734,6 +743,14 @@ def main(argv=None) -> int:
             for message in limits:
                 print(f"{'note' if args.note else 'LIMIT'}: {message}")
             bad += limits
+            if not args.note:
+                # Data and code availability (tools/availability.py): an
+                # integrity gap, so it fails check-submission, never `just check`.
+                from availability import check as availability
+                gaps = [f.message for f in availability(root)]
+                for message in gaps:
+                    print(f"AVAILABILITY: {message}")
+                bad += gaps
             if not rows and not args.note:
                 print("no submission set built yet -- build it: just submission")
                 return 1

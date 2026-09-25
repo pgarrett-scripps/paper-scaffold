@@ -205,6 +205,10 @@ class Project:
     # [[software]] (5.0.0): a pinned release whose documentation the methods
     # describe; /paper:methods-vs-code reads the docs at that ref.
     software: tuple[dict, ...] = ()
+    # [availability], [stats] and [response]: see _gates() below.
+    availability: dict = field(default_factory=dict)
+    stats_scopes: dict = field(default_factory=dict)
+    response: str | None = None
     declared: bool = False
 
 
@@ -248,7 +252,8 @@ def load(root: Path = ROOT) -> Project:
     except tomllib.TOMLDecodeError as exc:
         raise ValueError(f"{FILE}: {exc}") from None
     keys(data, {"schema_version", "stages", "preflight", "sources", "word",
-                "bibliography", "slides", "prose", "software"}, FILE)
+                "bibliography", "slides", "prose", "software", "availability",
+                "stats", "response"}, FILE)
     if type(data.get("schema_version")) is not int or data["schema_version"] != 1:
         raise ValueError(f"{FILE}: schema_version must be 1")
 
@@ -310,7 +315,7 @@ def load(root: Path = ROOT) -> Project:
     return Project(stages=stages, bib_audit_require_complete=complete,
                    typst_sources=typst, word=word, single_bibliography=single,
                    slides_theme=theme, prose_vocab=vocab, cover_letter=cover_letter,
-                   software=software, declared=True)
+                   software=software, declared=True, **_gates(data))
 
 
 def _prose(table) -> tuple[tuple[str, ...], str]:
@@ -362,6 +367,50 @@ def _software(value) -> tuple[dict, ...]:
         out.append({"name": item["name"], "repo": item["repo"], "ref": item["ref"],
                     "docs": tuple(docs), "note": item.get("note", "")})
     return tuple(out)
+
+
+def _strings(value, where: str, regex: bool = False) -> tuple[str, ...]:
+    if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
+        raise ValueError(f"{where}: expected a list of nonempty strings")
+    if regex:
+        for v in value:
+            try:
+                re.compile(v)
+            except re.error as exc:
+                raise ValueError(f"{where}: {v!r} is not a valid regex ({exc})") from None
+    return tuple(value)
+
+
+def _gates(data: dict) -> dict:
+    """[availability] (tools/availability.py), [stats] (tools/check_stats.py)
+    and [response] (tools/response.py), validated."""
+    table = data.get("availability", {})
+    where = f"{FILE} [availability]"
+    keys(table, {"enabled", "require_code_archive", "patterns", "disable",
+                 "placeholders", "section"}, where)
+    availability = {}
+    for key in ("enabled", "require_code_archive"):
+        if key in table:
+            if not isinstance(table[key], bool):
+                raise ValueError(f"{where}: {key} must be true or false")
+            availability[key] = table[key]
+    for key in ("patterns", "placeholders", "disable"):
+        if key in table:
+            availability[key] = _strings(table[key], f"{where} {key}", key != "disable")
+    if "section" in table:
+        availability["section"] = _strings([table["section"]], f"{where} section", True)[0]
+
+    table = data.get("stats", {})
+    where = f"{FILE} [stats]"
+    keys(table, {"si-only", "evidence-only"}, where)
+    scopes = {k: _strings(v, f"{where} {k}") for k, v in table.items()}
+
+    table = data.get("response", {})
+    keys(table, {"file"}, f"{FILE} [response]")
+    response = None
+    if "file" in table:
+        response = _paths([table["file"]], f"{FILE} response.file", (".typ",))[0]
+    return {"availability": availability, "stats_scopes": scopes, "response": response}
 
 
 def _paths(value, where: str, suffixes: tuple[str, ...] | None) -> tuple[str, ...]:
@@ -498,6 +547,12 @@ def describe(project: Project) -> list[str]:
     for sw in project.software:
         lines.append(f"software   {sw['name']:<17} {sw['repo']}@{sw['ref']}: "
                      + ", ".join(sw["docs"]))
+    for key, value in project.availability.items():
+        lines.append(f"availability {key} = {value!r}")
+    for key, value in project.stats_scopes.items():
+        lines.append(f"stats      {key:<13} {', '.join(value)}")
+    if project.response:
+        lines.append(f"response   file              {project.response}")
     return lines or [f"{FILE} declares no hooks"]
 
 

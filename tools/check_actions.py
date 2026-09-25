@@ -13,6 +13,10 @@ columns, every row has seven cells, ids are `A-` plus digits and unique,
 severity and status take their allowed values, and every done or wontfix row
 says in `closed` how (a commit hash, `uncommitted: <note>`, or a reason).
 
+It also holds each done row's commit hash to the history: the commit whose
+message carries a `Closes: A-0012` trailer must be the one the row names
+(tools/actions.py writes those rows; `just close-actions`).
+
 What it does not do: fail on open work. Open blockers print a WARNING line and
 the exit status stays 0; a ledger with open items is a manuscript with work
 left, not a broken one. A missing ledger is a silent pass, because a paper that
@@ -162,6 +166,18 @@ def main(argv: list[str] | None = None, ledger: Path = LEDGER,
     if errors:
         print(f"reviews/ACTIONS.md is malformed ({len(errors)} problem(s)):")
         for e in errors:
+            print(f"  {e}")
+        return 1
+    # A done row's hash against the commit whose `Closes: A-xxxx` trailer
+    # names it (tools/actions.py): a mismatch is an error, a hash that names
+    # no commit a warning.
+    from actions import verify_hashes
+    bad, doubtful = verify_hashes(rows, ledger.parent.parent)
+    for w in doubtful:
+        print(f"WARNING: {w}")
+    if bad:
+        print(f"reviews/ACTIONS.md records the wrong commit ({len(bad)} row(s)):")
+        for e in bad:
             print(f"  {e}")
         return 1
     for line in summarize(rows):
