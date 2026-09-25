@@ -34,6 +34,7 @@ cite, not a list they run.
 | `/paper:claim-audit` | "Preserved", "negligible", "comparable" with no tolerance and no number (principle 2) |
 | `/paper:figure-review`, `/paper:new-figure` | The figure checklist below |
 | `/paper:prose-review` | Promotional headings, informal verbs, adjectives where a number exists (principle 10) |
+| `/paper:intro-review` | The Introduction on its own: problem sized from the literature, each existing approach with its gap, terms and formats defined, aim, scope and design with reasons, no results before the Results (principles 1 and 7) |
 | `/paper:literature-check` | The Introduction surveys existing approaches before it states the gap (principle 7) |
 
 The experiment checklist has no skill: use it by hand before collecting data.

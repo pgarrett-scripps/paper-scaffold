@@ -352,7 +352,7 @@ class Hardening(unittest.TestCase):
         expected = {"copy-edit", "fix-verify", "declare-number", "new-figure",
                     "cover-letter", "reviewer-response",
                     "claim-audit", "methods-vs-code", "figure-review", "peer-review",
-                    "review-all", "prose-review",
+                    "review-all", "prose-review", "intro-review",
                     "literature-check", "story-review"}
         self.assertEqual({p.name for p in shared.iterdir()}, expected)
         for name in expected:

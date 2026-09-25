@@ -117,6 +117,23 @@ class Layout(unittest.TestCase):
         self.assertIn("warn: paper.pdf p.1", out.getvalue())
 
 
+class DefaultPdfs(unittest.TestCase):
+    def test_a_multi_document_project_checks_its_default_output(self):
+        # disertation: manuscript.toml builds dissertation.pdf, not paper.pdf.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ("paper.pdf", "main.typ", "thesis.pdf"):
+                (root / name).write_text("")
+            (root / "ch.typ").write_text("// >>> BODY START\nText.\n// <<< BODY END\n")
+            self.assertEqual(lc.default_pdfs(root, False), [root / "paper.pdf"])
+            (root / "manuscript.toml").write_text(
+                'schema_version = 1\ndefault_document = "thesis"\n'
+                '[parts.ch]\nsource = "ch.typ"\n'
+                '[documents.thesis]\nentrypoint = "main.typ"\n'
+                'output = "thesis.pdf"\nparts = ["ch"]\n')
+            self.assertEqual(lc.default_pdfs(root, False), [root / "thesis.pdf"])
+
+
 class Profile(unittest.TestCase):
     def test_figure_keys_are_validated(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -139,7 +156,7 @@ class Profile(unittest.TestCase):
 
 def run_cases() -> bool:
     suite = unittest.TestSuite()
-    for case in (Layout, Profile):
+    for case in (Layout, DefaultPdfs, Profile):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(case))
     return unittest.TextTestRunner(verbosity=1).run(suite).wasSuccessful()
 

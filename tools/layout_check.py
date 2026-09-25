@@ -201,6 +201,10 @@ def figures(root: Path, pdfs: list[Path], limits: dict) -> list[Finding]:
 
 def default_pdfs(root: Path, submission: bool) -> list[Path]:
     pdfs = [root / "paper.pdf"]
+    if (root / "manuscript.toml").is_file():
+        from document_project import load_project
+        project = load_project(root)
+        pdfs = [root / project.documents[project.default].output]
     if submission:
         pdfs += sorted(p for p in (root / "submission").glob("*.pdf")
                        if p.name != "cover-letter.pdf")
@@ -234,7 +238,7 @@ def run(root: Path, pdfs: list[Path], *, edge=EDGE_PT, tolerance=TOLERANCE_PT) -
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("pdf", nargs="*", type=Path, help="default paper.pdf")
+    parser.add_argument("pdf", nargs="*", type=Path, help="default paper.pdf, or the default document of manuscript.toml")
     parser.add_argument("--submission", action="store_true",
                         help="also the PDFs in submission/")
     parser.add_argument("--strict", action="store_true", help="a warning fails")

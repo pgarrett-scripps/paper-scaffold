@@ -64,6 +64,23 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 5.1.0
+
+- `/paper:intro-review`, a read-only review of the Introduction as a reviewer
+  reads it before any result: the problem sized from cited work, each
+  existing approach with its gap, every term and format the Results rely on
+  defined, the aim, scope and design stated with reasons, no results spent
+  before the Results, and agreement with the Limitations. Built from the
+  d_noise reviewers' complaints that the Introduction was thin.
+  `/paper:review-all` runs it, and an Introduction complaint from peer-review
+  on the same paragraph merges into its finding.
+- `just check-layout` on a `manuscript.toml` project checks the default
+  document's output (the dissertation's `dissertation.pdf`), not a missing
+  `paper.pdf`.
+
+Upgrade: `uv add` the v5.1.0 pin, `uv run paper sync`, and run
+`paper-plugin-update` for `/paper:intro-review`. Nothing new can fail.
+
 ## 5.0.0
 
 The roadmap from a survey of the ten papers built on the scaffold and their

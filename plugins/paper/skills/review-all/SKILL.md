@@ -1,6 +1,6 @@
 ---
 name: review-all
-description: Run every review skill (claim-audit, methods-vs-code, figure-review, prose-review, peer-review) in parallel as a final sanity check, merge their new findings into the action ledger reviews/ACTIONS.md, and give a ship verdict. Use before submission or before handing a draft to a coauthor. Read-only.
+description: Run every review skill (claim-audit, methods-vs-code, figure-review, prose-review, intro-review, peer-review) in parallel as a final sanity check, merge their new findings into the action ledger reviews/ACTIONS.md, and give a ship verdict. Use before submission or before handing a draft to a coauthor. Read-only.
 context: fork
 agent: general-purpose
 model: opus
@@ -9,7 +9,7 @@ model: opus
 # Run every review at once
 
 Work from the manuscript root and follow AGENTS.md/CLAUDE.md. This skill is
-read-only for the manuscript. It launches the five review skills as
+read-only for the manuscript. It launches the six review skills as
 independent agents, waits for all of them, merges their findings into the
 action ledger `reviews/ACTIONS.md`, and writes one short report with the ship
 verdict. It does not re-do any review itself and does not edit the
@@ -20,9 +20,9 @@ manuscript.
 All optional, in plain words after the skill name. State the interpretation
 at the top of the report.
 
-- **which**: default all five. The user may drop one ("skip figures") or
+- **which**: default all six. The user may drop one ("skip figures") or
   name a subset. `/paper:literature-check` is off by default because it needs
-  the network and is slow; "with literature" adds it as a sixth agent.
+  the network and is slow; "with literature" adds it as a seventh agent.
 - **no-ledger**: merge nothing into `reviews/ACTIONS.md`; the Merge section
   deduplicates across the reviews into the report only, and the report says
   the ledger was not updated.
@@ -30,7 +30,7 @@ at the top of the report.
   Default is split by the kind of work: `claim-audit`, `methods-vs-code`,
   `figure-review` and `prose-review` are checklists against a fixed standard
   (the sources, the code, `assets.json`, STYLE.md) and run on `sonnet`;
-  `peer-review` and `literature-check` are judgment calls and run on `opus`.
+  `peer-review`, `intro-review` and `literature-check` are judgment calls and run on `opus`.
   The split exists because Opus draws down the plan's rate-limit window several
   times faster than Sonnet, and the checklists lose nothing on Sonnet. The
   user may name another model for all reviews ("all on opus") or per review
@@ -73,7 +73,7 @@ si-body.typ or the PDF unless your skill's job is to check the source.
 You were launched by /paper:review-all: read reviews/ACTIONS.md to skip
 findings it already holds, but do not write it; review-all merges."
 That last clause applies to `claim-audit` and `methods-vs-code`, whose
-findings are about source and code; `peer-review`, `prose-review` and the
+findings are about source and code; `peer-review`, `prose-review`, `intro-review` and the
 caption half of `figure-review` work from the copy alone. The agents share
 nothing with each other beyond that file. Do not start any of them sequentially and do not run one
 inline to save time. Wait for every agent to finish before writing the
@@ -89,7 +89,9 @@ list of work, and it outlives this run.
 1. Deduplicate across the reviews: the same sentence flagged by two reviews
    is one action whose `source` cites both files. A `prose-review` wording
    finding on a sentence `claim-audit` calls overstated is one action owned
-   by `claim-audit`.
+   by `claim-audit`. A `peer-review` complaint about the Introduction and an
+   `intro-review` finding on the same paragraph are one action owned by
+   `intro-review`, whose fix is the more specific one.
 2. Deduplicate against the ledger: a finding that matches an `open` or
    `wontfix` row adds nothing. One that matches a `done` row whose problem is
    back reopens that row in place: `status` to `open`, `closed` to

@@ -170,7 +170,7 @@ just gate       # both, with fmt and `just assets` when stale, in one command
 
 ## Skills
 
-Fourteen workflows ship as the `paper` plugin (from the scaffold's
+Fifteen workflows ship as the `paper` plugin (from the scaffold's
 `plugins/paper/skills/`, enabled by `.claude/settings.json`; Codex reads the
 same files through the `.agents/skills` symlink as `$copy-edit` and so on).
 Prefer a skill over improvising its steps.
@@ -180,7 +180,7 @@ Prefer a skill over improvising its steps.
   (a revision round).
 - Review, read-only, findings under `reviews/`: `/paper:claim-audit`,
   `/paper:methods-vs-code`, `/paper:figure-review`, `/paper:prose-review`,
-  `/paper:literature-check` (network), `/paper:story-review`,
+  `/paper:intro-review`, `/paper:literature-check` (network), `/paper:story-review`,
   `/paper:peer-review`. `/paper:review-all` runs them and merges the findings
   (literature check only on request, story review never). A review skill
   never edits the manuscript.
