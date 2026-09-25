@@ -64,6 +64,113 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 5.0.0
+
+The roadmap from a survey of the ten papers built on the scaffold and their
+sessions' reports, released as one version. Six papers had built their own
+provenance tracking, five their own Word table styling, and several their own
+submission and revision checks. This release makes those shared. Major because
+`just assets` now refuses to drop an id silently and `just check-submission`
+now fails on a gap in the availability statement. The details are in the docs
+each item names.
+
+**Submission and the agent loop** (docs/submission.md, docs/build-and-staleness.md)
+- `just availability`, run by `check-submission`, checks the data and code
+  availability statement. It flags a cited accession missing from the
+  statement, a placeholder, a missing section, and code with no archived DOI.
+  Configure it with `[availability]` in project.toml.
+- `just assets` / `just stats` refuse to drop an id that gen_stats.py stopped
+  declaring. `--prune` retires it. Every failing `expect` is reported at once;
+  `just assets --explain` / `just explain-guards` print each beside the
+  sentences that read it. A whole-number float with no fmt prints `14`.
+  `[stats] si-only` / `evidence-only` globs quiet the unused-id warning.
+- `just gate [paper|all]` runs fmt, assets when stale, the build and verify,
+  stopping at the first failure. A clean verify writes a pass stamp
+  (`check-verify-stamp`; `install-hooks` adds an optional pre-commit hook).
+  `just paper` waits for another session's build (`PAPER_BUILD_WAIT`),
+  refuses to start below `PAPER_MIN_FREE_MB` of free disk, and a stale output
+  names the files that changed.
+
+**The revision round** (docs/submission.md, docs/working-with-ai.md)
+- `/paper:reviewer-response` with `just response-init` / `response` /
+  `check-response`: a point-by-point letter whose points cite ledger rows.
+  While the letter exists, `check-response` fails on a done point without
+  committed rows.
+- `just tag-submission NAME` tags the submitted state; `just diff-pdf NAME`
+  is a text-level diff against it. `just edit-check TAG --revision` allows
+  new ids, citations and floats, and still fails a typed numeral.
+- Ledger: `just actions-add` / `actions-reserve` allocate ids under a lock.
+  `Closes: A-0012` commit trailers and `just close-actions` close rows, and
+  `check-actions` fails when a row's hash disagrees with its trailer. Review
+  skills take `no-ledger`.
+
+**Where numbers come from** (docs/evidence.md)
+- An optional `evidence.toml` names each body of evidence: its path, software
+  versions, commit, verification file, and a status of pending, frozen or
+  held-out. Generators open data through `evidence("set")`. Entries record the
+  versions behind them, and a mix of versions of one tool fails.
+- `just check-evidence` (in verify) checks the manifest, stale or mixed
+  versions, verification, pending declarations, untracked or gitignored
+  inputs, host paths, and version literals in the prose.
+  `just evidence-stamp`, `just impact TOOL@VER`, and `trace` report the
+  evidence behind an id.
+- Declared inputs are stored repo-relative, symlinked data included. A hand
+  entry needs `origin.source`. A `pending` block renders a visible
+  placeholder, and only verify and preflight fail on it. Adopted tables take
+  `checked_against` (`just adopt-checked`). `check-assets` names generators
+  the last `just assets` did not run.
+
+**Claims held to the numbers** (docs/numbers.md, docs/prose-checks.md)
+- Uncertainty fields on stats (`lo`, `hi`, `level`, `n`, `sd`, `se`, with a
+  `v3:` checksum) and `#ci("id")` to print the interval.
+- `expect` relations between ids: `gt`, `ge`, `lt`, `le`, `ratio_to`,
+  `diff_to`.
+- `measurement` (single-run, replicated, exclusive) and the
+  `single-run-timing` rule.
+- `bound-rounding` and `interval-wording` warnings.
+- `#lit(v, unlike: "id")` clears `derivable-number` only for the named ids,
+  so a coincidental match no longer needs a global exception; `stale-vouch`
+  warns when the vouch no longer applies.
+- `claims.toml` retires a claim's old wording across the paper, SI and cover
+  letter. The cover letter now gets the prose rules, as warnings by default.
+- `[prose] vocab` shares vocabulary lists (ships `vocab/proteomics.toml`).
+- `[[software]]` pins a release that `/paper:methods-vs-code` checks the
+  Methods against.
+
+**Word, layout, and multi-document** (docs/word-export.md, docs/journals.md, docs/multi-document.md)
+- `[word.style]` table keys (font size, header bold or shading, borders,
+  layout, margins, compact, valign, unnest) and a per-table
+  `[word.tables."tbl:x"]` (widths, font size, header rows). These replace the
+  papers' own table hooks. Also new: `page_numbers` and `title_bold`.
+- `just check-layout` warns on text past the margins and on figures outside
+  the journal profile's new `[figures]` limits. check-submission runs it.
+- `#si-contents` ships in `assets.typ`.
+- manuscript.toml parts take `upstream = {repo, commit, figures}`.
+  `just port-check` (a verify stage, warn) catches an upstream that moved, a
+  stale copied figure, and a chapter that sets the page. `just port-diff
+  PART` shows the upstream number changes.
+
+Upgrade: `uv add` the v5.0.0 pin, `uv run paper sync`, commit
+`.paper/grandfathered.json` if sync writes one (existing hand entries without
+`origin.source` warn until sourced), then `just paper` and `just verify`, and
+run `paper-plugin-update` for `/paper:reviewer-response`. `just verify` fails
+nothing new on a paper that has not opted in. Three things can now fail:
+- `just check-submission` / `preflight`, on the availability statement. Run
+  `just availability`, then fix the statement or set `[availability]`
+  `require_code_archive = false`, `disable = [...]` or `enabled = false`.
+- `just assets`, when gen_stats.py dropped an id. Check for a rename, then
+  run `just assets --prune`.
+- `check-actions`, on a done row whose hash disagrees with its `Closes:`
+  commit.
+
+Expect new warnings: `bound-rounding`, untracked or host-path inputs,
+generators the last run skipped, cover-letter prose rules, and layout. Add
+`ci` to a file's `#import "stats.typ"` line to use `#ci`. A paper with its
+own `#let si-contents` either keeps it or imports the shipped one, not both.
+A prose-check.toml exception that exists only for a coincidental match can
+become `#lit(v, unlike: "id")`. Add `reviewer-response.pdf` to `.gitignore`
+when a revision round starts.
+
 ## 4.3.0
 
 The cover letter gets the same treatment as the manuscript: the journal's
