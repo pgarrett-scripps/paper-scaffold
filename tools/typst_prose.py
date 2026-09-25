@@ -54,7 +54,19 @@ STATS_N = r'#n\(\s*"([^"]+)"\s*,?\s*\)'
 # into both. The value is a quoted string by contract (lit() panics otherwise),
 # so the pattern needs only the direct-call form -- and the reflowed one, where
 # typstyle has broken the call across lines.
-LIT = r'#lit\(\s*"([^"]*)"\s*,?\s*\)'
+#
+# 5.0.0: an optional `unlike: "id"` (or `unlike: ("a", "b")`) names the stats
+# the literal is NOT, which silences derivable-number at this one site for a
+# collision with exactly those ids. `not:` would read better but is a Typst
+# keyword and cannot be an argument name. Group 1 is the literal, group 2 the
+# raw unlike argument (None without one); `lit_unlike()` parses it.
+LIT = (r'#lit\(\s*"([^"]*)"\s*'
+       r'(?:,\s*unlike\s*:\s*(\(\s*(?:"[^"]*"\s*,?\s*)*\)|"[^"]*")\s*)?,?\s*\)')
+
+
+def lit_unlike(arg: str | None) -> tuple[str, ...]:
+    """The ids named by a lit() call's `unlike:` argument, in order."""
+    return tuple(re.findall(r'"([^"]*)"', arg or ""))
 
 
 def resolve_lit(text: str) -> str:
@@ -67,6 +79,12 @@ def resolve_lit(text: str) -> str:
 # is not prose, so it must not reach the word count, the readability score, or
 # the narrator's mouth even while drafting.
 TODO = r'#todo\(\s*"([^"]*)"\s*,?\s*\)'
+
+# An interval read from stats.json (5.0.0): `#ci("id")` renders "lo–hi" with the
+# entry's fmt, `#ci("id", level: true)` prefixes the coverage ("95% CI 1.2–3.4").
+# Resolved like `#s`, for the same reason. Group 1 is the id, group 2 the level
+# flag.
+CI = r'#ci\(\s*"([^"]+)"\s*(?:,\s*level\s*:\s*(true|false)\s*)?,?\s*\)'
 
 
 # Written by analysis/scripts/gen_stats.py, beside the generated SI tables.
@@ -164,6 +182,37 @@ def display_of(rec: dict) -> str:
     return format(v, fmt) if fmt else str(v)
 
 
+def intervals_of(values: dict) -> dict:
+    """Every interval `#ci("id")` can read, keyed by id.
+
+    An entry's own lo/hi (written by Stats.add) come first. Failing that, a
+    pair of sibling ids, `id.lo`/`id.hi` or `id_lo`/`id_hi`, which is how
+    manuscripts declared intervals before the fields existed; those keep
+    working, each end rendered with its own fmt. Level is a fraction (0.95).
+    """
+    out: dict[str, dict] = {}
+    for id, rec in values.items():
+        if not isinstance(rec, dict):
+            continue
+        for sep in (".", "_"):
+            if id.endswith(sep + "lo") and id[:-3] + sep + "hi" in values:
+                base, hi = id[:-3], values[id[:-3] + sep + "hi"]
+                out.setdefault(base, {"lo": display_of(rec), "hi": display_of(hi),
+                                      "level": None})
+    for id, rec in values.items():
+        if isinstance(rec, dict) and "lo" in rec and "hi" in rec:
+            fmt = rec.get("fmt", "")
+            out[id] = {"lo": display_of({"value": rec["lo"], "fmt": fmt}),
+                       "hi": display_of({"value": rec["hi"], "fmt": fmt}),
+                       "level": rec.get("level")}
+    for rec in out.values():
+        rec["display"] = f"{rec['lo']}\u2013{rec['hi']}"
+        level = rec["level"]
+        rec["with_level"] = (f"{level * 100:g}% CI {rec['display']}"
+                             if level is not None else rec["display"])
+    return out
+
+
 def strip_links(text: str) -> str:
     """Replace every `#link(...)` with its shown text, or nothing if it has none.
 
@@ -218,7 +267,7 @@ def resolve_stats(text: str, path: Path | None = None) -> str:
     both a missing file and an unknown id raise: the same failure Typst gives at
     compile time, rather than a number quietly vanishing from the word count.
     """
-    if not re.search(STATS, text) and not re.search(STATS_N, text):
+    if not any(re.search(p, text) for p in (STATS, STATS_N, CI)):
         return text
     p = path or STATS_JSON
     if not p.is_file():
@@ -244,7 +293,19 @@ def resolve_stats(text: str, path: Path | None = None) -> str:
         return sub
 
     text = re.sub(STATS, repl("display"), text)
-    return re.sub(STATS_N, repl("value"), text)
+    text = re.sub(STATS_N, repl("value"), text)
+    if re.search(CI, text):
+        intervals = intervals_of(values)
+
+        def interval(m: re.Match) -> str:
+            if m.group(1) not in intervals:
+                raise SystemExit(
+                    f"error: {p.name} has no interval for '{m.group(1)}': give it "
+                    f"lo/hi in Stats.add(), or declare {m.group(1)}.lo and .hi")
+            rec = intervals[m.group(1)]
+            return rec["with_level"] if m.group(2) == "true" else rec["display"]
+        text = re.sub(CI, interval, text)
+    return text
 
 
 # Supplementary data files, numbered by config.typ's `paper-data-files`

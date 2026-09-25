@@ -48,7 +48,9 @@ The raw-value helper resolves too, to the unrounded value rather than the displa
 
 A note to self must vanish from the count and the narration alike, including the reflowed form, while the prose around it survives.
 
-A vouched literal resolves to exactly what was typed: the column ran at 40 degrees with a pooled mean of 2.2, and the exploded form survives a reflow the same way the stats calls do: 12,345 events in total.
+A vouched literal resolves to exactly what was typed: the column ran at 40 degrees with a pooled mean of 2.2, and the exploded form survives a reflow the same way the stats calls do: 12,345 events in total. A literal may name the stat it only looks like, 2.07 mL, and still resolves to what was typed.
+
+An interval resolves to its two ends from the entry's own fmt: the fold change spanned 1.71 to 2.49, or 95% CI 1.71 to 2.49 with its level, and the exploded form 1.71 to 2.49 survives a reflow.
 
 = Figures and tables
 

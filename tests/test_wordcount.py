@@ -98,7 +98,8 @@ class TypstTests(unittest.TestCase):
             '#let paper-title = "Title excluded"\n#let paper-abstract = [Short abstract.]\n')
         (self.root / 'stats.typ').write_text(
             '#let s(id) = "forty two"\n#let n(id) = 42\n'
-            '#let lit(v) = v\n#let todo(v) = none\n')
+            '#let lit(v, unlike: none) = v\n#let ci(id, level: false) = "1-2"\n'
+            '#let todo(v) = none\n')
         (self.root / 'assets.typ').write_text(
             '#let fig(id) = []\n#let tbl(id) = []\n'
             '#let dfile(id) = [Data File 1]\n#let dfile-short(id) = [File 1]\n'

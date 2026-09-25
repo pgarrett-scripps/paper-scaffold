@@ -51,6 +51,7 @@ def findings(project: Project, document: Document, cfg) -> list[Finding]:
         findings += pc.check_derivable_numbers(targets, stats_path=project.root / "stats.json")
         findings += pc.check_unaccounted_numbers(targets, stats_path=project.root / "stats.json")
         findings += pc.check_bypassed_assets(targets, assets_path=project.root / "assets.json")
+        findings += pc.claim_rules.claim_findings(targets, project.root / "stats.json")
         findings += pc.check_todos(targets)
         if cfg.runs("list-in-prose") or cfg.runs("bold-in-prose"):
             findings += pc.check_house_style(targets)

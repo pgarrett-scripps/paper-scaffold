@@ -31,7 +31,7 @@
 // The generated-number lookup, same as paper.typ imports. Injected below for the
 // same reason as refn: the sliced body calls it, and an eval scope missing a
 // helper fails the whole count rather than just that number.
-#import "stats.typ": lit, n, s, todo
+#import "stats.typ": ci, lit, n, s, todo
 
 // The generated-asset lookup, for the same reason again: the sliced body calls
 // fig() for every generated figure, and an eval scope missing it fails the whole
@@ -61,6 +61,7 @@
     s: s,
     n: n,
     lit: lit,
+    ci: ci,
     todo: msg => none,
     fig: asset-fig,
     tbl: asset-tbl,

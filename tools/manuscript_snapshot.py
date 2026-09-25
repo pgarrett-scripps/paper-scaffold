@@ -91,7 +91,9 @@ def resolve_source(src: str, stats: dict, assets: dict, where: str) -> str:
         tail = (resolve_source("#(" + tail_src + ")", stats, assets, where)[2:-1]
                 if HELPER.search(tail_src) else tail_src)
         if helper in ("s", "n", "lit"):
-            if tail.strip().strip(",").strip():
+            # lit()'s `unlike:` names ids for prose-check; it renders nothing.
+            if tail.strip().strip(",").strip() and not (
+                    helper == "lit" and re.match(r"\s*,\s*unlike\s*:", tail)):
                 raise ValueError(f"{where}: unsupported arguments to {helper}({key!r})")
             if helper == "lit":
                 value = key

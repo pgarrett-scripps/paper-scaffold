@@ -58,6 +58,12 @@ RULES: dict[str, tuple[str, str]] = {
     "unreached-si-section": ("warn", "the section label, e.g. sec:si-methods"),
     "unexpanded-acronym": ("warn",  "the acronym"),
     "derivable-number":   ("warn",  "the typed value"),
+    # Wording held to the number it states (tools/claim_rules.py, 5.0.0).
+    "bound-rounding":     ("warn",  "the stats id"),
+    "interval-wording":   ("warn",  ""),
+    "single-run-timing":  ("warn",  "the stats id"),
+    "stale-vouch":        ("warn",  "the id lit(unlike:) names"),
+    "retired-claim":      ("error", "the claim id in claims.toml"),
     "unaccounted-number": ("warn",  "the typed value"),
     "unresolved-todo":    ("warn",  "the note text"),
     "orphaned-asset":     ("warn",  "the file name"),
@@ -208,7 +214,8 @@ def load_config(root: Path) -> Config:
     """
     path = root / CONFIG_NAME
     if not path.exists():
-        return Config(limits={**DEFAULT_LIMITS, **_journal_limits(root)})
+        return _with_shared_vocab(root, Config(
+            limits={**DEFAULT_LIMITS, **_journal_limits(root)}))
 
     # A malformed file is a typo in a config, not a bug in the checker, so it
     # gets the same one-line treatment as every other bad entry here. The common
@@ -301,8 +308,59 @@ def load_config(root: Path) -> Config:
             _bad(f"[vocabulary.{name}].remove must be a list, got {remove!r}")
         vocab[name] = {"add": add, "remove": [str(v).lower() for v in remove]}
 
-    return Config(disable=disable, enable=enable, allow=allow, limits=limits,
-                  severity=severity, vocab=vocab, path=path)
+    return _with_shared_vocab(root, Config(
+        disable=disable, enable=enable, allow=allow, limits=limits,
+        severity=severity, vocab=vocab, path=path))
+
+
+def _with_shared_vocab(root: Path, cfg: Config) -> Config:
+    """Merge the vocabularies project.toml's [prose] vocab names (5.0.0).
+
+    A field's shared terms (the acronyms and names every paper in it uses)
+    otherwise get copied into each paper's prose-check.toml by hand. A shared
+    file holds only [allow] lists and [vocabulary.*] `add` entries, and only
+    ADDS: the project's own `remove` still applies on top, and nothing in a
+    shared file can disable a rule or change a severity.
+    """
+    try:
+        from project_hooks import load as load_project
+        names = load_project(root).prose_vocab
+    except (OSError, ValueError) as exc:
+        _bad(f"cannot read project.toml for [prose] vocab: {exc}")
+    for name in names:
+        from paths import DATA
+        file = (root / name) if name.endswith(".toml") else DATA / "vocab" / f"{name}.toml"
+        if not file.is_file():
+            shipped = sorted(f.stem for f in (DATA / "vocab").glob("*.toml"))
+            _bad(f"[prose] vocab {name!r}: no such file {file}; shipped: "
+                 f"{', '.join(shipped) or 'none'}")
+        try:
+            raw = tomllib.loads(file.read_text(encoding="utf-8"))
+        except tomllib.TOMLDecodeError as e:
+            _bad(f"vocabulary {name!r} is not valid TOML: {e}")
+        if set(raw) - {"about", "allow", "vocabulary"}:
+            _bad(f"vocabulary {name!r} may hold only about, [allow] and "
+                 f"[vocabulary.*]; got {sorted(set(raw) - {'about', 'allow', 'vocabulary'})}")
+        for rule, values in raw.get("allow", {}).items():
+            if rule not in RULES or not RULES[rule][1] or not isinstance(values, list):
+                _bad(f"vocabulary {name!r}: [allow].{rule} is not a per-value rule list")
+            cfg.allow.setdefault(rule, set()).update(str(v).lower() for v in values)
+        for vname, spec in raw.get("vocabulary", {}).items():
+            if vname not in VOCABULARIES or set(spec) - {"add"}:
+                _bad(f"vocabulary {name!r}: [vocabulary.{vname}] must be one of "
+                     f"{', '.join(sorted(VOCABULARIES))} with only `add`")
+            add = spec.get("add", [])
+            mine = cfg.vocab.setdefault(vname, {"add": None, "remove": []})
+            if VOCABULARIES[vname] == "phrases":
+                if not isinstance(add, dict):
+                    _bad(f"vocabulary {name!r}: [vocabulary.{vname}].add must be a table")
+                merged = {str(k).lower(): str(v) for k, v in add.items()}
+                mine["add"] = {**merged, **(mine["add"] or {})}
+            else:
+                if not isinstance(add, list):
+                    _bad(f"vocabulary {name!r}: [vocabulary.{vname}].add must be a list")
+                mine["add"] = {str(v).lower() for v in add} | set(mine["add"] or ())
+    return cfg
 
 
 def silencer(f: Finding) -> str:
@@ -314,12 +372,17 @@ def silencer(f: Finding) -> str:
 
 
 def report(findings: list[Finding], cfg: Config, *, show_suppressed: bool,
-           strict: bool) -> int:
-    """Print the findings and return the exit code."""
+           strict: bool, cap_warn: frozenset[str] = frozenset()) -> int:
+    """Print the findings and return the exit code.
+
+    `cap_warn` names sources (a Finding's `where`) whose findings are at most
+    warnings: the cover letter, by default (project.toml [prose]).
+    """
     # Severity is applied here rather than where each Finding is built: one place
     # to get right, and no check has to know the config exists to honour it.
     # Findings are frozen, so this rebuilds rather than assigns.
-    findings = [replace(f, severity=cfg.severity_of(f.rule)) for f in findings
+    findings = [replace(f, severity="warn" if f.where in cap_warn
+                        else cfg.severity_of(f.rule)) for f in findings
                 if cfg.runs(f.rule)]
 
     kept, hidden = [], []

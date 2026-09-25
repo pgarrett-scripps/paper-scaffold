@@ -31,7 +31,13 @@ task to clear the list.
 1. **Computed result:** use real analysis and its inputs. Add a new entry
    through gen_stats.py with `st.add(...)`, and declare the data read in
    `st.write(inputs=[...])`. Seed fmt, desc, unit, and justified sign/range
-   guards for a new ID. Run `just assets`. Never turn a prose literal into a
+   guards for a new ID. Record what the sentence says around the number in
+   the same call: an interval as `lo=`, `hi=`, `level=` (the prose then
+   reads `#ci("id")`, never two typed ends), `n=`/`sd=`/`se=`, and
+   `measurement="single-run"|"replicated"|"exclusive"` for a timing. A claim
+   relating two values ("threefold the baseline", "higher than") is
+   `gt=`/`ge=`/`lt=`/`le="other.id"` or `ratio_to=("other.id", 3, None)` /
+   `diff_to=`, not a hand-derived ratio id. Run `just assets`. Never turn a prose literal into a
    generator constant and call that a reproducible calculation.
 2. **Externally sourced number:** when no project script computes it, add a
    hand entry to stats.json with value, fmt, origin.by = "hand", and an
@@ -41,7 +47,10 @@ task to clear the list.
    This vouches only for that occurrence and only suppresses unaccounted-number.
    It cannot suppress derivable-number. If a computed result shares the digits
    but represents another quantity, investigate the collision rather than
-   assigning the wrong statistic.
+   assigning the wrong statistic; once it is established that the literal is
+   a different quantity, name the stats it is not:
+   `#lit("2.07", unlike: "effect.fold")` (a tuple for several). That clears
+   only those collisions, and `stale-vouch` warns if they change.
 4. **Global value exception:** use prose-check.toml with a written reason only
    when justified across the manuscript. Prefer a local declaration when other
    occurrences of the same digits still need checking.
