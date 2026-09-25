@@ -168,10 +168,10 @@ def run_cases() -> bool:
 def _si_contents_cases(rt) -> bool:
     """`#si-contents`: the Word sentence matches what the PDF prints.
 
-    The PDF builds the sentence in a `context` block (docs/manuscript.md),
+    The PDF builds the sentence in a `context` block (assets.typ's si-contents),
     the Word export rebuilds it from the numbering pass (koth-paper, whose
     hand-written paragraph had drifted from the SI's headings). Two
-    implementations of one sentence drift too, so the documented block is
+    implementations of one sentence drift too, so the assets.typ helper is
     compiled here and the two texts compared.
     """
     import shutil
@@ -211,11 +211,10 @@ def _si_contents_cases(rt) -> bool:
         print("  resolver [si-contents]: typst or pdftotext missing; "
               "PDF parity not checked")
         return ok
-    doc = (ROOT / "docs" / "manuscript.md").read_text(encoding="utf-8")
-    block = re.search(r"```typst\n((?:(?!```).)*#let si-contents(?:(?!```).)*)```",
-                      doc, re.S)
+    assets = (ROOT / "assets.typ").read_text(encoding="utf-8")
+    block = re.search(r"^(#let si-contents = context \{\n.*?^\}\n)", assets, re.S | re.M)
     if block is None:
-        print("  resolver [si-contents]: docs/manuscript.md lost the helper")
+        print("  resolver [si-contents]: assets.typ lost the helper")
         return False
     setup = ("#pagebreak()\n#context [#metadata(here().page()) <si-start>]\n"
              "#counter(figure.where(kind: image)).update(0)\n"

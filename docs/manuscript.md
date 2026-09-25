@@ -92,36 +92,25 @@ behaves as it did before this existed.
 Journals ask for a sentence saying what the Supporting Information holds (ACS
 calls it "Associated Content"). Written by hand, it drifts: a section is
 renamed or a figure added and the sentence still lists the old ones. To derive
-it instead, define this helper in `paper.typ`'s preamble, above BODY START,
-and write `#si-contents` where the sentence goes (normally in the back matter,
-outside the body markers, so it does not count as prose):
+it instead, import the helper `assets.typ` ships and write `#si-contents`
+where the sentence goes (normally in the back matter, outside the body
+markers, so it does not count as prose):
 
 ```typst
-// The SI's level-1 headings and float counts, read at layout time after
-// the <si-start> probe. tools/resolve_typst.py builds the same sentence for
-// Word, since `context` does not travel there.
-#let si-contents = context {
-  let heads = query(heading.where(level: 1).after(<si-start>))
-    .filter(h => h.numbering != none)
-  let secs = heads
-    .map(h => [#numbering(h.numbering, ..counter(heading).at(h.location())) #h.body])
-    .join(", ")
-  let span(noun, n) = if n == 1 [#noun S1] else [#(noun)s S1–S#n]
-  let floats = (
-    ("Figure", query(figure.where(kind: image).after(<si-start>)).len()),
-    ("Table", query(figure.where(kind: table).after(<si-start>)).len()),
-  ).filter(p => p.at(1) > 0).map(p => span(..p)).join(" and ")
-  let lead = if heads.len() == 1 [Section #secs] else if heads.len() > 1 [Sections #secs]
-  if lead != none and floats != none [#lead. #floats (PDF).] else [#lead#floats (PDF).]
-}
+#import "assets.typ": fig, tbl, si-contents
 ```
+
+It reads the SI's numbered level-1 headings and float counts after the
+`<si-start>` probe at layout time. Before 5.0.0 this block was copied into
+each `paper.typ`; a paper that still has its own `#let si-contents` either
+keeps it (and does not import the name) or deletes it and imports it.
 
 It prints, for example, "Sections S1 Methods, S2 Data. Figures S1–S3 and
 Table S1 (PDF)." The Word export substitutes the same sentence from its own
 numbering pass, which counts **labeled** SI floats only; give every SI figure
 and table a label, as cross-referencing needs anyway. `just test` compiles
-this exact block and compares it with the resolver's sentence, so edit the
-two together. A manuscript that does not write `#si-contents` is unaffected.
+the helper in `assets.typ` and compares it with the resolver's sentence, so a
+change to one is a change to both. A manuscript that does not write `#si-contents` is unaffected.
 
 ## Code blocks
 

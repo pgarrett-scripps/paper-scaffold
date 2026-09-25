@@ -134,3 +134,26 @@
     include e.path
   }
 }
+
+// "Sections S1 Methods, S2 Data. Figures S1–S3 and Table S1 (PDF).": the
+// sentence a journal asks for about the SI (ACS "Associated Content"), built
+// from the SI's numbered level-1 headings and float counts after the
+// <si-start> probe, so it cannot drift from them. Opt-in:
+// `#import "assets.typ": fig, tbl, si-contents`, then `#si-contents` where the
+// sentence goes. tools/resolve_typst.py builds the same sentence for Word,
+// since `context` does not travel there; `just test` compiles this block and
+// compares the two. docs/manuscript.md.
+#let si-contents = context {
+  let heads = query(heading.where(level: 1).after(<si-start>))
+    .filter(h => h.numbering != none)
+  let secs = heads
+    .map(h => [#numbering(h.numbering, ..counter(heading).at(h.location())) #h.body])
+    .join(", ")
+  let span(noun, n) = if n == 1 [#noun S1] else [#(noun)s S1–S#n]
+  let floats = (
+    ("Figure", query(figure.where(kind: image).after(<si-start>)).len()),
+    ("Table", query(figure.where(kind: table).after(<si-start>)).len()),
+  ).filter(p => p.at(1) > 0).map(p => span(..p)).join(" and ")
+  let lead = if heads.len() == 1 [Section #secs] else if heads.len() > 1 [Sections #secs]
+  if lead != none and floats != none [#lead. #floats (PDF).] else [#lead#floats (PDF).]
+}
