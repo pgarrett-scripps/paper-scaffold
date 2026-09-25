@@ -262,7 +262,7 @@ class Hardening(unittest.TestCase):
             self.skipTest("analysis contract removed from this manuscript")
         for name in ("analysis/scripts/_stats.py", "analysis/scripts/_provenance.py",
                      "tools/manifest_validation.py", "tools/atomic_io.py",
-                     "tools/hashcache.py", "tools/paths.py"):
+                     "tools/hashcache.py", "tools/paths.py", "tools/evidence.py"):
             self.put(name, (ROOT / name).read_text())
         gen = self.put("analysis/scripts/gen_stats.py", 'from _stats import Stats\ns=Stats()\ns.add("x", 1.0)\ns.write()')
         stats = self.put("stats.json", json.dumps({"values": {
@@ -295,7 +295,8 @@ class Hardening(unittest.TestCase):
     def test_trace_reports_hand_stat_uses_and_guard_failure(self):
         self.put("paper.typ", '#s("x")\n// #s("not-real")')
         doc = {"values": {"x": {"value": 3, "fmt": "", "expect": {"min": 0},
-                               "origin": {"by": "hand", "note": "protocol"}}}}
+                               "origin": {"by": "hand", "note": "protocol",
+                                          "source": "doi:10.1234/protocol"}}}}
         self.put("stats.json", json.dumps(doc))
         result = trace.inspect("x", self.root)
         self.assertEqual(result["status"], "ok")

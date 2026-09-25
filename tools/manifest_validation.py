@@ -73,14 +73,27 @@ def validate(doc, kind: str) -> dict:
         if not isinstance(inputs, dict) or any(not isinstance(h, str)
                                               for h in inputs.values()):
             raise ManifestError(f"sources.{owner} must map paths to hash strings")
+    pending = doc.get("pending")
+    if pending is not None and (not isinstance(pending, dict) or any(
+            not isinstance(k, str) or not isinstance(v, str) for k, v in pending.items())):
+        raise ManifestError('pending must map an id or "prefix*" to a reason string')
+    for owner, sets in (doc.get("evidence") or {}).items():
+        if not _evidence_map(sets):
+            raise ManifestError(f"evidence.{owner} must map set names to {{tool: version}}")
     for id, rec in doc["values"].items():
         if not isinstance(rec, dict):
             raise ManifestError(f"{id}: entry must be an object")
+        if "evidence" in rec and not _evidence_map(rec["evidence"]):
+            raise ManifestError(f"{id}: evidence must map set names to {{tool: version}}")
+        checked = rec.get("checked_against")
+        if checked is not None and (not isinstance(checked, dict) or any(
+                h is not None and not isinstance(h, str) for h in checked.values())):
+            raise ManifestError(f"{id}: checked_against must map paths to a hash or null")
         origin = rec.get("origin")
         if origin is not None:
             if not isinstance(origin, dict):
                 raise ManifestError(f"{id}: origin must be an object")
-            for field in ("by", "note", "at"):
+            for field in ("by", "note", "at", "source"):
                 if field in origin and not isinstance(origin[field], str):
                     raise ManifestError(f"{id}: origin.{field} must be a string")
         if kind == "stats":
@@ -98,6 +111,24 @@ def validate(doc, kind: str) -> dict:
                                                   for h in inputs.values()):
                 raise ManifestError(f"{id}: inputs must map paths to hash strings")
     return doc
+
+
+def _evidence_map(sets) -> bool:
+    return isinstance(sets, dict) and all(
+        isinstance(sw, dict) and all(isinstance(v, str) for v in sw.values())
+        for sw in sets.values())
+
+
+def pending_match(pending: dict, id: str) -> str | None:
+    """The reason an id is declared pending, or None.
+
+    A key is an exact id or a prefix ending in `*`, the one pattern syntax
+    stats.typ and assets.typ can match too.
+    """
+    for key, reason in (pending or {}).items():
+        if (key.endswith("*") and id.startswith(key[:-1])) or key == id:
+            return reason
+    return None
 
 
 def load(path: Path, kind: str) -> dict:

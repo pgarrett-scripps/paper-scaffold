@@ -231,7 +231,8 @@ def check_stats_cases() -> bool:
     def entry(**kw):
         e = {"value": 1.0, "fmt": ".2f", "unit": "",
              "desc": "d", "expect": {}, "source": "",
-             "origin": {"by": "hand", "note": "protocol"}}
+             "origin": {"by": "hand", "note": "protocol",
+                        "source": "https://example.org/protocol"}}
         e.update(kw)
         return e
 
@@ -240,6 +241,11 @@ def check_stats_cases() -> bool:
         ("valid hand entry",        {}, 0),
         ("hand entry with no note", {"origin": {"by": "hand"}}, 1),
         ("hand entry, blank note",  {"origin": {"by": "hand", "note": "  "}}, 1),
+        ("hand entry, no source",   {"origin": {"by": "hand", "note": "protocol"}}, 1),
+        ("hand entry, host source",
+         {"origin": {"by": "hand", "note": "p", "source": "/home/me/p.pdf"}}, 1),
+        ("hand entry, DOI source",
+         {"origin": {"by": "hand", "note": "p", "source": "doi:10.1234/x"}}, 0),
         ("no origin at all",        {"origin": None}, 1),
         ("origin with no by",       {"origin": {"note": "x"}}, 1),
         ("generator that is gone",

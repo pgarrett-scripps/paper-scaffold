@@ -130,11 +130,49 @@ def adopt(root: Path, note: str) -> tuple[list[str], int]:
     return (lines, 0)
 
 
+def checked(root: Path, id: str) -> tuple[list[str], int]:
+    """Record the hashes of the files a hand table was checked against.
+
+    Run after re-reading the table against them: `checked_against` in the
+    entry names the files (a lock file, a commands script), and this is the
+    deliberate "still true" that clears check-assets' warning, like `just pin`.
+    """
+    path = root / "assets.json"
+    try:
+        doc = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        return ([f"cannot read assets.json: {e}"], 1)
+    rec = (doc.get("values") or {}).get(id)
+    if not isinstance(rec, dict):
+        return ([f"{id}: not declared in assets.json"], 1)
+    against = rec.get("checked_against")
+    if not isinstance(against, dict) or not against:
+        return ([f'{id}: add "checked_against": {{"path/to/file": null}} to its '
+                 f"assets.json entry first, naming what the table describes"], 1)
+    lines = []
+    for src in sorted(against):
+        f = root / src
+        if not f.is_file():
+            return ([f"{id}: checked-against file {src} does not exist"], 1)
+        digest = hashcache.sha(f)
+        if against[src] != digest:
+            lines.append(f"  recorded  {src}")
+        against[src] = digest
+    path.write_text(json.dumps(doc, indent=2) + "\n")
+    lines.append(f"  {id}: checked against {len(against)} file(s)")
+    return (lines, 0)
+
+
 def main() -> int:
     note = ""
     for a in sys.argv[1:]:
         if a.startswith("--note="):
             note = a[len("--note="):]
+        if a.startswith("--checked="):
+            lines, rc = checked(ROOT, a[len("--checked="):])
+            for line in lines:
+                print(line)
+            return rc
     lines, rc = adopt(ROOT, note)
     for line in lines:
         print(line)

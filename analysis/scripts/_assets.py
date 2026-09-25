@@ -68,7 +68,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from _provenance import PAPER, caller_script, code_inputs, declared_inputs, sha
+from _provenance import (PAPER, caller_script, code_inputs, declared_inputs, sha,
+                         evidence, evidence_of, note_run)  # noqa: F401 (evidence: re-exported)
 
 from atomic_io import write_text
 from manifest_validation import validate, ManifestError
@@ -141,7 +142,8 @@ def _print_geometry(target: Path, fig, min_pt) -> dict:
 
 
 def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
-           desc: str = "", fig=None, min_pt: float | None = None) -> None:
+           desc: str = "", fig=None, min_pt: float | None = None,
+           evidence: str | list[str] = ()) -> None:
     """Declare one generated figure or table.
 
     `path`   relative to the manuscript root, e.g. "figures/cohort.png"
@@ -152,6 +154,9 @@ def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
              it lets the smallest type size be measured rather than guessed.
     `min_pt` the smallest type size on a figure no matplotlib Figure drew,
              stated by the generator. Ignored when `fig` is given.
+    `evidence` evidence.toml set name(s) this was built from, beyond the sets
+             that already name the id or hold one of its inputs. The sets'
+             software versions are recorded in the entry (docs/evidence.md).
     """
     if kind not in KINDS:
         raise AssetError(f"{id!r}: kind must be one of {KINDS}, got {kind!r}")
@@ -169,6 +174,11 @@ def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
     except RuntimeError as e:
         raise AssetError(f"{id!r}: {e}") from None
 
+    try:
+        sets = evidence_of(id, "assets", declared, evidence)
+    except ValueError as e:
+        raise AssetError(str(e)) from None
+
     # A generator that declared no data at all is the blind spot this contract
     # has: its output can go stale against data nothing here knows about, and no
     # check will say so. Reported at the point the omission is made rather than
@@ -185,6 +195,8 @@ def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
         "origin": {"by": caller_script()},
         "inputs": dict(sorted({**code_inputs(), **declared}.items())),
     }
+    if sets:
+        entry["evidence"] = sets
     if kind == "figure":
         geometry = _print_geometry(target, fig, min_pt)
         if geometry:
@@ -194,6 +206,7 @@ def record(id: str, path: str, *, kind: str, inputs: list[str] = (),
     # generators run in parallel cannot drop each other's entries.
     with _exclusive():
         _merge(id, entry)
+    note_run(entry["origin"]["by"])
 
 
 def _merge(id: str, entry: dict) -> None:
@@ -232,8 +245,10 @@ def _merge(id: str, entry: dict) -> None:
         entry["origin"]["at"] = datetime.now(timezone.utc).strftime(
             "%Y-%m-%dT%H:%M:%SZ")
 
-    doc["_about"] = ABOUT
     doc["values"][id] = entry
+    # Top-level blocks other than values (`pending`) are the author's and
+    # pass through untouched, as in stats.json.
+    extra = {k: v for k, v in doc.items() if k not in ("_about", "values")}
     write_text(OUT, json.dumps(
-        {"_about": ABOUT, "values": dict(sorted(doc["values"].items()))},
+        {"_about": ABOUT, **extra, "values": dict(sorted(doc["values"].items()))},
         indent=2) + "\n")

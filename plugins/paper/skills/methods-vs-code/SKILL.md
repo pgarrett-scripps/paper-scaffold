@@ -53,7 +53,9 @@ question is then whether the code performs that step at all.
 
 Read every script under `analysis/scripts/` that `assets.json` or
 `stats.json` names in an `origin.by`, plus the modules they import, plus
-`analysis/pyproject.toml` and `analysis/uv.lock` for versions. Record the
+`analysis/pyproject.toml` and `analysis/uv.lock` for versions, and
+`evidence.toml` (when present) for the software versions and configs behind
+each result set; `just impact TOOL` lists the ids a version touches. Record the
 actual value or behavior for each row: the literal in the code, the default
 of the library call when the code passes nothing, and the order of
 operations. Note a parameter the code sets that the prose never mentions.

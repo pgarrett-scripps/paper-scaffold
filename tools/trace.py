@@ -13,6 +13,8 @@ import sys
 
 import check_assets
 import check_stats
+import check_evidence
+import evidence as evidence_manifest
 from manifest_validation import load
 from manuscript_sources import usages
 from typst_prose import display_of
@@ -67,12 +69,14 @@ def inspect(id: str, root: Path = ROOT, kind: str | None = None) -> dict:
     finally:
         check_stats.ROOT, check_assets.ROOT = old_stats, old_assets
 
+    evidence = _evidence(root, id, kind, declaration, inputs, documents, add)
+
     uses = [u for u in usages(root) if u["id"] == id and u["helper"] in helpers]
     status = ("failed" if any(c["status"] == "failed" for c in checks) else
               "incomplete" if any(c["status"] == "incomplete" for c in checks) else "ok")
     commands = list(dict.fromkeys(c["command"] for c in checks if c["command"]))
     result = {"schema_version": 1, "id": id, "kind": kind, "status": status,
-              "declaration": declaration, "inputs": inputs, "uses": uses,
+              "declaration": declaration, "inputs": inputs, "evidence": evidence, "uses": uses,
               "findings": checks, "suggested_commands": commands,
               "scope": {"rederived": False, "inputs": "declared inputs only",
                         "uses": "literal calls in entrypoints and slide decks, and literal Typst includes/imports",
@@ -83,6 +87,45 @@ def inspect(id: str, root: Path = ROOT, kind: str | None = None) -> dict:
         except (TypeError, ValueError):
             result["display"] = None
     return result
+
+
+def _evidence(root, id, kind, declaration, inputs, documents, add) -> dict:
+    """The evidence sets behind one entry: the versions it was built from,
+    what evidence.toml declares now, and the check-evidence findings for it."""
+    try:
+        manifest = evidence_manifest.load(root)
+    except evidence_manifest.EvidenceError as exc:
+        add("evidence.manifest", [check_evidence.Finding("error", id, str(exc))],
+            None)
+        return {}
+    recorded = declaration.get("evidence") or {}
+    names = set(recorded)
+    if manifest is not None:
+        names.update(manifest.covering(id, kind))
+        for rel in inputs:
+            names.update(manifest.containing(root, rel))
+    out = {}
+    for name in sorted(names):
+        s = manifest.sets.get(name) if manifest else None
+        out[name] = {"recorded": recorded.get(name),
+                     "declared": s.produced_by() if s else None,
+                     "paths": list(s.paths) if s else [],
+                     "status": s.status if s else None,
+                     "verify": s.verify if s else None}
+    pending = {}
+    for doc in documents.values():
+        pending.update(doc.get("pending") or {})
+    if manifest is not None:
+        docs = {"stats": {"values": {}}, "assets": {"values": {}}}
+        docs[kind] = {"values": {id: declaration}}
+        found = [f for f in check_evidence._entries(manifest, docs) if f.id == id]
+        add("evidence.versions", found, "just assets")
+    from manifest_validation import pending_match
+    reason = pending_match(pending, id)
+    if reason:
+        add("evidence.pending", [check_evidence.Finding(
+            "error", id, f"declared pending: {reason}")], None)
+    return out
 
 
 def main() -> int:

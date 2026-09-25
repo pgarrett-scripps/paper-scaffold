@@ -78,7 +78,8 @@ Details: [docs/numbers.md](docs/numbers.md), [docs/assets.md](docs/assets.md).
   `checksum` and `origin`; `fmt`, `unit`, `desc` and `expect` are yours and
   survive `just assets` (`gen_stats.py` arguments only seed a NEW entry). To
   change a number, change the analysis; never edit a generated `value`. A
-  hand entry has `origin.by = "hand"`, an `origin.note` naming the source, a
+  hand entry has `origin.by = "hand"`, an `origin.note`, an `origin.source`
+  a reader can re-open (repo path, URL, DOI, commit or `evidence:SET`), a
   `value` and a `fmt`. Files no generator declares can be watched under a
   top-level `"pinned"` block, recorded with `just pin`.
 - **Never edit or commit `stats-rendered.json`** (a build artifact).
@@ -93,7 +94,9 @@ Details: [docs/numbers.md](docs/numbers.md), [docs/assets.md](docs/assets.md).
   `#figure(tbl("tbl.x"), caption: [...]) <tbl:x>` in `si-body.typ`. A figure
   sets `metadata={"Software": None}` and seeds any RNG. End the generator
   with `record(id, path, kind=..., inputs=[data it read], desc=...)`, paths
-  relative to the manuscript root. Then
+  relative to the manuscript root. Data named in `evidence.toml` is opened
+  as `evidence("set")`, never a typed path ([docs/evidence.md](docs/evidence.md)).
+  A result still running is a `pending` block, never a stale value. Then
   `just assets && git add figures si assets.json stats.json`.
   `/paper:new-figure` does every step.
 

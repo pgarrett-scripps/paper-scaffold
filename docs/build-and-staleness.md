@@ -108,7 +108,19 @@ always present and almost never acted on.
   NOT in `verify`. Run it before submitting.
 - **`just check-assets`** -- per generated file: does it still hash to
   what was recorded, does its generator still exist, have its declared inputs
-  changed, and does anything reference it.
+  changed, and does anything reference it. It also warns when a file a hand or
+  adopted table was `checked_against` has changed, and when a recorded
+  generator did not run in the last `just assets` (the run log in
+  `.build-state/assets-run.json`; without one, a note for a generator no
+  analysis recipe names).
+- **`just check-evidence`** -- the evidence manifest, `evidence.toml`: each
+  set's paths, verification file and stamped config inputs; the software
+  versions every number and figure was built from against the versions
+  declared now, and any entry mixing two versions of one tool; `pending`
+  declarations (always an error); declared inputs git does not track, and
+  inputs recorded as host paths (warnings); version literals in the prose
+  that disagree with the manifest. `just preflight` runs it `--strict`, which
+  also fails a missing set path. See [evidence.md](evidence.md).
 - **`just check`** -- a `paper.pdf` or `paper.docx` built from sources that have
   since changed, and `figures/` and `si/` older than the `analysis/` code behind
   them. Neither output is tracked in git; `just paper` and `just docx` record what

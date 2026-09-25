@@ -31,11 +31,25 @@
 // the finished paper.
 #let assets-draft-mode = sys.inputs.at("draft", default: "") == "true"
 
+// PENDING (assets.json `pending`, docs/evidence.md): an id, or a "prefix*",
+// whose evidence is not in yet renders as a visible placeholder in every
+// build, file or not; `just verify` and `just preflight` fail until the
+// declaration is removed.
+#let _pending(id) = paper-assets.at("pending", default: (:)).keys().any(key =>
+  key == id or (key.ends-with("*") and id.starts-with(key.slice(0, key.len() - 1))))
+
+#let _pending-block(id) = block(
+  width: 100%, inset: 1.5em, fill: rgb("#fff1c2"), stroke: 0.5pt + rgb("#b36b00"),
+  align(center, text(fill: rgb("#8a4b00"), weight: "bold", "[pending: " + id + "]")),
+)
+
 #let _entry(id) = {
   if type(paper-assets) != dictionary or "values" not in paper-assets {
     panic("assets.json has no `values` table; regenerate it with `just assets`")
   }
-  if id not in paper-assets.values {
+  if _pending(id) {
+    "pending"
+  } else if id not in paper-assets.values {
     if not assets-draft-mode {
       panic("assets.json has no asset '" + id + "'. Declare it with "
         + "record() in the script that writes it, or fix the id. "
@@ -57,7 +71,7 @@
 // usual `width: 70%` still works at the call site where it belongs.
 #let fig(id, ..args) = {
   let e = _entry(id)
-  if e == none { _placeholder(id) } else {
+  if e == "pending" { _pending-block(id) } else if e == none { _placeholder(id) } else {
     if e.kind != "figure" {
       panic("'" + id + "' is declared as a " + e.kind + ", not a figure")
     }
@@ -111,7 +125,10 @@
 #let _dfile(id, word) = {
   let e = _entry(id)
   let n = dfile-number(id)
-  if e == none or n == none { _placeholder(id) } else [#word #n]
+  if e == "pending" {
+    box(fill: rgb("#fff1c2"), inset: (x: 2pt),
+      text(fill: rgb("#8a4b00"), weight: "bold", "[pending: " + id + "]"))
+  } else if e == none or n == none { _placeholder(id) } else [#word #n]
 }
 
 // "Supplementary Data File N": the full phrase, for a first mention.
@@ -127,7 +144,7 @@
 // and no label -- those live at the call site, in si-body.typ.
 #let tbl(id) = {
   let e = _entry(id)
-  if e == none { _placeholder(id) } else {
+  if e == "pending" { _pending-block(id) } else if e == none { _placeholder(id) } else {
     if e.kind != "table" {
       panic("'" + id + "' is declared as a " + e.kind + ", not a table")
     }

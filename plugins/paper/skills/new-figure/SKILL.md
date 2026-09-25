@@ -59,7 +59,9 @@ record("fig.yourname", str(OUT.relative_to(PAPER)), kind="figure",
 
 For a table use a tbl. ID and kind="table". Include every data file read in
 inputs, relative to the manuscript root; the script and its local imports
-are recorded automatically. Follow the project's _assets.py contract.
+are recorded automatically. When the data is a set in evidence.toml, open
+it with `evidence("set")` (importable from _assets) instead of typing its
+path, so the set's software versions are recorded with the figure. Follow the project's _assets.py contract.
 
 ## Connect it to the manuscript
 

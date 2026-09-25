@@ -225,11 +225,16 @@ def resolve_stats(text: str, path: Path | None = None) -> str:
         raise SystemExit(
             f'error: prose uses #s("...") or #n("...") but {p} is missing; '
             f"regenerate it with `just assets`")
-    values = json.loads(p.read_text()).get("values", {})
+    doc = json.loads(p.read_text())
+    values = doc.get("values", {})
+    from manifest_validation import pending_match
 
     def repl(field: str):
         def sub(m: re.Match) -> str:
             id = m.group(1)
+            # Declared pending (docs/evidence.md): the placeholder the PDF shows.
+            if field == "display" and pending_match(doc.get("pending") or {}, id) is not None:
+                return f"[pending: {id}]"
             if id not in values:
                 raise SystemExit(
                     f"error: {p.name} has no value '{id}'; declare it in "
