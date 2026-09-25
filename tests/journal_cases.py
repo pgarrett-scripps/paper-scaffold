@@ -131,6 +131,58 @@ class JournalCases(unittest.TestCase):
                 with self.assertRaisesRegex(journal.JournalError, msg):
                     journal.load_profile(self.root, "bad")
 
+    # --- cover letter --------------------------------------------------------
+
+    def test_shipped_profiles_carry_the_cover_letter_rules_without_a_limit(self):
+        # JPR and JASMS state what the letter must say and no length limit
+        # (guidelines dated 2026-08-27); a limit here would be invented.
+        for name in journal.available(ROOT):
+            with self.subTest(profile=name):
+                letter = journal.load_profile(ROOT, name).letter
+                self.assertIn("journal-fit", letter["required"])
+                self.assertNotIn("max-words", letter)
+                self.assertNotIn("max-pages", letter)
+                self.assertTrue(letter["source"].startswith("https://"))
+        jasms = journal.load_profile(ROOT, "jasms-article").letter
+        self.assertEqual(jasms["reviewers-min"], 4)
+
+    def test_cover_letter_table_is_validated_strictly(self):
+        for tail, msg in (("max-letters = 5\n", "expected only"),
+                          ("max-words = 0\n", "positive integer"),
+                          ("max-pages = 1.5\n", "positive integer"),
+                          ('required = ["significance"]\n', "unknown item"),
+                          ('required = ["title", "title"]\n', "twice"),
+                          ('required = "title"\n', "list of strings"),
+                          ("reviewers-min = 4\n", "suggested-reviewers"),
+                          ('checked = "25 Sep"\n', "YYYY-MM-DD"),
+                          ('source = "acs.org"\n', "must be a URL")):
+            with self.subTest(tail=tail):
+                self.put("journals/bad.toml", PROFILE + "[cover-letter]\n" + tail)
+                with self.assertRaisesRegex(journal.JournalError, msg):
+                    journal.load_profile(self.root, "bad")
+        self.put("journals/ok.toml", PROFILE + '[cover-letter]\nmax-words = 500\n'
+                 'required = ["title", "suggested-reviewers"]\nreviewers-min = 3\n')
+        self.assertEqual(journal.load_profile(self.root, "ok").letter["max-words"], 500)
+
+    def test_cover_letter_limits_are_checked_against_the_built_counts(self):
+        self.put("journals/test-article.toml",
+                 PROFILE + "[cover-letter]\nmax-words = 100\nmax-pages = 1\n")
+        profile = journal.load_profile(self.root, "test-article")
+        self.assertEqual(journal.letter_findings(profile, {"words": 100, "pages": 1}), [])
+        over = journal.letter_findings(profile, {"words": 101, "pages": 2})
+        self.assertEqual([f.level for f in over], ["error", "error"])
+        self.assertIn("101 words", over[0].message)
+        self.assertIn("2 pages", over[1].message)
+        unmeasured = journal.letter_findings(profile, {"words": None, "pages": 1})
+        self.assertIn("not measured", unmeasured[0].message)
+        # No letter built, or no rules: nothing to hold it to.
+        self.assertEqual(journal.letter_findings(profile, None), [])
+        self.assertEqual(journal.letter_findings(
+            journal.load_profile(self.root, "test-article").__class__(
+                **{**profile.__dict__, "letter": {}}), {"words": 10**6}), [])
+        # The verify-side check never looks at the letter.
+        self.assertFalse(any(f.subject == "cover letter" for f in journal.check(self.root)))
+
     # --- journal.toml ------------------------------------------------------
 
     def test_no_profile_holds_the_manuscript_to_nothing(self):

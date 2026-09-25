@@ -49,8 +49,8 @@ and specific rendering defects. Copy-editing records its initial metrics with
 `just verify`. The writing review also checks defined terminology and concrete,
 supported claims using [STYLE.md](../STYLE.md#scientific-terms-and-concrete-claims).
 
-Twelve workflows ship as skills: four that edit (`copy-edit`, `fix-verify`,
-`declare-number`, `new-figure`) and seven read-only reviews (`claim-audit`,
+Thirteen workflows ship as skills: five that edit (`copy-edit`, `fix-verify`,
+`declare-number`, `new-figure`, `cover-letter`) and seven read-only reviews (`claim-audit`,
 `methods-vs-code`, `figure-review`, `prose-review`, `literature-check`,
 `story-review`, `peer-review`) that write findings under `reviews/`, plus
 `review-all`, which runs the fix-list reviews in parallel (the network-bound
@@ -71,11 +71,12 @@ their own passes and cite that document for the reasons.
 | `fix-verify` | Diagnose failed or incomplete checks and repair the cause while preserving author edits |
 | `declare-number` | Connect a number to the right source; check that a literal conversion preserves displayed text |
 | `new-figure` | Add a generated plot/table, declaration, caption, citations, and the required imports and checks |
+| `cover-letter` | Draft or revise `cover-letter.typ`: significance from the manuscript, numbers via `#s()`, each item the journal profile requires, `#todo` for what only the author knows |
 
 For example, use `/copy-edit Shorten the Results section` in Claude Code or
 `$copy-edit Shorten the Results section` in Codex. The workflows can also be
 selected from a matching plain-language request. Start a new agent session
-after installing the shared paths and check that these four skills appear in
+after installing the shared paths and check that these five skills appear in
 its skill list. Discovery locations are documented by
 [Claude Code](https://code.claude.com/docs/en/skills) and
 [Codex](https://learn.chatgpt.com/docs/build-skills).

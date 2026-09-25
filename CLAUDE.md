@@ -158,13 +158,13 @@ just verify     # the gate: formatting, extractors, prose rules, staleness
 
 ## Skills
 
-Twelve workflows ship as the `paper` plugin (from the scaffold's
+Thirteen workflows ship as the `paper` plugin (from the scaffold's
 `plugins/paper/skills/`, enabled by `.claude/settings.json`; Codex reads the
 same files through the `.agents/skills` symlink as `$copy-edit` and so on).
 Prefer a skill over improvising its steps.
 
 - Edit: `/paper:copy-edit`, `/paper:fix-verify`, `/paper:declare-number`,
-  `/paper:new-figure`.
+  `/paper:new-figure`, `/paper:cover-letter`.
 - Review, read-only, findings under `reviews/`: `/paper:claim-audit`,
   `/paper:methods-vs-code`, `/paper:figure-review`, `/paper:prose-review`,
   `/paper:literature-check` (network), `/paper:story-review`,

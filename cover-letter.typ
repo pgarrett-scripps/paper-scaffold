@@ -10,8 +10,15 @@
 // stale number behind in it. The journal and article type come from the
 // profile journal.toml selects, passed in by the build as `--input journal=`
 // and `--input article-type=`; the defaults below apply without one.
+//
+// What the letter says: why the work matters, its broader impact, why this
+// journal's readers, and whether an editor invited it, plus each item the
+// profile's [cover-letter] `required` lists (`just journal` prints them).
+// `/paper:cover-letter` drafts it that way; docs/submission.md has the why.
+// Anything only the author knows (a phone number, suggested reviewers) is a
+// `#todo("...")`, which stops `just cover-letter` until it is filled in.
 #import "config.typ": paper-authors, paper-title
-#import "stats.typ": s
+#import "stats.typ": s, todo
 
 #let journal = sys.inputs.at("journal", default: "the journal")
 #let article-type = sys.inputs.at("article-type", default: "Article")
@@ -36,8 +43,8 @@ Dear Editors,
 Please consider the enclosed manuscript, "#paper-title", for publication in
 #emph(journal) (#article-type).
 
-Replace this paragraph with what the paper shows and why it matters to this
-journal's readers. State results as the manuscript does: across #s(
+Replace this paragraph with what the paper shows, why it matters, and why it
+suits this journal's readers. State results as the manuscript does: across #s(
   "cohort.n_conditions",
 ) conditions, the treated group scored #s("effect.treated_over_control") over
 control.

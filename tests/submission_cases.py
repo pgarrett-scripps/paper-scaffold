@@ -6,7 +6,8 @@ and measures inside the journal's box or fails on the resolution floor; a
 profile names only a format this can write; the submission placement defaults
 to the journal layout; a missing <si-start> probe is a clear error, not a
 wrong page range; an absent cover-letter.typ is tolerated and leaves no stale
-letter behind; a paper with no SI or a separate SI target ships the right
+letter behind; the letter's words and pages are measured, recorded, and
+held to the profile's [cover-letter] limits by check-submission only; a paper with no SI or a separate SI target ships the right
 set; an SI citing the main list gets its own local list and qualified
 main-text references; a recorded output reads stale when its source moves;
 and a captured build's tools import nothing the capture leaves out.
@@ -19,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -300,6 +302,61 @@ parts = ["si"]
         self.assertIn("no cover-letter.typ", note)
         self.assertFalse((self.root / "submission/cover-letter.pdf").exists())
         self.assertEqual(submission.load_records(self.root), {})
+
+    def _letter_profile(self, limits: str) -> None:
+        self.put("journals/test-article.toml", PROFILE + "[cover-letter]\n" + limits)
+        self.put("journal.toml", 'schema_version = 1\nprofile = "test-article"\n'
+                                 '[sections]\nmethods = "main/Methods"\n')
+
+    def _record_letter(self, **counts) -> None:
+        self.put("cover-letter.typ", "Dear Editors,\n")
+        staged = self.put("staged.pdf", "pdf")
+        sources = submission.file_sources(self.root, ["cover-letter.typ"])
+        sources["tools/submission.py"] = submission.tool_digest()
+        submission.publish(self.root, staged, "cover-letter.pdf",
+                           {"kind": "files", "sources": sources, **counts})
+
+    def test_cover_letter_over_the_profiles_limit_fails_check_submission(self):
+        self._letter_profile("max-words = 400\nmax-pages = 1\n")
+        self._record_letter(words=401, pages=2)
+        self.assertEqual(len(submission.letter_limits(self.root)), 2)
+        self.assertEqual(submission.main(["check", "--root", str(self.root)]), 1)
+        # `just check` runs it with --note: reported, never failed.
+        self.assertEqual(submission.main(["check", "--note", "--root", str(self.root)]), 0)
+        manifest = json.loads((self.root / "submission/manifest.json").read_text())
+        self.assertEqual(manifest["files"]["cover-letter.pdf"]["words"], 401)
+        self._record_letter(words=400, pages=1)
+        self.assertEqual(submission.letter_limits(self.root), [])
+        self.assertEqual(submission.main(["check", "--root", str(self.root)]), 0)
+
+    def test_no_letter_and_no_letter_rules_are_both_tolerated(self):
+        # A profile limit with no letter built: nothing to check.
+        self._letter_profile("max-words = 10\n")
+        self.assertEqual(submission.letter_limits(self.root), [])
+        # A letter with no [cover-letter] table: counted, never limited.
+        self.put("journals/test-article.toml", PROFILE)
+        self._record_letter(words=10**5, pages=40)
+        self.assertEqual(submission.letter_limits(self.root), [])
+
+    @unittest.skipUnless(shutil.which("typst"), "typst not installed")
+    def test_cover_letter_build_measures_words_and_pages(self):
+        self._letter_profile("max-words = 5\n")
+        self.put("cover-letter.typ", "#set page(height: 3in)\nDear Editors of "
+                 "#sys.inputs.at(\"journal\"), one two three.\n#pagebreak()\nSincerely,\n")
+        with unittest.mock.patch.object(submission, "tool",
+                                        lambda name: ROOT / "tools" / name):
+            try:
+                message = submission.cover_letter(self.root)
+            except subprocess.CalledProcessError as exc:
+                self.skipTest(f"typst could not compile the letter here: {exc}")
+        record = submission.load_records(self.root)["cover-letter.pdf"]
+        self.assertEqual(record["pages"], 2)
+        if record["words"] is None:
+            self.skipTest("wordometer is not in the Typst package cache")
+        self.assertEqual(record["words"], 10)   # "Journal of Tests" is three
+        self.assertIn("10 words, 2 page(s)", message)
+        self.assertIn("LIMIT:", message)
+        self.assertFalse(list(self.root.glob(".cover-letter-count-*")))
 
     def test_recorded_output_goes_stale_and_replaced(self):
         # The record hashes the running tool (tools/paths.py), wherever it is.

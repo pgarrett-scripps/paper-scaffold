@@ -63,7 +63,7 @@ COUNTABLE = ("abstract", "si", "references")
 
 PROFILE_KEYS = {"schema_version", "label", "journal", "type", "source",
                 "guidelines-dated", "checked", "words", "floats", "figures",
-                "graphical-abstract", "notes"}
+                "graphical-abstract", "cover-letter", "notes"}
 WORD_KEYS = {"main-max", "counts", "excludes", "abstract-max", "keywords-max"}
 FLOAT_KEYS = {"figures-max", "tables-max", "figures-and-tables-max"}
 FIGURE_KEYS = {"min-dpi"}
@@ -73,6 +73,32 @@ GRAPHIC_KEYS = {"required", "width-in", "height-in", "min-dpi", "label",
 # journal's accepted list is longer (ACS also takes EPS); these are the ones
 # a raster can become without inventing vector content.
 GRAPHIC_FORMATS = ("tif", "png", "jpg")
+LETTER_KEYS = {"max-words", "max-pages", "required", "reviewers-min", "source",
+               "guidelines-dated", "checked"}
+# What a journal can ask the cover letter to say, by the key [cover-letter]
+# `required` names. A key is a thing to say, not a heading to find: whether a
+# letter says it is read by /paper:cover-letter, never by the gate, because a
+# keyword match cannot tell "why this journal" from a sentence that mentions
+# the journal. `just journal` prints the list; the gate checks length only.
+LETTER_ITEMS = {
+    "title": "the full manuscript title",
+    "corresponding-author": "the corresponding author's name and complete contact "
+                            "information (mailing address, phone, email)",
+    "other-authors": "the names of the other authors",
+    "journal-fit": "why the paper is appropriate for this journal",
+    "supporting-information": "a description of any Supporting Information, for "
+                              "publication or for review only",
+    "suggested-reviewers": "individuals competent to review the manuscript, with "
+                           "their contact information",
+    "preprint": "if a draft is on a preprint server: its link, and how the "
+                "manuscript changed since deposition",
+    "prior-work": "related or prior work (including prior dissemination) the "
+                  "editor should know about",
+    "length": "any length issues, such as the justification for exceeding a "
+              "word limit",
+    "editor-discussion": "whether the manuscript was discussed with an editor "
+                         "before submission",
+}
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -101,6 +127,7 @@ class Profile:
     floats: dict = field(default_factory=dict)
     figures: dict = field(default_factory=dict)
     graphic: dict = field(default_factory=dict)
+    letter: dict = field(default_factory=dict)
     notes: dict = field(default_factory=dict)
 
 
@@ -198,6 +225,30 @@ def load_profile(root: Path, id: str) -> Profile:
     if "guidelines-dated" in graphic and not DATE.match(str(graphic["guidelines-dated"])):
         raise JournalError(f"{where}: [graphical-abstract].guidelines-dated must be YYYY-MM-DD")
 
+    letter = data.get("cover-letter", {})
+    keys(letter, LETTER_KEYS, f"{where} [cover-letter]")
+    for k in ("max-words", "max-pages", "reviewers-min"):
+        _positive(letter, k, where)
+    required = letter.get("required", [])
+    if not isinstance(required, list) or any(not isinstance(x, str) for x in required):
+        raise JournalError(f"{where}: [cover-letter].required must be a list of strings")
+    bad = [x for x in required if x not in LETTER_ITEMS]
+    if bad:
+        raise JournalError(f"{where}: [cover-letter].required has unknown item(s) "
+                           f"{bad}; expected {', '.join(LETTER_ITEMS)}")
+    if len(set(required)) != len(required):
+        raise JournalError(f"{where}: [cover-letter].required lists an item twice")
+    if "reviewers-min" in letter and "suggested-reviewers" not in required:
+        raise JournalError(f"{where}: [cover-letter].reviewers-min needs "
+                           f"\"suggested-reviewers\" in required")
+    for k in ("guidelines-dated", "checked"):
+        if k in letter and not DATE.match(str(letter[k])):
+            raise JournalError(f"{where}: [cover-letter].{k} must be YYYY-MM-DD")
+    if "source" in letter and not str(letter["source"]).startswith(("http://", "https://")):
+        raise JournalError(f"{where}: [cover-letter].source must be a URL")
+    if letter:
+        letter["required"] = required
+
     notes = data.get("notes", {})
     if not isinstance(notes, dict) or any(not isinstance(v, str) for v in notes.values()):
         raise JournalError(f"{where}: [notes] must map rule names to quoted text")
@@ -206,7 +257,7 @@ def load_profile(root: Path, id: str) -> Profile:
                    type=data["type"], source=data["source"],
                    guidelines_dated=data["guidelines-dated"], checked=data["checked"],
                    words=words, floats=floats, figures=figures, graphic=graphic,
-                   notes=notes)
+                   letter=letter, notes=notes)
 
 
 def load_selection(root: Path = ROOT) -> dict | None:
@@ -547,6 +598,63 @@ def check(root: Path = ROOT) -> list[Finding]:
     return out
 
 
+# ---------------------------------------------------------- cover letter ---
+# The letter is a submission file, built by `just cover-letter` and recorded
+# by tools/submission.py with the words and pages it measured. Its limits are
+# checked there (check-submission, preflight), not in check(): check() runs
+# inside verify, and a letter nobody has rebuilt since the last prose edit is
+# the upload set's staleness, not the manuscript's.
+
+LETTER_SOURCE = "cover-letter.typ"
+LETTER_RECORD = Path(".build-state") / "submission.json"
+
+
+def letter_findings(profile: Profile | None, measured: dict | None) -> list[Finding]:
+    """The profile's cover-letter limits against a built letter's counts."""
+    if profile is None or not profile.letter or measured is None:
+        return []
+    out = []
+    for key, what in (("max-words", "words"), ("max-pages", "pages")):
+        cap = profile.letter.get(key)
+        if cap is None:
+            continue
+        n = measured.get(what)
+        if n is None:
+            out.append(Finding("error", "cover letter",
+                               f"{profile.label} limits the cover letter to {cap} {what}, "
+                               f"and the built letter's {what} were not measured; "
+                               f"rebuild it: just cover-letter"))
+        elif n > cap:
+            out.append(Finding("error", "cover letter",
+                               f"the cover letter has {n} {what}; {profile.label} "
+                               f"allows at most {cap}"))
+    return out
+
+
+def letter_card(root: Path, profile: Profile | None) -> dict:
+    """What `just journal` shows about the cover letter: rules and counts."""
+    # The record tools/submission.py writes, read as data: importing that tool
+    # here would pull it into every captured build's tools (it is not one).
+    # Whether the letter is current is check-submission's question.
+    built = None
+    try:
+        data = json.loads((root / LETTER_RECORD).read_text(encoding="utf-8"))
+        record = data.get("outputs", {}).get("cover-letter.pdf")
+        if isinstance(record, dict):
+            built = {"words": record.get("words"), "pages": record.get("pages")}
+    except (OSError, ValueError, AttributeError):
+        pass
+    rules = profile.letter if profile else {}
+    return {"source": LETTER_SOURCE, "exists": (root / LETTER_SOURCE).is_file(),
+            "built": built, "max_words": rules.get("max-words"),
+            "max_pages": rules.get("max-pages"),
+            "reviewers_min": rules.get("reviewers-min"),
+            "required": [{"item": k, "says": LETTER_ITEMS[k]}
+                         for k in rules.get("required", [])],
+            "rules_source": rules.get("source"), "rules_checked": rules.get("checked"),
+            "has_rules": bool(rules)}
+
+
 # --------------------------------------------------------------- report ---
 
 def report(root: Path = ROOT) -> dict:
@@ -576,7 +684,9 @@ def report(root: Path = ROOT) -> dict:
         "pixels": list(pixel_size(root / toc["path"])) if toc and toc["path"]
         and (root / toc["path"]).is_file() and pixel_size(root / toc["path"]) else None,
         **{k.replace("-", "_"): v for k, v in profile.graphic.items()}}
-    out["findings"] = [f.__dict__ for f in check(root)]
+    out["cover_letter"] = letter_card(root, profile)
+    measured = out["cover_letter"]["built"]
+    out["findings"] = [f.__dict__ for f in check(root) + letter_findings(profile, measured)]
     out["notes"] = profile.notes
     return out
 
@@ -627,6 +737,7 @@ def _print_report(r: dict) -> None:
               f"{pl.get('submission', 'journal')}  ({CONFIG} [placement])")
         if g.get("file_format"):
             print(f"  standalone file: {g['file_format'].upper()} (just toc-graphic)")
+    _print_letter(r.get("cover_letter"))
     print()
     if r["findings"]:
         _print_findings([Finding(**f) for f in r["findings"]])
@@ -637,6 +748,32 @@ def _print_report(r: dict) -> None:
         print("In the journal's words:")
         for key, text in r["notes"].items():
             print(f"  {key}: {text}")
+
+
+def _print_letter(c: dict | None) -> None:
+    if not c:
+        return
+    if not c["exists"] and not c["has_rules"]:
+        return
+    limits = [f"{c['max_words']} words" if c["max_words"] else "",
+              f"{c['max_pages']} page(s)" if c["max_pages"] else ""]
+    limit = ", ".join(x for x in limits if x) or "none stated in the guidelines"
+    if not c["exists"]:
+        state = f"no {c['source']}"
+    elif c["built"] is None:
+        state = "not built yet (just cover-letter)"
+    else:
+        b = c["built"]
+        words = b["words"] if b["words"] is not None else "?"
+        pages = b["pages"] if b["pages"] is not None else "?"
+        state = f"{words} words, {pages} page(s) as last built"
+    print(f"Cover letter: {state}; limit: {limit}  (checked by just check-submission)")
+    if c["required"]:
+        print("  the journal asks it to give (/paper:cover-letter checks these):")
+        for row in c["required"]:
+            extra = (f" -- at least {c['reviewers_min']}"
+                     if row["item"] == "suggested-reviewers" and c["reviewers_min"] else "")
+            print(f"    - {row['item']}: {row['says']}{extra}")
 
 
 def wordcount_print(rows: list[dict]) -> None:

@@ -28,6 +28,8 @@ This is the one upstream version, and it adds no second source of truth:
   cover-letter.pdf
       cover-letter.typ, compiled with the profile's journal and article type
       as inputs. Optional: without the file, no letter, and no stale one left.
+      Its words and pages are measured and recorded, and `check` holds them
+      to the profile's [cover-letter] max-words and max-pages (docs/submission.md).
 
 WITHOUT AN APPENDIX SI. The cut above assumes paper.typ includes si-body.typ.
 When it does not, the main files are the whole capture, and the SI is either
@@ -223,7 +225,8 @@ def write_manifest(root: Path) -> None:
         files[name] = {"role": role, "bytes": path.stat().st_size,
                        "sha256": digest(path), "status": status(root, name, record),
                        **{k: record[k] for k in ("manuscript_id", "pages", "placement",
-                                                 "format", "dpi", "pixels", "si")
+                                                 "format", "dpi", "pixels", "si",
+                                                 "words", "pages")
                           if k in record}}
     write_text(out / "manifest.json", json.dumps({
         "schema_version": 1,
@@ -613,12 +616,47 @@ def toc_graphic(root: Path) -> str:
 
 # ------------------------------------------------------------ cover letter ---
 
+def letter_counts(root: Path, source: Path, args: list[str], tmp: Path) -> dict:
+    """{"words": n, "pages": n} for the letter as compiled with `args`.
+
+    Words are what wordometer counts in the letter's content, the same
+    counter the manuscript's word count uses: everything the letter prints,
+    the address block and signature included, with #s() numbers resolved.
+    Pages are the pages Typst lays out. Either is None when it cannot be
+    measured, which the limit check reports rather than passes.
+    """
+    out: dict = {"words": None, "pages": None}
+    fd, name = tempfile.mkstemp(dir=root, prefix=".cover-letter-count-", suffix=".typ")
+    os.close(fd)
+    wrapper = Path(name)
+    rel = source.resolve().relative_to(root.resolve()).as_posix()
+    try:
+        write_text(wrapper, '#import "@preview/wordometer:0.1.4": word-count-of\n'
+                            f'#metadata(word-count-of(include "/{rel}").words) '
+                            '<cover-letter-words>\n')
+        proc = subprocess.run(["typst", "query", "--root", str(root), *args, str(wrapper),
+                               "<cover-letter-words>", "--field", "value", "--one"],
+                              cwd=root, capture_output=True, text=True)
+        if proc.returncode == 0:
+            out["words"] = int(json.loads(proc.stdout))
+    finally:
+        wrapper.unlink(missing_ok=True)
+    pages = tmp / "pages"
+    pages.mkdir()
+    proc = subprocess.run(["typst", "compile", "--root", str(root), *args, "--format", "svg",
+                           str(source), str(pages / "p{0p}.svg")],
+                          cwd=root, capture_output=True, text=True)
+    if proc.returncode == 0:
+        out["pages"] = len(list(pages.glob("p*.svg")))
+    return out
+
+
 def cover_letter(root: Path) -> str:
     source = root / LETTER_SOURCE
     if not source.is_file():
         forget(root, "cover-letter.")
         return f"note: no {LETTER_SOURCE}; no cover letter written"
-    from journal import CONFIG, current, load_selection
+    from journal import CONFIG, current, letter_findings, load_selection
     profile, _ = current(root)
     subprocess.run([sys.executable, str(tool("render_stats.py"))], cwd=root,
                    check=True, stdout=subprocess.DEVNULL)
@@ -627,10 +665,12 @@ def cover_letter(root: Path) -> str:
     if profile:
         args += ["--input", f"journal={profile.journal}",
                  "--input", f"article-type={profile.type}"]
+    (root / ".build-state").mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(dir=root / ".build-state") as tmp:
         staged, deps = Path(tmp) / name, Path(tmp) / "deps.json"
         subprocess.run(["typst", "compile", "--root", str(root), "--deps", str(deps),
                         *args, str(source), str(staged)], cwd=root, check=True)
+        counts = letter_counts(root, source, args, Path(tmp))
         inputs = compile_inputs(root, deps)
         sel = load_selection(root)
         inputs.append(CONFIG)
@@ -638,8 +678,24 @@ def cover_letter(root: Path) -> str:
             inputs.append(f"journals/{sel['profile']}.toml")
         sources = file_sources(root, inputs)
         sources["tools/submission.py"] = tool_digest()
-        publish(root, staged, name, {"kind": "files", "sources": sources})
-    return f"wrote {OUT_DIR}/{name}" + (f" (to {profile.journal})" if profile else "")
+        publish(root, staged, name, {"kind": "files", "sources": sources, **counts})
+    words = counts["words"] if counts["words"] is not None else "?"
+    pages = counts["pages"] if counts["pages"] is not None else "?"
+    msg = (f"wrote {OUT_DIR}/{name}" + (f" (to {profile.journal})" if profile else "")
+           + f": {words} words, {pages} page(s)")
+    for f in letter_findings(profile, counts):
+        msg += f"\nLIMIT: {f.message}"
+    return msg
+
+
+def letter_limits(root: Path) -> list[str]:
+    """The profile's cover-letter limits against the recorded letter."""
+    record = load_records(root).get("cover-letter.pdf")
+    if not record:
+        return []
+    from journal import current, letter_findings
+    profile, _ = current(root)
+    return [f.message for f in letter_findings(profile, record)]
 
 
 # ------------------------------------------------------------------ check ---
@@ -668,6 +724,16 @@ def main(argv=None) -> int:
             label = "note" if args.note else "STALE"
             for r in bad:
                 print(f"{label}: {r['output']} is {r['status']} -- rebuild: just submission")
+            try:
+                limits = letter_limits(root)
+            except ValueError as exc:
+                if not args.note:
+                    raise
+                print(f"note: cover-letter limits not checked: {exc}")
+                limits = []
+            for message in limits:
+                print(f"{'note' if args.note else 'LIMIT'}: {message}")
+            bad += limits
             if not rows and not args.note:
                 print("no submission set built yet -- build it: just submission")
                 return 1

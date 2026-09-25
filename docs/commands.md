@@ -17,8 +17,8 @@ Every `just` recipe a manuscript uses, in one table.
 | `just docx` | Export `paper.docx` for journals and co-authors |
 | `just submission` | The journal upload set in `submission/`: main text and SI apart (PDF and Word), graphical abstract, cover letter, `manifest.json` |
 | `just main-pdf` / `si-pdf` / `main-docx` / `si-docx` | One half of the manuscript, cut from the last `just paper` build |
-| `just toc-graphic` / `cover-letter` | The graphical abstract in the profile's format and box; `cover-letter.typ` as a PDF |
-| `just check-submission` | Fail if a file in `submission/` is behind its source. Not in `verify`; in `preflight` |
+| `just toc-graphic` / `cover-letter` | The graphical abstract in the profile's format and box; `cover-letter.typ` as a PDF, with its words and pages held to the profile's `[cover-letter]` limits |
+| `just check-submission` | Fail if a file in `submission/` is behind its source, or the cover letter is over the profile's `[cover-letter]` limit. Not in `verify`; in `preflight` |
 | `just slides [name]` | Build a slide deck from `slides/` -> `slides/<name>.pdf` (all decks with no name) |
 | `just slides-handout [name]` | Build the handout form, with every `#pause` reveal flattened |
 | `just slides-check [name]` | Deck staleness plus the four slide-only prose rules. Not in `verify` |

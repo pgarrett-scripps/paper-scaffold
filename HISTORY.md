@@ -64,6 +64,49 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 4.3.0
+
+The cover letter gets the same treatment as the manuscript: the journal's
+rules in the profile with their source, a measured count, and a skill that
+writes it from the paper.
+
+- **`/paper:cover-letter`** drafts or revises `cover-letter.typ` from the
+  abstract, the key results (as `#s()` ids) and the journal profile. It
+  answers the four questions of Yates's editorial "The Cover Letter"
+  (J. Proteome Res. 2017, doi:10.1021/acs.jproteome.6b01068): why the work is
+  important, its broader impacts, who will be interested, and whether an
+  editor encouraged it. It writes each item the journal requires, leaves a
+  `#todo` for what only the author knows (contact details, reviewers,
+  preprint, conflicts), and does not claim significance the paper does not
+  show. Rationale in `docs/submission.md` "The cover letter".
+- **Journal profiles take a `[cover-letter]` table**: `required` (item keys),
+  optional `max-words`, `max-pages`, `reviewers-min`, and `source`,
+  `guidelines-dated`, `checked`, validated as strictly as the other tables.
+  The four JPR and JASMS profiles now carry it, read from the ACS author
+  guidelines dated 2026-08-27 on 2026-09-25. Neither journal states a
+  length limit for the letter, so none is set. JASMS asks for four or more
+  suggested reviewers and any related or prior work; both ask for contact
+  details, the other authors, the title, why the journal, the SI, any
+  preprint, length issues and editor contact. `[notes]` quotes them.
+- **The letter is counted.** `just cover-letter` measures words (wordometer,
+  as the manuscript) and pages, prints them, and records them in
+  `.build-state/submission.json` and `manifest.json`. `just check-submission`
+  (so `just preflight`) fails on a profile limit exceeded; `just journal`
+  shows the counts and the required items. `just verify` is unchanged: the
+  letter is an upload-set file, and a paper without one checks nothing.
+- `just cover-letter` no longer fails in a checkout with no `.build-state/`.
+- The scaffold's `cover-letter.typ` imports `todo` and says what the letter
+  is for.
+
+Upgrade: `uv add` the v4.3.0 pin, `uv run paper sync`, then `just paper`.
+Nothing in the manuscript changes, and no gate starts failing: the shipped
+profiles set no letter limit. Run `paper-plugin-update` (or
+`/plugin update paper`) for `/paper:cover-letter`. CLAUDE.md and
+`cover-letter.typ` are the paper's own: to use `#todo` in the letter, change
+its import to `#import "stats.typ": s, todo`, and add `/paper:cover-letter`
+to CLAUDE.md's Skills list (thirteen workflows) if you keep one. A paper
+with its own `journals/*.toml` override can add a `[cover-letter]` table.
+
 ## 4.2.0
 
 A round of peer review of a computational methods paper had three reviewers

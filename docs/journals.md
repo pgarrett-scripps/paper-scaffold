@@ -23,7 +23,10 @@ from, the date the journal printed on those guidelines, and the date they were
 read; a profile without all three does not load. When a limit changes, re-read
 the source, change the number, and move `checked`. `[notes]` quotes the
 journal's own sentence beside each rule, so `just journal` can show the rule
-and its wording together.
+and its wording together. A `[cover-letter]` table records what the
+journal asks the cover letter to say and any length limit; the letter is an
+upload-set file, checked by `just check-submission` rather than here (see
+[Submission outputs](submission.md#the-cover-letter)).
 
 Nothing here is a second checker. The profile's word limits join
 `word-limits.toml`'s checks in `just check-words`, so one table answers "am I
