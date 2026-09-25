@@ -19,6 +19,13 @@ Every hook is opt-in: with no `project.toml` and no `project.just`, every
 recipe behaves exactly as it did before hooks existed. `just hooks` lists
 what this paper declares.
 
+Three tables configure checks rather than hook in code, each documented
+where its check is: `[availability]` (the data and code availability check,
+[submission](submission.md#data-and-code-availability)), `[stats]`
+(`si-only` and `evidence-only` globs of ids `check-stats` does not call
+unused, [numbers](numbers.md)) and `[response]` (`file`, the response
+letter's path, [submission](submission.md#a-revision-round)).
+
 `project.toml` is validated strictly. An unknown table or key, a stage with
 no `run`, or a `schema_version` other than 1 is an error. The stage runner
 reports it inside `verify`, so a typo cannot become a stage that never runs.

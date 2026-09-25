@@ -17,7 +17,7 @@ ENTRYPOINTS = ("paper.typ", "config.typ", "si-body.typ")
 # as one. The glob is the manifest on purpose: a list of decks in a config file
 # is a second place to update and therefore a place to drift.
 SLIDES = "slides"
-CALL = re.compile(r'(?<![\w-])#?(s|n|fig|tbl)\(\s*"([^"\n]+)"')
+CALL = re.compile(r'(?<![\w-])#?(s|n|ci|fig|tbl)\(\s*"([^"\n]+)"')
 DEPENDENCY = re.compile(r'#(?:include|import)\s+"([^"\n]+)"')
 
 # The Supporting Information's own reference list. Typst allows exactly one

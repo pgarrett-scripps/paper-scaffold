@@ -99,6 +99,33 @@ That is also why `stats.json` sits at the manuscript root rather than under
 `si/`: a file you are invited to edit is not generated output, and cannot be
 guarded by "did anything change".
 
+### Retiring an id, failing guards, unused ids
+
+- **Retiring.** When `gen_stats.py` stops declaring an id it used to write,
+  `just assets` and `just stats` refuse to write anything and name the ids.
+  A deleted `st.add` line is usually a mistake (a renamed id leaves the
+  prose reading the old one). To retire them deliberately: `just assets
+  --prune` (or `PAPER_STATS_PRUNE=1`).
+- **Guards.** Every failing `expect` of a run is reported together, not just
+  the first, and recorded in `.build-state/stats-guard-failures.json`. `just
+  assets --explain` (or `just explain-guards` afterwards) prints each failing
+  id's value and guard beside every sentence that reads it, which is where
+  the decision is made: reword the sentence and update `expect`, or fix the
+  analysis.
+- **Unused ids.** `check-stats` warns about an id nothing reads. An id cited
+  only in the SI's generated tables, or kept as evidence for a reviewer, is
+  exempt when a glob in `project.toml` names it:
+
+  ```toml
+  [stats]
+  si-only = ["si.*"]
+  evidence-only = ["control.*", "raw_counts"]
+  ```
+
+  A glob that matches no id warns.
+- **Display.** A value with no `fmt` that is a whole number stored as a
+  float (`14.0`) prints `14`.
+
 ## Pinned files: watching what no script reads
 
 Provenance the pipeline records automatically stops at what a generator

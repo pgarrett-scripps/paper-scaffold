@@ -349,7 +349,7 @@ class Hardening(unittest.TestCase):
         self.assertEqual(shared.readlink().as_posix(),
                          os.path.relpath(source / "plugins/paper/skills", destination / ".agents"))
         expected = {"copy-edit", "fix-verify", "declare-number", "new-figure",
-                    "cover-letter",
+                    "cover-letter", "reviewer-response",
                     "claim-audit", "methods-vs-code", "figure-review", "peer-review",
                     "review-all", "prose-review",
                     "literature-check", "story-review"}

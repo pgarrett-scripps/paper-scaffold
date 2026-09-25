@@ -7,6 +7,7 @@ Every `just` recipe a manuscript uses, in one table.
 | Command | Does |
 |---|---|
 | `just verify` | **The gate.** Formatting, extractors, prose rules and staleness, in one pass |
+| `just gate [paper\|all]` | fmt, `just assets` when the declarations are stale, the build, then `verify`; stops at the first failure |
 | `just preflight` | **The submission gate.** Fresh builds and upload set + `verify` + deep stats + DOI audit |
 | `just doctor` | Are the external tools installed and new enough? |
 | `just paper` | Build `paper.pdf`, `paper.docx`, and `paper.review.txt`, with word counts and readability |
@@ -18,7 +19,8 @@ Every `just` recipe a manuscript uses, in one table.
 | `just submission` | The journal upload set in `submission/`: main text and SI apart (PDF and Word), graphical abstract, cover letter, `manifest.json` |
 | `just main-pdf` / `si-pdf` / `main-docx` / `si-docx` | One half of the manuscript, cut from the last `just paper` build |
 | `just toc-graphic` / `cover-letter` | The graphical abstract in the profile's format and box; `cover-letter.typ` as a PDF, with its words and pages held to the profile's `[cover-letter]` limits |
-| `just check-submission` | Fail if a file in `submission/` is behind its source, or the cover letter is over the profile's `[cover-letter]` limit. Not in `verify`; in `preflight` |
+| `just check-submission` | Fail if a file in `submission/` is behind its source (naming the changed files), the cover letter is over the profile's `[cover-letter]` limit, or the availability statement has a gap. Not in `verify`; in `preflight` |
+| `just availability` | The data and code availability check alone ([submission](submission.md#data-and-code-availability)) |
 | `just slides [name]` | Build a slide deck from `slides/` -> `slides/<name>.pdf` (all decks with no name) |
 | `just slides-handout [name]` | Build the handout form, with every `#pause` reveal flattened |
 | `just slides-check [name]` | Deck staleness plus the four slide-only prose rules. Not in `verify` |
@@ -32,15 +34,24 @@ Every `just` recipe a manuscript uses, in one table.
 | `just wordcount --sections` | List exact section paths available for word-count checks |
 | `just check-words` | Enforce configured minimum/maximum word counts; also runs in `verify` |
 | `just readability` | Flesch-Kincaid / reading ease / fog without rebuilding |
-| `just assets` | Regenerate every generated figure, table and prose number (delegates to `analysis/`) |
+| `just assets [--prune] [--explain]` | Regenerate every generated figure, table and prose number (delegates to `analysis/`). Refuses to drop an id `gen_stats.py` no longer declares without `--prune`; `--explain` maps a failing guard to its sentences |
+| `just stats [--prune]` | Re-run `gen_stats.py` alone |
+| `just explain-guards` | The last run's failing `expect` guards beside the sentences that read each id |
 | `just check` | Report every artifact that has fallen behind its source |
 | `just trace <id> --json` | Inspect a statistic or asset, its uses, provenance, and checks as structured data |
 | `just check-actions [--open\|--init]` | Validate `reviews/ACTIONS.md` and count open review actions; `--open` lists them, `--init` creates it. In `verify` |
+| `just actions-add <sev> <source> <summary> <fix>` | Append one ledger row under a lock with the next free id; prints it |
+| `just actions-reserve <n>` | Hand out ids without writing rows |
+| `just close-actions` | Mark rows named by `Closes: A-NNNN` commit trailers done with that commit's hash |
 | `just pin` | Record hashes for the files listed under `pinned` in `stats.json` |
 | `just text-baseline` / `text-diff` | Snapshot the PDF's words; word-level diff after a structural refactor |
 | `just review-baseline <name>` | Save a resolved manuscript version, including its figures and bibliography |
 | `just review <name> [new-name]` | Highlight changes against the current manuscript or another saved version |
-| `just edit-baseline` / `edit-check` | Check that wording edits preserve retained numbers, helper IDs, citations, declarations, and structure |
+| `just edit-baseline` / `edit-check` | Check that wording edits preserve retained numbers, helper IDs, citations, declarations, and structure; `edit-check <tag> --revision` allows new ids and refs |
+| `just response-init` / `response` / `check-response` | The response to reviewers: start it, build it, check its points against the ledger ([submission](submission.md#a-revision-round)) |
+| `just tag-submission <name>` | Tag `submitted/<name>` with the PDF hash and save review version `<name>` |
+| `just diff-pdf <name>` | Text-level diff of the PDF against submission `<name>` -> `.review/diff-<name>.pdf` and `.html` |
+| `just check-verify-stamp` / `install-hooks` | Is the last verify pass current; an optional pre-commit hook that asks it |
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
 | `just prose-check` | Check the prose, plus figure resolution and table shape, against STYLE.md |
 | `just word-audit` | Count flagged words across the manuscript without rebuilding |

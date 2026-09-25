@@ -64,7 +64,9 @@ just paper
 just verify
 ```
 
-Use the same tag for edit-check if the baseline was tagged. On failure,
+Use the same tag for edit-check if the baseline was tagged. In a revision round
+(answering reviewers), `just edit-check <tag> --revision` accepts new `#s()`
+ids, citations, floats and headings but still fails on a typed numeral. On failure,
 inspect the offending changes and correct your edits while preserving user
 work. Never reset whole files or re-baseline just to obtain a pass.
 
@@ -86,9 +88,10 @@ and a representative sentence change. Do not estimate missing baseline metrics.
 For each ledger row this edit actually fixed, and that the checks above
 confirm, edit its row in `reviews/ACTIONS.md`: `status` to `done`, `closed`
 to the short hash of the commit that contains the fix. This skill does not
-commit unless asked, so until then write `uncommitted: <what changed>`; the
-commit that lands it, or the next session, replaces that with the hash. The
-ledger edit rides in the following commit, since a commit cannot name its
-own hash. Leave a row open when the fix is partial, and say which part
+commit unless asked, so until then write `uncommitted: <what changed>`. The
+commit that lands the fix carries a `Closes: A-0012` line (several:
+`Closes: A-0012, A-0013`) in its message; `just close-actions` then writes
+that commit's hash into each named row, and `just check-actions` fails when
+a recorded hash disagrees with the commit that says it closes the row. Leave a row open when the fix is partial, and say which part
 remains in the report. Run `just check-actions` after editing the ledger
 and report the ids closed.

@@ -23,6 +23,9 @@ at the top of the report.
 - **which**: default all five. The user may drop one ("skip figures") or
   name a subset. `/paper:literature-check` is off by default because it needs
   the network and is slow; "with literature" adds it as a sixth agent.
+- **no-ledger**: merge nothing into `reviews/ACTIONS.md`; the Merge section
+  deduplicates across the reviews into the report only, and the report says
+  the ledger was not updated.
 - **model**: passed as the Agent tool's `model` parameter on every launch.
   Default is split by the kind of work: `claim-audit`, `methods-vs-code`,
   `figure-review` and `prose-review` are checklists against a fixed standard
@@ -91,7 +94,9 @@ list of work, and it outlives this run.
    `wontfix` row adds nothing. One that matches a `done` row whose problem is
    back reopens that row in place: `status` to `open`, `closed` to
    `reopened <YYYY-MM-DD>: <what came back>`.
-3. Append the rest, in the next ids, blockers first (a claim the evidence
+3. Append the rest with `just actions-add` (it takes the ledger lock and
+   the next free id; `just actions-reserve N` first when the ids must be
+   known before writing), blockers first (a claim the evidence
    contradicts, methods drift that changes a result, a figure that shows the
    opposite of the text, a failing `just verify`), then majors, then minors.
    Each row keeps the owner its review assigned as `fix` (`/paper:copy-edit`,

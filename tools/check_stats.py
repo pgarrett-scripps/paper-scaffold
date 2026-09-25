@@ -260,8 +260,24 @@ def _unused(values: dict) -> list[Finding]:
     # A slide deck counts as a reader: a number restated in a talk is still in
     # use, and `just slides-check` is what holds the slide to it.
     called = {u["id"] for u in usages(ROOT) if u["helper"] in ("s", "n")}
-    return [Finding("warn", id, "is declared but no .typ file reads it")
-            for id in sorted(set(values) - called)]
+    # project.toml [stats] si-only / evidence-only: id globs declared on
+    # purpose without a sentence (a supplementary data file's numbers, the
+    # evidence behind a claim an audit reads). Not unused; a glob that
+    # matches nothing is the stale declaration instead.
+    from fnmatch import fnmatchcase
+    from project_hooks import load
+    exempt, found = set(), []
+    for scope, globs in load(ROOT).stats_scopes.items():
+        for glob in globs:
+            hit = {id for id in values if fnmatchcase(id, glob)}
+            if not hit:
+                found.append(Finding("warn", glob, f"project.toml [stats] {scope} "
+                                     "matches no declared id"))
+            exempt |= hit
+    return found + [Finding("warn", id, "is declared but no .typ file reads it "
+                            "(mark it in project.toml [stats] si-only or "
+                            "evidence-only if that is deliberate)")
+                    for id in sorted(set(values) - called - exempt)]
 
 
 def _rederive(values: dict) -> tuple[list[Finding], str]:

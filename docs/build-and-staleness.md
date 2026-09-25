@@ -119,7 +119,37 @@ always present and almost never acted on.
   severity and status values, and a `closed` value on every done or wontfix
   row. Prints open counts by severity. Open blockers are a WARNING, not a
   failure; a missing ledger passes silently. See
-  [working-with-ai.md](working-with-ai.md#the-review-action-ledger).
+  [working-with-ai.md](working-with-ai.md#the-review-action-ledger). A
+  done row whose hash disagrees with the commit carrying its `Closes:`
+  trailer fails; a hash that names no commit here warns.
+- **`just check-response`** -- only while `reviewer-response.typ` exists:
+  every `done` point cites ledger rows closed with a commit
+  ([submission](submission.md#a-revision-round)).
+
+A stale output names what changed: `paper.pdf is stale (changed: paper.typ,
+stats.json)`.
+
+## The agent loop: `just gate`, the pass stamp, the build lock
+
+- **`just gate`** runs `just fmt` (when typstyle is installed), `just assets`
+  only when `check-declared` names it, `just paper` (or `just gate all`), and
+  `just verify`, stopping at the first failure with `GATE FAILED at <step>`.
+  The exit status is the verdict.
+- **The pass stamp.** A clean `verify` writes `.build-state/verify-pass.json`
+  with a fingerprint of every non-ignored file in the manuscript directory,
+  taken when verify started; files changing mid-run record no pass. `just
+  check-verify-stamp` compares it with the tree now. `just install-hooks`
+  writes an optional git pre-commit hook that runs it for commits touching
+  the manuscript (it refuses to replace a hook it did not write). Bypass once
+  with `git commit --no-verify`.
+- **The build lock.** `just paper` holds `.build-state/build.lock` for the
+  whole build and waits up to `PAPER_BUILD_WAIT` seconds (default 900) for
+  another session's build, instead of failing halfway;
+  `.build-state/build.lock.owner` names the holder. Other builds that take
+  the lock directly still fail at once unless `PAPER_BUILD_WAIT` is set.
+- **Free space.** A build refuses to start with less than `PAPER_MIN_FREE_MB`
+  (default 500; 0 disables) free on the manuscript's disk, instead of dying
+  mid-write.
 
 `just check` deliberately does not check the audiobooks, and there is no upstream
 figure copy to compare against any more. See HISTORY.md's "Decisions reversed"

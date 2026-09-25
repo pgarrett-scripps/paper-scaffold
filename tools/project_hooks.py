@@ -140,6 +140,10 @@ class Project:
     # [slides] theme: the paper's own deck theme. `paper sync` then never
     # writes slides/theme.typ and lists this file under the lock's overrides.
     slides_theme: str | None = None
+    # [availability], [stats] and [response]: see _gates() below.
+    availability: dict = field(default_factory=dict)
+    stats_scopes: dict = field(default_factory=dict)
+    response: str | None = None
     declared: bool = False
 
 
@@ -183,7 +187,7 @@ def load(root: Path = ROOT) -> Project:
     except tomllib.TOMLDecodeError as exc:
         raise ValueError(f"{FILE}: {exc}") from None
     keys(data, {"schema_version", "stages", "preflight", "sources", "word",
-                "bibliography", "slides"}, FILE)
+                "bibliography", "slides", "availability", "stats", "response"}, FILE)
     if type(data.get("schema_version")) is not int or data["schema_version"] != 1:
         raise ValueError(f"{FILE}: schema_version must be 1")
 
@@ -239,7 +243,51 @@ def load(root: Path = ROOT) -> Project:
 
     return Project(stages=stages, bib_audit_require_complete=complete,
                    typst_sources=typst, word=word, single_bibliography=single,
-                   slides_theme=theme, declared=True)
+                   slides_theme=theme, declared=True, **_gates(data))
+
+
+def _strings(value, where: str, regex: bool = False) -> tuple[str, ...]:
+    if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
+        raise ValueError(f"{where}: expected a list of nonempty strings")
+    if regex:
+        for v in value:
+            try:
+                re.compile(v)
+            except re.error as exc:
+                raise ValueError(f"{where}: {v!r} is not a valid regex ({exc})") from None
+    return tuple(value)
+
+
+def _gates(data: dict) -> dict:
+    """[availability] (tools/availability.py), [stats] (tools/check_stats.py)
+    and [response] (tools/response.py), validated."""
+    table = data.get("availability", {})
+    where = f"{FILE} [availability]"
+    keys(table, {"enabled", "require_code_archive", "patterns", "disable",
+                 "placeholders", "section"}, where)
+    availability = {}
+    for key in ("enabled", "require_code_archive"):
+        if key in table:
+            if not isinstance(table[key], bool):
+                raise ValueError(f"{where}: {key} must be true or false")
+            availability[key] = table[key]
+    for key in ("patterns", "placeholders", "disable"):
+        if key in table:
+            availability[key] = _strings(table[key], f"{where} {key}", key != "disable")
+    if "section" in table:
+        availability["section"] = _strings([table["section"]], f"{where} section", True)[0]
+
+    table = data.get("stats", {})
+    where = f"{FILE} [stats]"
+    keys(table, {"si-only", "evidence-only"}, where)
+    scopes = {k: _strings(v, f"{where} {k}") for k, v in table.items()}
+
+    table = data.get("response", {})
+    keys(table, {"file"}, f"{FILE} [response]")
+    response = None
+    if "file" in table:
+        response = _paths([table["file"]], f"{FILE} response.file", (".typ",))[0]
+    return {"availability": availability, "stats_scopes": scopes, "response": response}
 
 
 def _paths(value, where: str, suffixes: tuple[str, ...] | None) -> tuple[str, ...]:
@@ -367,6 +415,12 @@ def describe(project: Project) -> list[str]:
                      "(the paper's own; paper sync writes no slides/theme.typ)")
     if not project.bib_audit_require_complete:
         lines.append("preflight  bib-audit runs without --require-complete")
+    for key, value in project.availability.items():
+        lines.append(f"availability {key} = {value!r}")
+    for key, value in project.stats_scopes.items():
+        lines.append(f"stats      {key:<13} {', '.join(value)}")
+    if project.response:
+        lines.append(f"response   file              {project.response}")
     return lines or [f"{FILE} declares no hooks"]
 
 

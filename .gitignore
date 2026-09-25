@@ -80,3 +80,6 @@ slides/*.pdfpc
 # The toolchain docs, mirrored by `paper sync` for reading in a paper
 # (docs/package.md). The lock beside it, .paper/scaffold.lock.json, is tracked.
 .paper/docs/
+
+# The response letter PDF (just response): rebuilt from reviewer-response.typ.
+reviewer-response.pdf

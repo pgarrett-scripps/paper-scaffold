@@ -143,13 +143,16 @@ After writing the findings file, and before the final print:
 2. Skip a finding that matches an `open` or `wontfix` row. Reopen a matching
    `done` row whose problem is back: `status` to `open`, `closed` to
    `reopened <YYYY-MM-DD>: <what came back>`.
-3. Append each remaining finding as a row: the next id (`just check-actions`
-   prints it), its severity, `open`, source
-   `<YYYY-MM-DD>-literature-check.md#<ref>` naming the finding, a one-line summary,
-   the routed fix as `fix`, and an empty `closed`.
+3. Append each remaining finding with
+   `just actions-add <severity> "<source>" "<summary>" "<fix>"`: source
+   `<YYYY-MM-DD>-literature-check.md#<ref>` naming the finding, a one-line summary, the
+   routed fix. It takes the ledger lock and the next free id and prints the
+   id, so two sessions never write the same one; do not type new rows.
 4. Run `just check-actions` and repair any format error in the rows you
-   wrote. Print the ids you added or reopened with the verdict.
+   reopened. Print the ids you added or reopened with the verdict.
 
 When `/paper:review-all` launched this review (its prompt says so), skip
 this section: review-all merges every review into the ledger once, after all
 of them finish, so parallel reviews never write the file at the same time.
+When the user passes `no-ledger`, skip this section too: the findings file
+is the whole output, and the final print says the ledger was not updated.
