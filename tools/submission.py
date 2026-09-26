@@ -78,6 +78,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from atomic_io import write_text
 from build_state import build_lock, changed_note, digest, snapshot, stats_digest
+from pdf_outline import open_with_outline
 
 OUT_DIR = "submission"
 RECORD = Path(".build-state") / "submission.json"
@@ -355,6 +356,7 @@ def split_pdf(root: Path, kind: str) -> str:
                 subprocess.run(["typst", "compile", "--root", str(folder), "--no-pdf-tags",
                                 "--input", f"toc={placement}", "--pages", pages,
                                 str(folder / "paper.typ"), str(staged)], check=True)
+                open_with_outline(staged)
                 if snapshot(root, manifest["dependencies"]) != manifest["sources"]:
                     raise SubmissionError("the source changed during the export; rerun it")
                 publish(root, staged, name, manuscript_record(
@@ -376,6 +378,7 @@ def separate_si_pdf(root: Path, entry: str) -> str:
         staged, deps = Path(tmp) / name, Path(tmp) / "deps.json"
         subprocess.run(["typst", "compile", "--root", str(root), "--deps", str(deps),
                         entry, str(staged)], cwd=root, check=True)
+        open_with_outline(staged)
         sources = file_sources(root, ["manuscript.toml", *compile_inputs(root, deps)])
         sources["tools/submission.py"] = tool_digest()
         publish(root, staged, name, {"kind": "files", "sources": sources, "si": "separate"})
@@ -472,6 +475,7 @@ def compile_standalone_si(root: Path, folder: Path, manifest: dict, si: Standalo
             staged = Path(tmp) / name
             subprocess.run(["typst", "compile", "--root", str(folder),
                             str(source), str(staged)], check=True)
+            open_with_outline(staged)
             if snapshot(root, manifest["dependencies"]) != manifest["sources"]:
                 raise SubmissionError("the source changed during the export; rerun it")
             publish(root, staged, name, manuscript_record(

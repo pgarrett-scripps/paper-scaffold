@@ -22,6 +22,56 @@
 #let inclusion-confirmed = [All co-authors agreed that this work may be
   included in this dissertation.]
 
+// Short entries for the Lists of Figures and Tables: the caption's bold title
+// when it opens with one, otherwise its first sentence. A word ending in a
+// period ends the sentence unless it is a listed abbreviation or a single
+// initial (E. coli), or the next word starts in lower case. Falls back to the
+// whole caption. The Word export (tools/document_docx.py, caption_entry)
+// applies the same rule, so the PDF and Word lists agree.
+#let caption-not-sentence-end = ("e.g.", "i.e.", "vs.", "al.", "approx.", "Fig.",
+  "Figs.", "Eq.", "cf.", "ca.", "no.", "No.")
+#let caption-sentence-end(word, next) = (
+  word.ends-with(".") and word not in caption-not-sentence-end
+    and word.match(regex("^\\(?[A-Z]\\.$")) == none
+    and (next == none or next.match(regex("^[a-z]")) == none)
+)
+#let caption-title(body) = {
+  let children = if body.func() == [].func() { body.children } else { (body,) }
+  let ignorable = ([ ].func(), parbreak, linebreak)
+  let content-children = children.filter(c => c.func() not in ignorable)
+  if content-children.len() > 0 and content-children.first().func() == strong {
+    return content-children.first().body
+  }
+  let out = ()
+  for (i, child) in children.enumerate() {
+    if child.func() == text {
+      let words = child.text.split(" ")
+      for (j, word) in words.enumerate() {
+        let last = j + 1 == words.len()
+        // A sentence ends only where a space (or the caption end) follows.
+        let followed = not last or i + 1 == children.len() or children.at(i + 1).func() in ignorable
+        let next = if not last { words.at(j + 1) } else if i + 2 < children.len() and children.at(i + 2).func() == text {
+          children.at(i + 2).text
+        } else { none }
+        if followed and caption-sentence-end(word, next) {
+          out.push(text(words.slice(0, j + 1).join(" ")))
+          return out.join()
+        }
+      }
+    }
+    out.push(child)
+  }
+  body
+}
+
+#let float-outline-entry(it) = {
+  if it.element.func() != figure { return it }
+  link(it.element.location(), it.indented(it.prefix(), [
+    #caption-title(it.element.caption.body)
+    #box(width: 1fr, it.fill) #it.page()
+  ]))
+}
+
 // ---------------------------------------------------------------------------
 // Main document wrapper. Renders the title page, copyright page, and abstract,
 // then the chapter `body`.
@@ -61,6 +111,7 @@
   show figure.caption: set text(size: 9pt)
   show figure.caption: set par(leading: 0.65em, spacing: 0.65em)
   show figure.where(kind: table): set figure.caption(position: top)
+  show outline.entry: float-outline-entry
 
   // ----- Title page (page i) -----
   set align(center)

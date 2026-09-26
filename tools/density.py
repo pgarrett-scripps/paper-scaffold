@@ -39,9 +39,28 @@ PASSIVE = re.compile(
 HEDGE = re.compile(
     r"\b(?:may|might|could|would|appears?|seems?|suggests?|likely|possibly|"
     r"potentially|presumably|apparently|relatively|somewhat)\b", re.I)
+# Concessions and contrasts. Not a fault one at a time; a paragraph where
+# every claim carries a "however" or an "although" is hard to follow, and
+# this is how a section of them shows up.
+CONCESSIVE = re.compile(
+    r"\b(?:however|although|though|whereas|despite|nevertheless|nonetheless|"
+    r"albeit|but|while)\b", re.I)
 ACRONYM = re.compile(r"\b[A-Z]{2,}[0-9]*\b")
 NUMERAL = re.compile(r"\b\d[\d.,/-]*\b")
 SYMBOL = re.compile(r"[%±×÷≤≥<>=~µ°]")
+# A sentence carrying this many numerals is counted as number-heavy. A
+# prompt to reread, not a limit: a sentence comparing two conditions on two
+# metrics legitimately carries four.
+HEAVY_NUMERALS = 4
+# How many of the most number-dense sentences to print.
+TOP_SENTENCES = 8
+
+
+def sentences(text: str) -> list[str]:
+    """Split cleaned prose at sentence ends, keeping decimals and "e.g." whole."""
+    masked = readability.protect_periods(text)
+    parts = re.split(r"(?<=[.!?])\s+", masked)
+    return [p.replace("\x00", ".") for p in parts if len(p.split()) >= 2]
 
 
 def sections(body: str) -> list[tuple[str, str]]:
@@ -62,7 +81,8 @@ def metrics(text: str) -> dict[str, float]:
     n = len(words)
     if n == 0:
         return {}
-    sents = [s for s in re.split(r"(?<=[.!?])\s+", text) if len(s.split()) >= 2]
+    sents = sentences(text)
+    heavy = sum(1 for s in sents if len(NUMERAL.findall(s)) >= HEAVY_NUMERALS)
     per_k = lambda c: 1000.0 * c / n  # noqa: E731
 
     # Parentheses: count pairs, and how much text sits inside them. A long
@@ -80,11 +100,13 @@ def metrics(text: str) -> dict[str, float]:
         "nominal.": per_k(len(NOMINAL.findall(text))),
         "passive": per_k(len(PASSIVE.findall(text))),
         "hedges": per_k(len(HEDGE.findall(text))),
+        "concess.": per_k(len(CONCESSIVE.findall(text))),
+        f"{HEAVY_NUMERALS}+num%": 100.0 * heavy / max(1, len(sents)),
     }
 
 
-COLS = ["w/sent", "numerals", "parens", "in-paren%", "acronyms",
-        "nominal.", "passive", "hedges"]
+COLS = ["w/sent", "numerals", f"{HEAVY_NUMERALS}+num%", "parens", "in-paren%",
+        "acronyms", "nominal.", "passive", "hedges", "concess."]
 
 
 def median(xs: list[float]) -> float:
@@ -159,6 +181,29 @@ def main() -> int:
         t.add_row("[dim]none[/]",
                   "[dim]every section sits close to the manuscript's norms[/]")
     console.print(t)
+
+    # --- the sentences carrying the most numbers, where a rewrite starts ---
+    ranked = []
+    for scope, src in (("", paper), ("SI ", si)):
+        for name, text in sections(src):
+            for sent in sentences(readability.clean(text)):
+                k = len(NUMERAL.findall(sent))
+                if k >= HEAVY_NUMERALS:
+                    ranked.append((k, scope + name, sent))
+    ranked.sort(key=lambda r: -r[0])
+    if ranked:
+        console.print()
+        t = table(f"Most number-dense sentences ({len(ranked)} carry "
+                  f"{HEAVY_NUMERALS} or more numerals)",
+                  caption="some need every number; ask which ones the "
+                          "sentence's point rests on")
+        t.add_column("n", justify="right")
+        t.add_column("section")
+        t.add_column("sentence")
+        for k, name, sent in ranked[:TOP_SENTENCES]:
+            short = sent if len(sent) <= 160 else sent[:157] + "..."
+            t.add_row(str(k), name, short)
+        console.print(t)
     return 0
 
 

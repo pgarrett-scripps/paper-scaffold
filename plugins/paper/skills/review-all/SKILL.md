@@ -1,6 +1,6 @@
 ---
 name: review-all
-description: Run every review skill (claim-audit, methods-vs-code, figure-review, prose-review, intro-review, peer-review) in parallel as a final sanity check, merge their new findings into the action ledger reviews/ACTIONS.md, and give a ship verdict. Use before submission or before handing a draft to a coauthor. Read-only.
+description: Run every review skill (claim-audit, methods-vs-code, figure-review, prose-review, readability-review, intro-review, peer-review) in parallel as a final sanity check, merge their new findings into the action ledger reviews/ACTIONS.md, and give a ship verdict. Use before submission or before handing a draft to a coauthor. Read-only.
 context: fork
 agent: general-purpose
 model: opus
@@ -9,7 +9,7 @@ model: opus
 # Run every review at once
 
 Work from the manuscript root and follow AGENTS.md/CLAUDE.md. This skill is
-read-only for the manuscript. It launches the six review skills as
+read-only for the manuscript. It launches the seven review skills as
 independent agents, waits for all of them, merges their findings into the
 action ledger `reviews/ACTIONS.md`, and writes one short report with the ship
 verdict. It does not re-do any review itself and does not edit the
@@ -20,9 +20,9 @@ manuscript.
 All optional, in plain words after the skill name. State the interpretation
 at the top of the report.
 
-- **which**: default all six. The user may drop one ("skip figures") or
+- **which**: default all seven. The user may drop one ("skip figures") or
   name a subset. `/paper:literature-check` is off by default because it needs
-  the network and is slow; "with literature" adds it as a seventh agent.
+  the network and is slow; "with literature" adds it as an eighth agent.
 - **no-ledger**: merge nothing into `reviews/ACTIONS.md`; the Merge section
   deduplicates across the reviews into the report only, and the report says
   the ledger was not updated.
@@ -30,7 +30,7 @@ at the top of the report.
   Default is split by the kind of work: `claim-audit`, `methods-vs-code`,
   `figure-review` and `prose-review` are checklists against a fixed standard
   (the sources, the code, `assets.json`, STYLE.md) and run on `sonnet`;
-  `peer-review`, `intro-review` and `literature-check` are judgment calls and run on `opus`.
+  `peer-review`, `readability-review`, `intro-review` and `literature-check` are judgment calls and run on `opus`.
   The split exists because Opus draws down the plan's rate-limit window several
   times faster than Sonnet, and the checklists lose nothing on Sonnet. The
   user may name another model for all reviews ("all on opus") or per review
@@ -73,7 +73,7 @@ si-body.typ or the PDF unless your skill's job is to check the source.
 You were launched by /paper:review-all: read reviews/ACTIONS.md to skip
 findings it already holds, but do not write it; review-all merges."
 That last clause applies to `claim-audit` and `methods-vs-code`, whose
-findings are about source and code; `peer-review`, `prose-review`, `intro-review` and the
+findings are about source and code; `peer-review`, `prose-review`, `readability-review`, `intro-review` and the
 caption half of `figure-review` work from the copy alone. The agents share
 nothing with each other beyond that file. Do not start any of them sequentially and do not run one
 inline to save time. Wait for every agent to finish before writing the
@@ -91,7 +91,11 @@ list of work, and it outlives this run.
    finding on a sentence `claim-audit` calls overstated is one action owned
    by `claim-audit`. A `peer-review` complaint about the Introduction and an
    `intro-review` finding on the same paragraph are one action owned by
-   `intro-review`, whose fix is the more specific one. More generally, when
+   `intro-review`, whose fix is the more specific one. A `prose-review`
+   and a `readability-review` finding on the same paragraph are one action
+   owned by `readability-review`, whose rewrite covers the paragraph; where
+   prose-review asks for a number and readability-review asks for fewer,
+   the readability rewrite stands and the row says so. More generally, when
    several reviews raise the same problem on the same passage (a paragraph,
    a figure, a table), even in different words, merge them into one action:
    the owner is the review whose fix is most specific, and `source` cites
@@ -109,7 +113,10 @@ list of work, and it outlives this run.
    `/paper:declare-number`, `/paper:fix-verify`, `/paper:new-figure`,
    "analysis change", "author decision"), `status` `open`, and an empty
    `closed`. A failing `just verify` is one blocker routed to
-   `/paper:fix-verify`, sourced to this run's report.
+   `/paper:fix-verify`, sourced to this run's report. A
+   `readability-review` finding is never a blocker: it is a suggestion the
+   author may decline (`wontfix`), and it never makes the verdict "not
+   ready" on its own.
 4. Run `just check-actions` and repair any format error in the rows you
    wrote.
 5. Verdict: one of "ready", "ready after the listed minors", or "not ready",

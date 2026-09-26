@@ -8,7 +8,7 @@ This chapter cites its own reference @second-shared.
 The example retains native mathematics such as $x^2 / n$ in Word.
 #figure(table(columns: (1fr, 3fr), table.header([Quantity], [Description]),
   [Signal], [A wider explanation column demonstrates preserved proportions.]),
-  caption: [Measurement summary. The complete caption appears in the opening table list.]) <tbl-second>
+  caption: [Measurement summary. The opening table list shows only the first sentence.]) <tbl-second>
 #figure(image("diagram.svg", width: 80%),
   caption: [Workflow illustration. The blue input connects to the green output.
     This explanation is retained in the opening figure list.]) <fig-second>

@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from document_docx import (pandoc, namespace_ids, walk, check, word_state,
     sources_fingerprint, format_docx, NS, node, styled, paragraph, heading,
-    pagebreak, index_blocks, caption_title)
+    pagebreak, index_blocks, caption_entry)
 from word_pagination import destinations, cache_pages
 from document_project import Project, Part, Document
 from build_state import digest
@@ -175,10 +175,10 @@ class WordExportTests(unittest.TestCase):
                           or f.get('{'+NS['w']+'}tooltip') == 'Dissertation page number']
                 self.assertEqual(values, ['iii','1','3','4'])
 
-    def test_caption_lists_preserve_full_legends_and_formatting(self):
+    def test_caption_lists_hold_the_short_title_with_its_formatting(self):
         import pypandoc
-        inlines = [node('Str', 'Figure 1:'), node('Space', []),
-                   node('Strong', [node('Emph', [node('Str', 'Measured')])]), node('Space', []),
+        inlines = [node('Str', 'Figure'), node('Space', []), node('Str', '1:'), node('Space', []),
+                   node('Emph', [node('Str', 'Measured')]), node('Space', []),
                    node('Str', '0.05'), node('Space', []), node('Str', 'error.'),
                    node('Space', []), node('Str', 'Detailed legend follows.')]
         with tempfile.TemporaryDirectory() as folder:
@@ -190,32 +190,42 @@ class WordExportTests(unittest.TestCase):
                 doc = ET.fromstring(archive.read('word/document.xml'))
                 entry = doc.find('.//w:hyperlink', NS)
                 self.assertEqual(''.join(t.text or '' for t in entry.findall('.//w:t', NS)),
-                                 'Figure 1: Measured 0.05 error. Detailed legend follows.')
+                                 'Figure 1: Measured 0.05 error.')
                 self.assertIsNotNone(entry.find('.//w:i', NS))
-                bold = ''.join(''.join(t.text or '' for t in r.findall('w:t', NS))
-                    for r in entry.findall('.//w:r', NS) if r.find('w:rPr/w:b', NS) is not None)
-                self.assertEqual(bold, 'Figure 1: Measured 0.05 error.')
-                self.assertEqual(inlines[2]['t'], 'Strong')  # source/body caption unchanged
+                self.assertIsNone(entry.find('.//w:b', NS))
+                self.assertEqual(len(inlines), 11)  # source/body caption unchanged
                 self.assertIn('figure-one', doc.find('.//w:fldSimple', NS).get('{'+NS['w']+'}instr'))
 
-    def test_titles_are_bold_without_relying_on_source_emphasis(self):
-        for text, expected in [
+    def test_list_entry_is_the_title_or_first_sentence(self):
+        def text(items):
+            return ''.join(n['c'] if n['t'] == 'Str' else ' ' if n['t'] == 'Space'
+                           else text(n['c']) for n in items)
+        for caption, expected in [
             ('Table 1: Version 4.0.0 supports 0.05 error. Further details.',
              'Table 1: Version 4.0.0 supports 0.05 error.'),
             ('Figure 2: A single sentence.', 'Figure 2: A single sentence.'),
+            ('Figure 3: No final period', 'Figure 3: No final period'),
+            ('Figure 4: Growth of E. coli vs. time, e.g. in LB. Detail.',
+             'Figure 4: Growth of E. coli vs. time, e.g. in LB.'),
+            ('Figure 5: Tolerance of 5 p.p.m. was used here. Detail.',
+             'Figure 5: Tolerance of 5 p.p.m. was used here.'),
         ]:
-            result = caption_title([node('Str', text)])
-            self.assertEqual(result[0], node('Strong', [node('Str', expected)]))
-            self.assertEqual(''.join(n['c'] for n in result[0]['c']) +
-                             ''.join(n['c'] for n in result[1:]), text)
+            words = caption.split(' ')
+            inlines = [n for i, w in enumerate(words)
+                       for n in ([node('Space', [])] if i else []) + [node('Str', w)]]
+            self.assertEqual(text(caption_entry(inlines)), expected)
+        bold = [node('Str', 'Figure'), node('Space', []), node('Str', '6:'), node('Space', []),
+                node('Strong', [node('Str', 'Bold'), node('Space', []), node('Str', 'title')]),
+                node('Space', []), node('Str', 'then legend.')]
+        self.assertEqual(text(caption_entry(bold)), 'Figure 6: Bold title')
+        self.assertFalse(any(n.get('t') == 'Strong' for n in walk(caption_entry(bold))))
         equation = node('Math', [node('InlineMath', []), 'x^2'])
-        value = [node('Str', 'Figure 3: '), equation,
-                 node('Emph', [node('Str', ' accuracy. Explanation '),
-                               node('Strong', [node('Str', 'with emphasis.')])])]
-        result = caption_title(value)
-        self.assertIn(equation, result[0]['c'])
-        self.assertEqual(result[0]['c'][-1], node('Emph', [node('Str', ' accuracy.')]))
-        self.assertFalse(any(n.get('t') == 'Strong' for n in walk(result[1:])))
+        value = [node('Str', 'Figure'), node('Space', []), node('Str', '7:'), node('Space', []),
+                 equation, node('Emph', [node('Str', ' accuracy. Explanation '),
+                                         node('Strong', [node('Str', 'with emphasis.')])])]
+        result = caption_entry(value)
+        self.assertIn(equation, result)
+        self.assertEqual(result[-1], node('Emph', [node('Str', ' accuracy.')]))
         self.assertEqual(value[-1]['c'][-1]['t'], 'Strong')
 
     def test_pdf_bookmark_destinations(self):

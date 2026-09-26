@@ -424,10 +424,32 @@ def house_style_cases() -> bool:
                 ok = False
     return ok
 
+def density_cases() -> bool:
+    """Sentence splitting keeps decimals whole, so a numeral count per
+    sentence is right, and concessions and number-heavy sentences are counted."""
+    import density
+    ok = True
+    text = ("CV was 0.287 before and 0.289 after at 5 and 15 minutes. "
+            "However, counts were unchanged. Runtime fell, although memory rose.")
+    sents = density.sentences(text)
+    if len(sents) != 3 or "0.287" not in sents[0]:
+        print(f"  density: expected 3 sentences with decimals whole, got {sents!r}")
+        ok = False
+    m = density.metrics(text)
+    heavy = m[f"{density.HEAVY_NUMERALS}+num%"]
+    if abs(heavy - 100.0 / 3) > 0.1:
+        print(f"  density: expected one number-heavy sentence in three, got {heavy:.1f}%")
+        ok = False
+    want = 1000.0 * 2 / m["words"]
+    if abs(m["concess."] - want) > 0.1:
+        print(f"  density: expected 2 concessions, got rate {m['concess.']:.1f}")
+        ok = False
+    return ok
+
 def run_cases() -> bool:
     ok = True
     for case in (structural_cases, boundary_cases, suppression_cases,
-                 si_reach_cases, house_style_cases,):
+                 si_reach_cases, house_style_cases, density_cases,):
         ok &= case()
     return ok
 

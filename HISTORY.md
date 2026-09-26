@@ -64,6 +64,58 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 5.3.0
+
+Results sections had become hard to follow: d_noise's run at 105 to 121
+numerals per 1,000 words against a paper median of 51, and koth's UPS2
+section at 153 against 33, with a concession or limitation beside most
+claims. Part of the cause was our own rule to replace every adjective with
+a number. This release adds a reader's view, as defaults with exceptions,
+never as gates.
+
+- `/paper:readability-review` (read-only, in `review-all`): is each Results
+  paragraph's point stated in words before its numbers, does each number
+  carry the point and get interpreted against a yardstick, are caveats
+  gathered rather than attached to every claim. It rewrites the worst
+  paragraphs (at most eight), keeping `#s()` ids so `/paper:copy-edit` and
+  `just edit-check` can apply them, aiming at one or two numbers per
+  sentence and reporting numerals per sentence before and after. A habit
+  that recurs across sections becomes a proposed house rule (at most five)
+  the author can adopt into STYLE.md, instead of one row per instance.
+  Its findings are suggestions: never
+  blockers, major only when a paragraph's point cannot be found, and fixed
+  by cutting, moving or rewording, never by new tables or SI.
+- `just density` adds a concessions rate, the share of sentences with four or
+  more numerals, and a table of the most number-dense sentences. Still a
+  report, not a gate.
+- STYLE.md gains "Results paragraphs" (point first, one or two numbers per
+  sentence, interpret what you keep, gather caveats), stated as defaults.
+  "Words", `/paper:prose-review` and reviewer-lessons principle 10 now ask
+  for the number a claim rests on, not every number, so the two reviews no
+  longer pull against each other; in `review-all` the readability rewrite
+  owns a paragraph both flag.
+- Every PDF the toolchain compiles (paper, `manuscript.toml` documents and
+  chapters, slides, submission parts) opens with the bookmarks panel
+  showing. Typst writes the outline but never sets `/PageMode`;
+  `tools/pdf_outline.py` appends `/PageMode /UseOutlines` to the catalog as
+  an incremental update, keeping every original byte, before the output
+  hash is recorded, so freshness checks are unaffected. A PDF with no
+  headings is left as it is.
+- The Word export's Lists of Figures and Tables hold each caption's short
+  title, as the PDF lists do, instead of the full legend: its bold title
+  when it opens with one, otherwise its first sentence ("e.g.", "vs." and
+  initials such as "E. coli" do not end it), otherwise the whole caption.
+  The example dissertation template lists the same short entries through
+  `caption-title` and `float-outline-entry`; body captions are unchanged.
+
+Upgrade: `paper-plugin-update`, then `uv add` the v5.3.0 pin
+and `uv run paper sync` for the `just density` columns. STYLE.md is the
+paper's own: copy the "Results paragraphs" section from the scaffold's
+STYLE.md if you want it; the skill works without it. A `manuscript.toml`
+project whose own template lists full captions in the PDF can copy
+`caption-title` and `float-outline-entry` from
+`examples/dissertation/lib/template.typ` so its PDF and Word lists agree.
+
 ## 5.2.1
 
 The 5.2.0 review rules asked for too much. A second blind replay on d_noise

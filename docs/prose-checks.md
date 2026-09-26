@@ -61,11 +61,15 @@ length and sentence length.
 
 `just density` counts what FK is blind to and what actually makes a Results
 section unreadable: numerals, parentheticals (and what fraction of the words sit
-inside them), acronyms, nominalizations, passives, and hedges, all per 1,000
-words. **Read it relatively, not absolutely.** There is no published limit for any
+inside them), acronyms, nominalizations, passives, hedges and concessions
+("however", "although", "but"), all per 1,000 words, plus the share of
+sentences carrying four or more numerals. **Read it relatively, not absolutely.** There is no published limit for any
 of these and anyone quoting one is guessing, so the second table flags sections
 that depart from *this paper's own median* by 1.6x. A Methods section running at
-three times your own parenthetical rate is a real signal you can act on.
+three times your own parenthetical rate is a real signal you can act on. A
+third table lists the most number-dense sentences, which is where a rewrite
+of a Results section starts; `/paper:readability-review` reads those
+paragraphs and proposes rewrites.
 
 `just prose-check` enforces the mechanical rules in STYLE.md and adds two
 structural checks. Anything this project has earned an exception to goes in

@@ -36,7 +36,7 @@ BUILD_TOOLS = ("render_stats.py", "typst_prose.py", "journal.py",
                "atomic_io.py", "build_state.py", "bibliography.py",
                "manuscript_snapshot.py", "review.py", "paper_report.py",
                "wordcount.sh", "wordcount.py", "report.py", "project_hooks.py",
-               "paths.py", "document_project.py", "word_tables.py")
+               "paths.py", "document_project.py", "word_tables.py", "pdf_outline.py")
 INTERMEDIATES = {"stats-rendered.json", "paper.resolved.typ"}
 
 
@@ -247,6 +247,9 @@ def prepare_snapshot(root: Path, folder: Path, sources: dict, dependencies: list
         project_word(folder, numbers, front_matter=front_matter, toc=toc_word)
         write_text(folder / "document.json", json.dumps(make_document(folder), ensure_ascii=False))
         pdf.result()
+    # Open with the bookmarks panel; stamped before seal() hashes the PDF.
+    from pdf_outline import open_with_outline
+    open_with_outline(folder / "paper.pdf")
     return seal(folder, sources, dependencies)
 
 

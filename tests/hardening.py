@@ -21,6 +21,7 @@ import check_stats
 import export_docx
 import manifest_validation
 import manuscript_sources
+import pdf_outline
 import prose_edit_guard
 import resolve_typst
 import trace
@@ -59,6 +60,27 @@ class Hardening(unittest.TestCase):
                               capture_output=True, text=True, check=True)
         self.assertEqual(json.loads(proc.stdout), [[1]])
         self.assertIn("See Figure 1.", resolve_typst.resolve_crossrefs("", body))
+
+    @unittest.skipUnless(shutil.which("typst"), "typst not installed")
+    def test_pdf_opens_with_outline_by_incremental_update(self):
+        for body, want in (("= One\nText.\n= Two\nMore.", True), ("No headings.", False)):
+            with self.subTest(outline=want):
+                src = self.put("doc.typ", body)
+                pdf = self.root / "doc.pdf"
+                subprocess.run(["typst", "compile", str(src), str(pdf)], check=True)
+                before = pdf.read_bytes()
+                self.assertEqual(pdf_outline.open_with_outline(pdf), want)
+                after = pdf.read_bytes()
+                # The original bytes survive untouched; only an update is appended.
+                self.assertTrue(after.startswith(before))
+                self.assertEqual(b"/PageMode /UseOutlines" in after, want)
+                self.assertFalse(pdf_outline.open_with_outline(pdf))  # idempotent
+                if want:
+                    xref = int(after.rsplit(b"startxref", 1)[1].split()[0])
+                    self.assertTrue(after[xref:].startswith(b"xref"))
+                    entry = after[xref:].split(b"\n")[2]
+                    obj = int(entry.split()[0])
+                    self.assertRegex(after[obj:obj + 20], rb"^\d+ 0 obj")
 
     def test_guard_types_are_not_silently_ignored(self):
         for value, guard in (("oops", {"min": 0}), (True, {"sign": "+"}),
@@ -352,7 +374,7 @@ class Hardening(unittest.TestCase):
         expected = {"copy-edit", "fix-verify", "declare-number", "new-figure",
                     "cover-letter", "reviewer-response",
                     "claim-audit", "methods-vs-code", "figure-review", "peer-review",
-                    "review-all", "prose-review", "intro-review",
+                    "review-all", "prose-review", "readability-review", "intro-review",
                     "literature-check", "story-review", "slide-review"}
         self.assertEqual({p.name for p in shared.iterdir()}, expected)
         for name in expected:

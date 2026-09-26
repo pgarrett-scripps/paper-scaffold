@@ -177,6 +177,8 @@ def _compile(root: Path, name: str, target: Path, deps: Path, *,
         args += ["--input", "draft=true"]
     args += [str(root / SLIDES / f"{name}.typ"), str(target)]
     subprocess.run(args, cwd=root, check=True)
+    from pdf_outline import open_with_outline
+    open_with_outline(target)
 
 
 def build(name: str, *, handout: bool = False, draft: bool = False,

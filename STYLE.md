@@ -80,6 +80,9 @@ concept.
 
 Say what a number is before you say what it means. "MS1 peaks fell by 84.9%,
 shrinking the frame binary by 56.4%" beats "a substantial reduction was observed".
+Give the number the claim rests on, not every number that exists: "a
+substantial reduction (Table 2)" is fine when the table carries the values and
+the sentence's point is elsewhere. See "Results paragraphs" below.
 
 Prefer the concrete term over the umbrella one. If the mechanism is a filter, call
 it a filter, not an approach.
@@ -201,6 +204,31 @@ prior".
 Figure and table captions should stand alone. A reader who jumps to the figure
 should learn what it shows and what to conclude without hunting for the paragraph
 that cites it.
+
+## Results paragraphs
+
+Defaults, not rules: a paragraph that reports a parameter set or summarises a
+benchmark table may need more numbers, and a caveat that reverses a claim
+belongs next to it. Break a default when the reader is better served.
+
+- **Point first, in words.** Open with what the paragraph showed ("MS1
+  denoising left diaPASEF identifications unchanged"), then the evidence.
+  The first sentences of a section, read in order, should tell its story.
+- **One or two numbers per sentence.** Keep the ones the claim rests on and
+  leave the rest in the table or figure the sentence cites. One summary
+  ("below 0.5% in every condition") beats a list of conditions, and "no
+  change" beats a before-and-after pair that is identical.
+- **Interpret every number you keep.** Say whether it is large or small
+  against the tolerance, baseline or replicate spread. Define a tolerance
+  once in the Methods and then refer to it.
+- **Gather the caveats.** A "however" after every claim leaves the reader
+  unsure which way the result came out. Collect limitations in one sentence
+  at the end of the paragraph or in the Limitations, and put mechanism asides
+  in the Discussion.
+
+`just density` shows which sections run far above the paper's own median for
+numerals, number-heavy sentences and concessions, and lists the most
+number-dense sentences. `/paper:readability-review` reads the paragraphs.
 
 ## Citations
 

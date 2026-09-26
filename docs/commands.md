@@ -65,7 +65,7 @@ Every `just` recipe a manuscript uses, in one table.
 | `just prose-check --list-rules` | Every rule, its severity, and how to configure it |
 | `just bib-audit` | Check DOI metadata, retractions and dead links against Crossref/DataCite, and resolve DOI-less URLs (network) |
 | `just viz` | Diagnostics about the draft -> `viz/`: nine plots plus `report.json` for tools |
-| `just density` | Numerals, parentheticals, acronyms, passives per 1,000 words, and section outliers |
+| `just density` | Numerals, number-heavy sentences, parentheticals, acronyms, passives, concessions per 1,000 words, section outliers, and the most number-dense sentences |
 | `just setup` | Build the Python environment (uv, locked) |
 | `just version` | Which scaffold version this manuscript is built on |
 | `just upgrade-notes` | HISTORY Upgrade: lines between the lock's release and the installed package (alias `upgrade-plan`) |

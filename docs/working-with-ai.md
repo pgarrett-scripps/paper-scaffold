@@ -49,9 +49,9 @@ and specific rendering defects. Copy-editing records its initial metrics with
 `just verify`. The writing review also checks defined terminology and concrete,
 supported claims using [STYLE.md](../STYLE.md#scientific-terms-and-concrete-claims).
 
-Sixteen workflows ship as skills: six that edit (`copy-edit`, `fix-verify`,
-`declare-number`, `new-figure`, `cover-letter`, `reviewer-response`) and nine read-only reviews (`claim-audit`,
-`methods-vs-code`, `figure-review`, `prose-review`, `intro-review`, `literature-check`,
+Seventeen workflows ship as skills: six that edit (`copy-edit`, `fix-verify`,
+`declare-number`, `new-figure`, `cover-letter`, `reviewer-response`) and ten read-only reviews (`claim-audit`,
+`methods-vs-code`, `figure-review`, `prose-review`, `readability-review`, `intro-review`, `literature-check`,
 `story-review`, `peer-review`, `slide-review`) that write findings under `reviews/`, plus
 `review-all`, which runs the fix-list reviews in parallel (the network-bound
 literature check only on request; the story review is a plan to discuss and

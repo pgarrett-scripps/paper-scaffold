@@ -56,10 +56,14 @@ supplemental sections, and reference lists start on new pages. The first section
 after each chapter abstract also starts on a new page; ordinary sections flow
 continuously, with headings kept with their following content. These boundaries
 and recalculated page numbers are automatic on every build.
-The contents has linked page numbers, and the figure/table lists
-retain complete captions with each opening sentence (the title) bold and the
-remaining explanation in regular weight, preserving italics and equations;
-bold emphasis stays in the body captions. Explicit table proportions, native equations, chapter
+The contents has linked page numbers, and each figure/table list entry
+is the caption's short title, as in the PDF lists: its bold title when it
+opens with one, otherwise its first sentence (abbreviations such as "e.g."
+and "vs." and initials such as "E. coli" do not end it), otherwise the whole
+caption, preserving italics and equations. The body captions keep their full
+text and emphasis. The example template's `caption-title` and the Word
+export's `caption_entry` apply the same rule; a project template that lists
+full captions in its PDF should copy `float-outline-entry` from the example. Explicit table proportions, native equations, chapter
 references and verbatim code remain editable.
 
 Full front-matter pagination requires LibreOffice (`soffice`) and Poppler

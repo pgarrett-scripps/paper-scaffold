@@ -54,7 +54,8 @@ cite, not a list they run.
 | `/paper:claim-audit` | "Preserved", "negligible", "comparable" with no tolerance and no number (principle 2) |
 | `/paper:figure-review`, `/paper:new-figure` | The figure checklist below; figure-review also asks whether one figure shows how the method works (principle 3) |
 | `/paper:methods-vs-code` | Parameters a reader could not use without guessing; non-default search settings with no reason; config keys that exist in the pinned version (principle 6) |
-| `/paper:prose-review` | Promotional headings, informal verbs, adjectives where a number exists (principle 10) |
+| `/paper:prose-review` | Promotional headings, informal verbs, a vague adjective in place of the number a claim rests on (principle 10) |
+| `/paper:readability-review` | Results a reader can follow: the point in words first, the numbers it rests on interpreted, the rest left to the table, caveats gathered (principles 2 and 10, as defaults with exceptions) |
 | `/paper:intro-review` | The Introduction on its own: problem sized from the literature, each existing approach with its gap, terms and formats defined, aim, scope and design with reasons, no results before the Results (principles 1 and 7) |
 | `/paper:literature-check` | The Introduction surveys existing approaches before it states the gap (principle 7) |
 
@@ -280,7 +281,10 @@ score from every reviewer who noticed them.
   not a result ("Nothing is lost").
 - Do not describe results with informal verbs or metaphors ("gave up", "a
   small trim").
-- Replace an adjective with a number wherever a number exists.
+- Replace a vague adjective with the number the claim rests on. Give one or
+  two numbers and point to the table for the rest: a paragraph that restates
+  every value is as hard to judge as one with none (see STYLE.md "Results
+  paragraphs").
 - State the licence, code version, DOI and data accessions. Put the licence
   in the abstract if the journal allows it.
 

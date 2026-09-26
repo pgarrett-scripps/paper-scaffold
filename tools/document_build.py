@@ -196,6 +196,8 @@ def build(project: Project, document: Document) -> dict:
             fresh = load_project(root)
             if fingerprint(fresh, fresh.documents[document.id], dependencies) != before:
                 raise ValueError("sources changed during build; last good output preserved")
+            from pdf_outline import open_with_outline
+            open_with_outline(staged)  # before output_hash, so freshness sees it
             output = root / document.output
             output.parent.mkdir(parents=True, exist_ok=True)
             os.replace(staged, output)

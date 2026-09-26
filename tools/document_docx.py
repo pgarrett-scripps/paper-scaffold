@@ -142,61 +142,94 @@ def regular_weight(value):
     return value
 
 
-def caption_title(inlines):
-    """Bold the opening sentence consistently, keeping the entire caption.
+_WRAPPERS = {'Emph', 'Underline', 'Strikeout', 'Superscript', 'Subscript', 'SmallCaps'}
+_ATTRIBUTED = {'Span', 'Cite', 'Link', 'Quoted'}
+# Words ending in a period that do not end a caption sentence. The example
+# dissertation template's `caption-not-sentence-end` lists the same words, so
+# the PDF and Word lists of figures and tables agree.
+CAPTION_NOT_SENTENCE_END = {'e.g.', 'i.e.', 'vs.', 'al.', 'approx.', 'Fig.',
+                            'Figs.', 'Eq.', 'cf.', 'ca.', 'no.', 'No.'}
 
-    Work on the inline tree so italics, citations, code and native math survive.
-    Decimal/version dots are not sentence boundaries. A one-sentence caption
-    is entirely a title; existing emphasis in the explanation is normalized.
-    """
-    wrappers = {'Emph', 'Underline', 'Strikeout', 'Superscript', 'Subscript', 'SmallCaps'}
-    attributed = {'Span', 'Cite', 'Link', 'Quoted'}
 
-    def children(item):
-        if item['t'] in wrappers:
-            return item['c']
-        if item['t'] in attributed:
-            return item['c'][1]
-        return None
+def _children(item):
+    if item['t'] in _WRAPPERS:
+        return item['c']
+    if item['t'] in _ATTRIBUTED:
+        return item['c'][1]
+    return None
 
-    def visible(item):
-        if item['t'] == 'Str':
-            return item['c']
-        if item['t'] in ('Space', 'SoftBreak', 'LineBreak'):
-            return ' '
-        nested = children(item)
-        # Atomic math/code content cannot introduce a prose sentence boundary.
-        return ''.join(visible(c) for c in nested) if nested is not None else '\ufffc'
 
-    def split(items, remaining):
-        before, after = [], []
-        for item in items:
-            length = len(visible(item))
-            if remaining >= length:
-                before.append(item)
-            elif remaining <= 0:
-                after.append(item)
-            elif item['t'] == 'Str':
-                before.append(node('Str', item['c'][:remaining]))
-                after.append(node('Str', item['c'][remaining:]))
-            else:
-                left, right = split(children(item), remaining)
-                for target, content in ((before, left), (after, right)):
-                    if content:
-                        clone = copy.deepcopy(item)
-                        if item['t'] in wrappers:
-                            clone['c'] = content
-                        else:
-                            clone['c'][1] = content
-                        target.append(clone)
-            remaining -= length
-        return before, after
+def _visible(item):
+    if item['t'] == 'Str':
+        return item['c']
+    if item['t'] in ('Space', 'SoftBreak', 'LineBreak'):
+        return ' '
+    nested = _children(item)
+    # Atomic math/code content cannot introduce a prose sentence boundary.
+    return ''.join(_visible(c) for c in nested) if nested is not None else '\ufffc'
 
-    normalized = regular_weight(inlines)
-    text = ''.join(visible(item) for item in normalized)
-    boundary = re.search(r'[.!?](?=\s|$)', text)
-    title, explanation = split(normalized, boundary.end() if boundary else len(text))
-    return ([node('Strong', title)] if title else []) + explanation
+
+def _split(items, remaining):
+    before, after = [], []
+    for item in items:
+        length = len(_visible(item))
+        if remaining >= length:
+            before.append(item)
+        elif remaining <= 0:
+            after.append(item)
+        elif item['t'] == 'Str':
+            before.append(node('Str', item['c'][:remaining]))
+            after.append(node('Str', item['c'][remaining:]))
+        else:
+            left, right = _split(_children(item), remaining)
+            for target, content in ((before, left), (after, right)):
+                if content:
+                    clone = copy.deepcopy(item)
+                    if item['t'] in _WRAPPERS:
+                        clone['c'] = content
+                    else:
+                        clone['c'][1] = content
+                    target.append(clone)
+        remaining -= length
+    return before, after
+
+
+def _sentence_end(text):
+    """End of the first sentence in `text`, or its length. A word ending in a
+    period ends it unless it is a listed abbreviation, a single initial
+    (E. coli), or the next word starts in lower case; decimal and version
+    dots are inside a word and never count."""
+    words = list(re.finditer(r'\S+', text))
+    for i, word in enumerate(words):
+        w = word.group()
+        nxt = words[i + 1].group() if i + 1 < len(words) else None
+        if (w.endswith('.') and w not in CAPTION_NOT_SENTENCE_END
+                and not re.fullmatch(r'\(?[A-Z]\.', w)
+                and not (nxt and nxt[0].islower())):
+            return word.end()
+    return len(text)
+
+
+def caption_entry(inlines):
+    """The List of Figures/Tables entry for a caption: its label ("Figure 1:"),
+    then the caption's bold title when it opens with one, otherwise its first
+    sentence, otherwise the whole caption, in regular weight. The same rule as
+    the example dissertation template's `caption-title`, so a Word list
+    matches the PDF's. Works on the inline tree so italics, citations, code
+    and native math survive; the body caption is not touched."""
+    items = copy.deepcopy(inlines)
+    k = next((i + 1 for i, item in enumerate(items)
+              if item['t'] == 'Str' and item['c'].endswith(':')), 0)
+    body = k
+    while body < len(items) and items[body]['t'] in ('Space', 'SoftBreak'):
+        body += 1
+    if body < len(items) and items[body]['t'] == 'Strong':
+        return regular_weight(items[:body] + items[body]['c'])
+    normalized = regular_weight(items)
+    text = ''.join(_visible(item) for item in normalized)
+    offset = len(''.join(_visible(item) for item in normalized[:k]))
+    entry, _ = _split(normalized, offset + _sentence_end(text[offset:]))
+    return entry
 
 
 def index_blocks(title, rows):
@@ -204,7 +237,7 @@ def index_blocks(title, rows):
     for label, text, level in rows:
         inlines = [node('Str', text)] if isinstance(text, str) else copy.deepcopy(text)
         if level == 3:
-            inlines = caption_title(inlines)
+            inlines = caption_entry(inlines)
         blocks.append(styled('Dissertation Index ' + str(level), [node('Para', [
             node('Link', [['', [], []], inlines, ['#' + label, '']]),
             node('RawInline', ['openxml', '<w:r><w:tab/></w:r>']),

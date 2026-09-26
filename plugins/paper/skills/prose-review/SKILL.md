@@ -84,7 +84,11 @@ a finding. For each sentence in scope, ask:
    ("Nothing is lost") instead of naming a topic or metric ("Identification
    rate after filtering"); an informal verb or metaphor for a result ("gave
    up", "a small trim"); an adjective ("slightly fewer", "a large gain")
-   where the number exists, which STYLE.md "Words" already asks for. Read
+   standing in for the number the claim rests on, which STYLE.md "Words"
+   already asks for. An adjective with a pointer to the table that holds
+   the values ("a large gain, Table 2") is not a finding: the number need
+   not be restated in the prose, and `/paper:readability-review` asks for
+   fewer numbers where a paragraph carries too many. Read
    the headings as a list, since that is how an editor first sees them.
    Principle 10 of `.paper/docs/reviewer-lessons.md` (`docs/` in the
    scaffold itself) has the examples.
