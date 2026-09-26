@@ -64,6 +64,23 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 5.3.1
+
+A second trial of `/paper:readability-review` on d_noise (5 rewrites, 4
+proposed house rules, numerals per sentence 2.39 to 1.48 in the rewritten
+paragraphs, no new-work requests) showed four instructions a reader could
+take two ways. They now say:
+
+- numerals are counted as `just density` counts them, pooled across the
+  rewritten paragraphs;
+- a paragraph a house rule covers can still be rewritten, naming the rule;
+- a declared summary id may replace a pair only when its description
+  covers the same measure and level as the sentence;
+- the review creates `reviews/ACTIONS.md` only when it updates the ledger,
+  so `no-ledger` runs stay read-only.
+
+Upgrade: `paper-plugin-update`.
+
 ## 5.3.0
 
 Results sections had become hard to follow: d_noise's run at 105 to 121

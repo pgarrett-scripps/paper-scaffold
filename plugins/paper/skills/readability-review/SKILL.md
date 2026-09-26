@@ -47,7 +47,8 @@ whether it is worth an existing table's extra column. See "Proportion" in
 
 `reviews/ACTIONS.md` records every finding earlier reviews raised and whether
 it was fixed; its header states the rules. Read it before reviewing. If it is
-missing, create it with `just check-actions --init`. A problem that matches
+missing, say so; it is created in "Update the action ledger", never when
+that section is skipped. A problem that matches
 an `open`, `done` or `wontfix` row is not a new finding: cite the existing
 id instead. A `wontfix` row means the author already declined it; do not
 raise it again in other words. Appending to the ledger is the only write
@@ -128,7 +129,9 @@ rewrite under the original:
   and label it retains, in source form, so `/paper:copy-edit` can apply it
   and `just edit-check` can confirm nothing was invented. Dropping an id is
   allowed, and so is swapping a pair of ids for an already declared id
-  that summarises them (a range, a maximum). Adding a number that is not
+  that summarises them (a range, a maximum), when that id's description
+  covers the same measure and level as the sentence (a range declared
+  across PSMs and precursors does not bound peptides). Adding a number that is not
   already declared is not. Plain-language summaries ("essentially
   unchanged", "about three quarters") are fine when a declared value in the
   sentence or its cited table supports them and they do not make the claim
@@ -151,8 +154,10 @@ rewrite under the original:
 - Aim for one or two numbers per sentence, the ones the claim rests on;
   a sentence that genuinely compares more keeps them (see the defaults
   above). Under each rewrite give the numerals per sentence before and
-  after (e.g. "numerals/sentence: 4.3 -> 1.8, max 7 -> 3"), counting a
-  `#s()`/`#ci()` as the numerals it renders.
+  after (e.g. "numerals/sentence: 4.3 -> 1.8, max 7 -> 3"). Count as
+  `just density` does: each number as rendered (a `#s()` or `#ci()` counts
+  as the numerals it prints), leaving out figure, table and section
+  numbers.
 - Say what the rewrite gives up, in one line, so the author can weigh it.
 - Give each rewrite a severity (major / minor) by the same test as the
   table.
@@ -178,7 +183,9 @@ prose; the 30-min values stay in Table 2"), with its count, locations and
 the paragraphs it would shorten. A house rule is a proposal: the author
 adopts, adapts or declines it, and a declined one is not raised again.
 Each becomes one ledger action; its individual instances do not get table
-rows of their own.
+rows of their own. A paragraph that is an instance can still be one of the
+rewrites when it is among the worst; the rewrite applies the rule and
+names it.
 
 ## Report
 
@@ -188,7 +195,8 @@ Write `reviews/<YYYY-MM-DD>-readability-review.md` (create the directory):
    reading, the two or three habits that most get in the way, and the
    sections to start with. State plainly that every finding is a
    suggestion. Give the numerals per sentence across the rewritten
-   paragraphs, before and after, as one line.
+   paragraphs, pooled (all their numerals over all their sentences),
+   before and after, as one line.
 2. The `just density` output under its own heading.
 3. The first-sentence skim: each Results subsection's first sentences in
    order, and whether they tell the story.
