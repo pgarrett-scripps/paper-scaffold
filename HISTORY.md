@@ -64,6 +64,24 @@ copy with `--project PATH`, or copy the tool and the recipe in first. Before
 
 ---
 
+## 5.3.2
+
+- New `just prose-check` error `swallowed-semicolon`. In Typst, a `;` right
+  after an embedded expression (`#s("id"); the rest`) ends the expression
+  and is never printed, so the PDF, the Word file and the review copy all
+  lose the semicolon, while `paper.resolved.typ`, which substitutes text,
+  still shows it. koth-lfq reported this as a review-copy bug (A-0093); it
+  was the manuscript. Five papers had it (koth-lfq, uno, uno-lfq, d_noise's
+  reviewer response, spectrl's cover letter). A `;` joined to the next
+  character (`#sym.plus.minus;80`) and `#set`/`#show`/`#let` terminators
+  are not flagged.
+- No change for the review copy's stray line breaks: every
+  `paper.review.txt` rebuilt on 2026-09-26 was checked, and short lines
+  remain only in code blocks and headings.
+
+Upgrade: `uv add` the v5.3.2 pin, `uv run paper sync`, then write `\;`
+for each `swallowed-semicolon` that `just verify` lists.
+
 ## 5.3.1
 
 A second trial of `/paper:readability-review` on d_noise (5 rewrites, 4

@@ -446,10 +446,26 @@ def density_cases() -> bool:
         ok = False
     return ok
 
+def swallowed_semicolon_cases() -> bool:
+    """A `;` after an embedded expression never prints in Typst, so it is
+    flagged; an escaped one, a statement terminator, a `;` joined to the
+    next character and one inside a comment or string are not."""
+    from prose_check import check_swallowed_semicolons
+    src = ('At #s("a"); after. Split #s(\n  "b",\n);\nKept #s("c")\\; here. '
+           'Link #link("https://x.org/a;b") ok. #set text(size: 9pt);\n'
+           '#sym.plus.minus;80 wide. // #s("d"); in a comment\n'
+           'Nested #s("e(1)")[x]; end.')
+    found = [f.subject for f in check_swallowed_semicolons({"main": src})]
+    if found != ["s", "s", "s"]:
+        print(f"  swallowed-semicolon: expected three #s hits, got {found!r}")
+        return False
+    return True
+
 def run_cases() -> bool:
     ok = True
     for case in (structural_cases, boundary_cases, suppression_cases,
-                 si_reach_cases, house_style_cases, density_cases,):
+                 si_reach_cases, house_style_cases, density_cases,
+                 swallowed_semicolon_cases,):
         ok &= case()
     return ok
 

@@ -1280,6 +1280,62 @@ def check_todos(sources: dict[str, str]) -> list[Finding]:
     return out
 
 
+# An embedded expression in markup: `#name`, then any call arguments.
+EMBEDDED = re.compile(r"#([A-Za-z_][\w-]*(?:\.[A-Za-z_][\w-]*)*)")
+# Statements whose trailing `;` is only a terminator, never punctuation.
+STATEMENTS = {"set", "show", "let", "import", "include", "return"}
+
+
+def _skip_arguments(src: str, i: int) -> int:
+    """Index after the call arguments (`(...)` and `[...]`) that start at `i`,
+    skipping strings, so `#s("a)")` is one call."""
+    while i < len(src) and src[i] in "([":
+        depth, j, quoted = 0, i, False
+        while j < len(src):
+            c = src[j]
+            if quoted:
+                if c == "\\":
+                    j += 1
+                elif c == '"':
+                    quoted = False
+            elif c == '"':
+                quoted = True
+            elif c in "([":
+                depth += 1
+            elif c in ")]":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        i = j + 1
+    return i
+
+
+def check_swallowed_semicolons(sources: dict[str, str]) -> list[Finding]:
+    """A `;` right after an embedded expression (`#s("id");`) ends the
+    expression in Typst and is never printed: the PDF, the Word file and the
+    review copy all lose the semicolon, while `paper.resolved.typ`, which
+    substitutes text, still shows it. Write `\\;` to print one."""
+    out: list[Finding] = []
+    for name, src in sources.items():
+        # A comment, but not the `//` of a URL inside a string.
+        body = re.sub(r"(?m)(?<!:)//.*$", lambda m: " " * len(m.group(0)), src)
+        body = re.sub(r"```.*?```", lambda m: " " * len(m.group(0)), body, flags=re.S)
+        for m in EMBEDDED.finditer(body):
+            if m.group(1) in STATEMENTS or (m.start() and body[m.start() - 1] == "\\"):
+                continue
+            end = _skip_arguments(body, m.end())
+            # `#sym.plus.minus;80`: a `;` joined to what follows is a
+            # deliberate terminator. Punctuation is followed by a space.
+            if body[end:end + 1] == ";" and body[end + 1:end + 2] in ("", " ", "\t", "\n"):
+                out.append(Finding(
+                    "swallowed-semicolon", "error",
+                    f"the `;` after #{m.group(1)}(...) ends the expression and "
+                    f"never prints; write `\\;` for a semicolon",
+                    subject=m.group(1), where=name, context=_ctx(body, end)))
+    return out
+
+
 # A list item: `- ` (bulleted) or `+ ` (numbered) opening a line.
 LIST_ITEM = re.compile(r"(?m)^[ \t]*([-+])[ \t]+(\S+(?:[ \t]+\S+)?)")
 
@@ -1464,6 +1520,7 @@ def main_documents() -> int:
                           readability.clean(no_code(src)),
                           readability.clean(src, gap=GAP), cfg)
     findings += check_todos(extra)
+    findings += check_swallowed_semicolons(extra)
     for doc in covering(project):
         findings += document_findings(project, doc, cfg)
     # A paper.typ + si-body.typ pair kept under manuscript.toml still gets
@@ -1499,6 +1556,7 @@ def main() -> int:
     findings += check_derivable_numbers(targets)
     findings += check_unaccounted_numbers(targets)
     findings += check_todos({**targets, **extra})
+    findings += check_swallowed_semicolons({**targets, **extra})
     if cfg.runs("list-in-prose") or cfg.runs("bold-in-prose"):
         findings += check_house_style(targets)
     findings += check_bypassed_assets(targets)

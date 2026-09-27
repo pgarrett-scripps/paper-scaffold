@@ -66,6 +66,7 @@ RULES: dict[str, tuple[str, str]] = {
     "retired-claim":      ("error", "the claim id in claims.toml"),
     "unaccounted-number": ("warn",  "the typed value"),
     "unresolved-todo":    ("warn",  "the note text"),
+    "swallowed-semicolon": ("error", "the function name, e.g. s"),
     "orphaned-asset":     ("warn",  "the file name"),
     "bypassed-asset":     ("error", "the file path"),
     "low-resolution-figure": ("warn", "the file name"),

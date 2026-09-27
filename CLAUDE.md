@@ -126,6 +126,8 @@ Details: [docs/numbers.md](docs/numbers.md), [docs/assets.md](docs/assets.md).
   `{ ... }`. `#include` gives the file its own scope, so a new `.typ` file
   using `s()`, `n()`, `fig()` or `tbl()` needs its own
   `#import "stats.typ": s, n` and `#import "assets.typ": fig, tbl`.
+  A `;` right after `#s("id")` (or any `#call()`) ends the expression and
+  never prints: write `#s("id")\;` (`swallowed-semicolon`).
 - **Word export never compiles the preamble.** If you change the preamble or
   the resolver, run `just docx` and confirm the headings, abstract and
   equations survive, not just the exit code. Word fonts, spacing,
